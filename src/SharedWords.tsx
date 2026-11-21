@@ -70,31 +70,32 @@ export function ShareComposer({seed,userId,householdId,identity,people,onCreated
   </form>
  </section>;
 }
-export function SharedSpaces({userId,householdId,identity,openSpaceId,onCloseSpace,onPrivateSaved}:{
- userId:string,householdId:string,identity:Identity|null,openSpaceId:string|null,onCloseSpace:()=>void,onPrivateSaved:()=>void
+export function SharedSpaces({userId,householdId,identity,keyError,openSpaceId,onCloseSpace,onPrivateSaved}:{
+ userId:string,householdId:string,identity:Identity|null,keyError:string,openSpaceId:string|null,onCloseSpace:()=>void,onPrivateSaved:()=>void
 }){
  const [spaces,setSpaces]=useState<(SpaceSummary&{preview:WordPayload|null})[]>([]);
  const [active,setActive]=useState<string|null>(openSpaceId),[loading,setLoading]=useState(true),[error,setError]=useState('');
  async function refresh(){
-  if(!identity)return;
+  // The authenticated server list is metadata; do not hide existing spaces
+  // because this browser cannot decrypt their content.
   const r=await api<{spaces:SpaceSummary[]}>(`/words/spaces?householdId=${encodeURIComponent(householdId)}`);
-  const entries=await Promise.all(r.spaces.map(async s=>{
-   try{return {...s,preview:await unsealWord(s.initialEnvelope,identity.privateKey,s.id,s.initialPostId,userId)};}
-   catch{return {...s,preview:null};}
+  const entries=await Promise.all(r.spaces.map(async item=>{
+   if(!identity)return {...item,preview:null};
+   try{return {...item,preview:await unsealWord(item.initialEnvelope,identity.privateKey,item.id,item.initialPostId,userId)};}
+   catch{return {...item,preview:null};}
   }));
   setSpaces(entries);
+  setError('');
  }
  useEffect(()=>{
   let live=true;
-  if(!identity){setLoading(false);return;}
   setLoading(true);
   void refresh().catch(e=>{if(live&&!(e instanceof StaleSessionRequest))setError(message(e));})
    .finally(()=>{if(live)setLoading(false);});
   return()=>{live=false;};
- },[identity,householdId]);
+ },[identity,householdId,userId]);
  useEffect(()=>{if(openSpaceId)setActive(openSpaceId);},[openSpaceId]);
  useEffect(()=>{
-  if(!identity)return;
   let live=true,lastInteracted=Date.now();
   const record=()=>{lastInteracted=Date.now();};
   const poll=()=>{if(live&&document.visibilityState==='visible'&&Date.now()-lastInteracted<90_000)
@@ -104,22 +105,25 @@ export function SharedSpaces({userId,householdId,identity,openSpaceId,onCloseSpa
   const interval=window.setInterval(poll,15000);
   return()=>{live=false;window.clearInterval(interval);window.removeEventListener('pointerdown',record);window.removeEventListener('keydown',record);document.removeEventListener('visibilitychange',poll);};
  },[identity,householdId]);
- if(active)return <SharedSpaceDetail key={active} spaceId={active} userId={userId} householdId={householdId} identity={identity}
+ if(active)return <SharedSpaceDetail key={active} spaceId={active} userId={userId} householdId={householdId} identity={identity} keyError={keyError}
   onBack={()=>{setActive(null);onCloseSpace();void refresh().catch(e=>setError(message(e)));}} onPrivateSaved={onPrivateSaved}/>;
  return <section className="words-shared" aria-label="Shared journal spaces">
   <div className="words-hub-section-top"><div><span className="mono kicker">PROMPTS & JOURNALS</span><h2>Shared spaces.</h2></div><button type="button" className="quiet small" onClick={()=>void refresh().catch(e=>setError(message(e)))}><RotateCw size={15}/> Refresh</button></div>
-  {error&&<p role="alert" className="messages-error">{error}</p>}
+  {error&&<p role="alert" className="messages-error">Unable to load shared spaces: {error} <button type="button" className="quiet small" onClick={()=>void refresh().catch(e=>setError(message(e)))}>Retry</button></p>}
+  {!identity&&<p role="alert" className="messages-error">{keyError?
+    'Shared spaces still exist, but this browser cannot decrypt them because its key differs from the registered device key. Use the original browser profile for this account. Do not clear its site data or rotate its key.':
+    'Checking this browser’s encryption key. Shared writing remains encrypted until it is ready.'}</p>}
   {loading&&<p className="muted">Finding your shared spaces…</p>}
-  {!loading&&!spaces.length&&<p className="words-empty">No shared prompts or journal entries yet. Discover a prompt or write a journal entry to start one.</p>}
+  {!loading&&!error&&spaces.length===0&&<p className="words-empty">No shared prompts or journal entries are available to this account in this care circle. Check which test account and browser profile you are using.</p>}
   <div className="words-shared-ledger">{spaces.map(s=><button type="button" key={s.id} className="words-shared-row" onClick={()=>setActive(s.id)}>
    <span className="mono kicker">{s.kind==='prompt'?'PROMPT INVITATION':'SHARED JOURNAL'} · {new Date(s.createdAt).toLocaleDateString()}</span>
    <strong>{s.preview?.title||s.preview?.prompt||(s.kind==='prompt'?s.preview?.text:null)||'Shared journal entry'}</strong>
-   <span className="muted tiny">{s.creatorName} · Open the entry and its discussion</span>
+   <span className="muted tiny">{s.creatorName} · {s.preview?'Open the entry and its discussion':'Encrypted content unavailable on this device'}</span>
    <ArrowUpRight size={18}/></button>)}</div>
  </section>;
 }
-function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivateSaved}:{
- spaceId:string,userId:string,householdId:string,identity:Identity|null,onBack:()=>void,onPrivateSaved:()=>void
+function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,onPrivateSaved}:{
+ spaceId:string,userId:string,householdId:string,identity:Identity|null,keyError:string,onBack:()=>void,onPrivateSaved:()=>void
 }){
  const reflection=useWordsDraftVault(userId,householdId+':reflection:'+spaceId);
  const discussion=useWordsDraftVault(userId,householdId+':discussion:'+spaceId);
@@ -205,7 +209,10 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
   return <section className="words-space-detail" aria-label="Shared prompt and discussion">
   <button type="button" className="quiet small" onClick={onBack}><ArrowLeft size={15}/> All shared spaces</button>
   {error&&<p role="alert" className="messages-error">{error}</p>}
-  {!detail?<p className="muted">Opening your shared space…</p>:<>
+  {!identity?<p role="alert" className="messages-error">{keyError?
+    'This browser cannot decrypt the space: the local key differs from the enrolled account key. Return to the browser profile that originally enrolled this account. The space has not been deleted.':
+    'Waiting for your encrypted device identity. If it does not load, return to Shared spaces and review the device key warning.'}</p>:
+   !detail?error?<p role="alert">Unable to open this shared space. Use Back and retry from the list.</p>:<p className="muted">Opening your shared space…</p>:<>
    <header className="words-space-intro">
     <span className="mono kicker">{detail.kind==='prompt'?'SHARED PROMPT':'SHARED JOURNAL'}</span>
     {first?.content?.title&&<p className="mono kicker">{first.content.title}</p>}
