@@ -1,7 +1,9 @@
 /**
- * Fictional-data pilot, NOT reviewed E2EE. Device ECDH private key is
- * nonexportable but stored on the same browser origin as the app. The server
- * is trusted for key discovery (TOFU); multi-device/recovery is NOT supported.
+ * Fictional-data pilot, NOT reviewed E2EE. Legacy device keys are non-exportable
+ * and browser-bound; a separate explicit recovery-code flow now exists for
+ * NEW accounts. This module preserves legacy keys on all enrollment paths.
+ * Public key discovery remains unverified TOFU. Per-device revocation, legacy
+ * migration, and journal recovery are NOT supported yet.
  */
 export type PublicKey={kty:'EC',crv:'P-256',x:string,y:string};
 export type Identity={privateKey:CryptoKey,publicKey:PublicKey};
