@@ -15,7 +15,7 @@ test('remote staging migration and deployment both require target checks',()=>{
  assert.match(guard,/process\.exitCode=1/);
 });
 test('pre-E2E verification is a single reproducible command',()=>{
- assert.equal(packageJson.scripts['verify:pre-e2e'],'npm test && npm run typecheck && npm run build');
+ assert.equal(packageJson.scripts['verify:pre-e2e'],'npm run typecheck && npm test && npm run build');
 });
 test('private journal backup controls are opt-in and restore never silently overwrites',()=>{
  assert.match(hub,/Export encrypted backup/);
