@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {ArrowLeft,ArrowUpRight,BookOpen,Check,MessageCircle,RotateCw,Send,Users} from 'lucide-react';
+import {ArrowLeft,ArrowUpRight,Check,MessageCircle,RotateCw,Send,Users} from 'lucide-react';
 import {api,StaleSessionRequest} from './lib/api';
 import {sealWord,unsealWord,type WordPayload} from './lib/words-space-crypto';
 import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
