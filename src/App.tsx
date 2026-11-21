@@ -119,7 +119,7 @@ export default function App(){
  const pageUnread=(id:Page)=>id==='words'?unread.words:id==='messages'?unread.direct:0;
 
  const [date,setDate]=useState(''),[error,setError]=useState('');
- const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'invite'|'remove'|'link'|null>(null),[pending,setPending]=useState<Pending>({});
+ const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'archive-profile'|'archive-med'|'invite'|'remove'|'link'|null>(null),[pending,setPending]=useState<Pending>({});
  const [saving,setSaving]=useState(false),[accessCode,setAccessCode]=useState(''),[inviteInput,setInviteInput]=useState('');
  const [inviteCreated,setInviteCreated]=useState('');
  const [audience,setAudience]=useState<Audience|null>(null),[signupAudience,setSignupAudience]=useState<Audience>('parent');
@@ -136,6 +136,7 @@ export default function App(){
  const [authMode,setAuthMode]=useState<'signup'|'signin'>('signin'),[authName,setAuthName]=useState(''),[email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [personName,setPersonName]=useState(''),[personKind,setPersonKind]=useState<Person['kind']>('adult');
  const [medForm,setMedForm]=useState(blankMed),[medProfile,setMedProfile]=useState('');
+ const [showArchivedProfiles,setShowArchivedProfiles]=useState(false),[showArchivedMeds,setShowArchivedMeds]=useState(false);
  const [doseStatus,setDoseStatus]=useState<(typeof statuses)[number]|null>(null),[doseNote,setDoseNote]=useState(''),[doseIdempotency,setDoseIdempotency]=useState(''),[doseActualAt,setDoseActualAt]=useState(datetimeField(new Date()));
  const [correctionReason,setCorrectionReason]=useState('');
  const [inviteRole,setInviteRole]=useState<'caregiver'|'member'>('caregiver'),[inviteProfiles,setInviteProfiles]=useState<string[]>([]);
@@ -268,8 +269,10 @@ export default function App(){
  useEffect(()=>{setMyProfile(null);void refreshMyProfile();},[refreshMyProfile]);
  const refreshProfiles=useCallback(async()=>{
    if(!hid)return;
-   try{const r=await api<{profiles:Person[]}>(`/profiles?householdId=${encodeURIComponent(hid)}`);setProfiles(r.profiles);setSelected(old=>r.profiles.some(x=>x.id===old)?old:(r.profiles[0]?.id||''));}catch(e){fail(e);}
- },[hid]);
+   try{const r=await api<{profiles:Person[]}>(`/profiles?householdId=${encodeURIComponent(hid)}${active?.role==='owner'?'&includeArchived=1':''}`);
+    setProfiles(r.profiles);
+    setSelected(old=>r.profiles.some(x=>x.id===old&&!x.archived_at)?old:(r.profiles.find(x=>!x.archived_at)?.id||''));}catch(e){fail(e);}
+ },[hid,active?.role]);
  useEffect(()=>{void refreshProfiles();if(hid){const zone=households.find(h=>h.id===hid)?.timezone||'America/New_York';setDate(localDate(new Date(),zone));void api<{enabled:boolean,subscriptionCount:number}>(`/push/status?householdId=${encodeURIComponent(hid)}`).then(r=>{setPushEnabled(r.enabled);setPushSubscriptionCount(r.subscriptionCount);}).catch(e=>setPushFeedback({kind:'error',text:e instanceof Error?e.message:'Could not read notification status.'}));}},[refreshProfiles,hid,households]);
  useEffect(()=>{if(!user||!hasPasskey)return;void api<{configured:boolean,publicKey:string|null}>('/push/config').then(setPushConfig).catch(e=>setPushFeedback({kind:'error',text:e instanceof Error?e.message:'Could not check notification configuration.'}));},[user?.id,hasPasskey]);
  const refreshToday=useCallback(async()=>{
@@ -278,7 +281,7 @@ export default function App(){
  },[hid,date]);
  useEffect(()=>{void refreshToday();},[refreshToday]);
  const refreshPerson=useCallback(async()=>{
-   if(!selected)return;try{const [m,h]=await Promise.all([api<{medications:Medication[]}>(`/medications?profileId=${selected}`),api<{events:DoseEvent[]}>(`/history?profileId=${selected}`).catch(()=>({events:[]}))]);setMeds(m.medications);setHistory(h.events);}catch(e){fail(e);}
+   if(!selected)return;try{const [m,h]=await Promise.all([api<{medications:Medication[]}>(`/medications?profileId=${selected}&includeArchived=1`),api<{events:DoseEvent[]}>(`/history?profileId=${selected}`).catch(()=>({events:[]}))]);setMeds(m.medications);setHistory(h.events);}catch(e){fail(e);}
  },[selected]);
  useEffect(()=>{void refreshPerson();},[refreshPerson]);
  async function authSubmit(e:FormEvent<HTMLFormElement>){
@@ -430,6 +433,8 @@ export default function App(){
    catch(e){fail(e);}finally{setSaving(false);}
  }
  const person=profiles.find(x=>x.id===selected);
+ const visibleProfiles=profiles.filter(p=>showArchivedProfiles||!p.archived_at);
+ const visibleMeds=meds.filter(m=>showArchivedMeds||!m.archived_at);
  const toastView=toast&&<div className={`app-toast ${toast.kind}`} role={toast.kind==='error'?'alert':'status'} aria-live={toast.kind==='error'?'assertive':'polite'} aria-atomic="true">
    <span className="toast-icon">{toast.kind==='success'?<Check size={18}/>:toast.kind==='error'?<X size={18}/>:<ShieldCheck size={18}/>}</span>
    <p>{toast.message}</p>
