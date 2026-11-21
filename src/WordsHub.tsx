@@ -240,7 +240,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    <small>{item.description}</small></button>)}</nav>
   {feedback&&<p className="words-status" role="status"><Check size={15}/>{feedback}</p>}
   {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable on this browser.</strong> {keyError} Your private journal is still usable. If this is a second browser or another test profile signed into the same account, return to the original browser profile. Do not reset your account's key or clear the original browser data.</p>}
-  {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} people={people}
+  {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} keyError={keyError} people={people}
     onCreated={sid=>{
     const current=seed;setSeed(null);setOpenSpaceId(sid);selectTab('shared');
     if(current?.kind==='journal'){
