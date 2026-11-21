@@ -225,10 +225,38 @@ export function useWordsDraftVault(userId:string,householdId:string){
   }
  },[userId,householdId]);
 
+ const loadRemote=useCallback(async()=>{
+  setStatus('loading');
+  try{
+   await queue.current.catch(()=>{});
+   if(!remoteKey.current)throw new Error('Restore account encryption before opening a synced draft.');
+   const remote=await readSyncedDraft(userId,householdId,remoteKey.current);
+   if(!remote.document)throw new Error('No saved draft is available on another device.');
+   const old=await inspectDeviceVault(userId,householdId);
+   const saved=await saveDeviceDraft(userId,householdId,remote.document,old.revision,true);
+   if(!alive.current)return;
+   current.current=remote.document;
+   setTextState(remote.document.text);setPromptState(remote.document.prompt);setTitleState(remote.document.title??'');
+   revision.current=saved.revision;remoteRevision.current=remote.revision;
+   dirty.current=false;conflicted.current=false;remoteBlocked.current=false;editNo.current++;lastQueued.current=-1;
+   setRemoteConflict(false);setSynced(true);setSavedAt(remote.savedAt);setError('');setStatus('restored');
+  }catch(e){
+   if(!alive.current)return;
+   conflicted.current=true;setRemoteConflict(true);setStatus('conflict');
+   setError(e instanceof Error?e.message:'Could not restore another device’s draft.');
+  }
+ },[userId,householdId]);
+
  const overwriteStored=useCallback(async()=>{
   conflicted.current=false;
   dirty.current=true;editNo.current++;lastQueued.current=-1;
   setError('');
+  await flush(true);
+ },[flush]);
+
+ const retrySync=useCallback(async()=>{
+  if(!remoteKey.current)return;
+  dirty.current=true;editNo.current++;lastQueued.current=-1;setError('');
   await flush(true);
  },[flush]);
 
@@ -264,5 +292,5 @@ export function useWordsDraftVault(userId:string,householdId:string){
  },[userId,householdId]);
 
  return {text,prompt,title,setText,setPrompt,setTitle,ready,enabled,status,savedAt,error,
-  enable,flush,discard,reloadStored,overwriteStored};
+  syncEnabled,synced,remoteConflict,enable,flush,discard,reloadStored,loadRemote,overwriteStored,retrySync};
 }
