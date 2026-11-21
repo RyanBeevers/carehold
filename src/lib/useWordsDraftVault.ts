@@ -47,12 +47,13 @@ export function useWordsDraftVault(userId:string,householdId:string){
     result=await inspectDeviceVault(userId,householdId);
    }
    let cloudError='',cloudConflict=false,cloudSynced=false;
+   let cloudKey:CryptoKey|null=null,cloudRevision=0;
    try{
     const identity=await storedMessageIdentity(userId);
     if(identity?.journalKey){
-     remoteKey.current=identity.journalKey;
+     cloudKey=identity.journalKey;
      const remote=await readSyncedDraft(userId,householdId,identity.journalKey);
-     remoteRevision.current=remote.revision;
+     cloudRevision=remote.revision;
      if(remote.document&&result.document){
       cloudConflict=JSON.stringify(remote.document)!==JSON.stringify(result.document);
       cloudSynced=!cloudConflict;
@@ -62,7 +63,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
       cloudSynced=true;
      }else if(!remote.document&&result.document&&!remote.deleted){
       const saved=await saveSyncedDraft(userId,householdId,identity.journalKey,result.document,remote.revision);
-      remoteRevision.current=saved.revision;
+      cloudRevision=saved.revision;
       cloudSynced=true;
      }else if(!remote.document&&remote.deleted&&result.document){
       cloudConflict=true;
@@ -71,9 +72,10 @@ export function useWordsDraftVault(userId:string,householdId:string){
    }catch(e){
     cloudError=e instanceof Error?e.message:'Draft sync is unavailable.';
    }
-   return {result,cloudError,cloudConflict,cloudSynced};
-  })().then(({result,cloudError,cloudConflict,cloudSynced})=>{
+   return {result,cloudError,cloudConflict,cloudSynced,cloudKey,cloudRevision};
+  })().then(({result,cloudError,cloudConflict,cloudSynced,cloudKey,cloudRevision})=>{
    if(!alive.current||gen!==generation.current)return;
+   remoteKey.current=cloudKey;remoteRevision.current=cloudRevision;
    isEnabled.current=result.enabled;setEnabled(result.enabled);
    const restored=result.document??{...INITIAL};
    current.current=restored;
