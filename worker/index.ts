@@ -351,8 +351,18 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     const other=await db.prepare('SELECT role FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1]).first<{role:Role}>();
     if(!other)throw new ApiError(404,'Member not found.');
     if(other.role==='owner')bad(403,'Cannot revoke another owner from this route.');
-    await db.prepare('DELETE FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1]).run();
-    return json({revoked:true});
+    // A revoked member must no longer remain linked to an active profile.
+    const linked=await db.prepare('SELECT id FROM profiles WHERE household_id=? AND linked_user_id=?')
+      .bind(hid,memberDelete[1]).all<{id:string}>();
+    const ts=now();
+    await db.batch([
+      ...linked.results.map(profile=>db.prepare(`INSERT INTO profile_link_changes
+         (id,household_id,profile_id,previous_user_id,next_user_id,changed_by,changed_at)
+         VALUES(?,?,?,?,?,?,?)`).bind(uuid(),hid,profile.id,memberDelete[1],null,user.id,ts)),
+      db.prepare('UPDATE profiles SET linked_user_id=NULL WHERE household_id=? AND linked_user_id=?').bind(hid,memberDelete[1]),
+      db.prepare('DELETE FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1])
+    ]);
+    return json({revoked:true,unlinkedProfiles:linked.results.length});
   }
   if(path==='/api/invitations'&&req.method==='GET') {
     const hid=required(url.searchParams.get('householdId'));await owner(db,hid,user.id);

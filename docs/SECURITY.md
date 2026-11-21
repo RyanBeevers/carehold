@@ -30,3 +30,9 @@ Email verification, caregiver revocation, anti-enumeration and rate limits, thre
 The `parent`, `child`, and `teen` labels select **local, prewritten prompt copy only**. They do not alter profile grants, clinical access, consent rights, or privacy policies; a self-declared label cannot establish a minor's age or a clinician's status. No exact DOB is collected in the pilot.
 
 An invitation may be referenced by user ID and invitation ID after sign-up but before passkey registration. The staging record does **not** create household membership, expose household details, or store the bearer code. Actual acceptance still requires an authenticated passkey and checks the one-time invitation state. Clinical enrollment and children's age/guardian validation are deliberately deferred.
+
+## Linked profile boundary
+A household owner's account link associates an already-joined user with an existing care profile; it is **not** a profile grant. The link cannot be used to read unshared medication schedules or private content. Linking/unlinking and unlink-on-revocation are auditable. Do not use a self-declared parent/teen/child prompt audience as a substitute for relationship verification or consent.
+
+## Real push testing
+Notification preferences are opt-in. VAPID private key stays secret; the public key alone is sent to the browser. A test push is authenticated, checked for household membership and enabled preference, rate-limited (at most once per minute/user), and carries no medication, person or journal contents. Third-party push-service acceptance alone is not a delivery receipt from the browser; installed device display must be tested separately.

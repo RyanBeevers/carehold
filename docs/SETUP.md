@@ -64,3 +64,19 @@ Apply `npm run db:local` **after pulling**; migration `0003_audience_invites.sql
 - Changes to a prompt audience do **not** grant new rights. Verify child/teen accounts cannot see unshared medication profiles or create a household; permission checks remain server-side.
 - This pilot intentionally **does not collect dates of birth or offer doctor accounts**. DOB/age verification, guardian consent, teen age transitions, professional consent, clinical record access and encrypted communication remain release decisions. Self-selected audience is only a presentation preference. It is NOT age verification or evidence of guardian consent.
 - After the browser checks, complete the two outstanding tests: real mobile layout/contrast/navigation and real opt-in push delivery on an installed supported device. The cron warning in Wrangler local dev is expected.
+
+## Local push setup and real delivery smoke test
+
+The Settings notification button does **not** register a device until all three VAPID values exist. This is deliberate: it should now show a local, actionable error rather than silently failing.
+
+1. From the `carehold` project directory, run `npm run push:setup -- --contact you@example.com`, replacing the address with an actual contact mailbox you control. The command writes a fresh VAPID pair and `mailto:` subject into the **gitignored** `.dev.vars` file, without printing the private key. It will not overwrite existing keys. If keys already exist, inspect their configuration locally instead of rotating them.
+2. Restart `npm run dev:worker` (Wrangler reads secrets at startup). Leave Vite on **5173**. Refresh `http://localhost:5173`.
+3. In **Settings → Gentle reminders**, confirm configuration is ready, click **Enable reminders**, grant browser/OS permission, then click **Send test notification**. This calls the authenticated, 60-second-rate-limited push endpoint; the response reports how many push services accepted the send. **Acceptance is not proof of device display**—verify an actual system notification appears.
+4. If permission was denied, adjust browser and operating-system site notification settings; the app cannot re-prompt a blocked site. On iOS, test an actual HTTPS origin and installed Home Screen app; `localhost` on a desktop cannot validate iOS delivery.
+5. Pausing disables household delivery preference, not the underlying device subscription. Never put medical names, prescriptions, profile names or communication text in lock-screen push payloads.
+
+## Account-to-profile identity linking
+
+From **People**, a household owner can link an adult/child medication profile to an **existing household member account**. Pets cannot be linked. One account may be linked to at most one profile **per household**. Link/unlink changes are audited. A member must first be invited and joined (with passkey) before the link can be made. Revoking a household member also clears their profile link while preserving the audit record.
+
+**This is identity association only, not automatic permission:** the linked account gains no new ability to view or manage medication history or private content. The owner must still share profile-level medication capabilities explicitly through the invitation/grant mechanism. Link permissions and caregiver permissions are independent. Future private journaling will require independent recipient consent and E2EE before any sharing.

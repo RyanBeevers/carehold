@@ -56,3 +56,8 @@ Household-only use does **not** waive baseline security. Stop new sensitive-data
 - The curated Words library must show parent-to-child prompts only to the parent audience and age-distinct child/teen-to-parent prompts only to their selected audience. Shared prompts are allowed. Never log read, view, copy, draft or unshared response activity.
 - A signup invitation can be staged before passkey completion as `pending_household_invites.user_id -> invitation_id` with NO reusable plaintext code stored. Stage ≠ acceptance; only a fully authenticated passkey-enabled user may claim it, and claim must honor revocation, expiry, duplicate membership and profile grants.
 - Do not collect minors' exact dates of birth before consent, retention and age-transition decisions are made. A UI prompt audience remains self-selected and intentionally non-authoritative.
+
+## Linked accounts and push checks
+- `profiles.linked_user_id` is an optional, auditable **identity association**, never an authorization shortcut. Linking requires an owner and existing household member; no pet links; one user per profile per household. Revoking membership unlinks the profile and writes history. Do not infer permission from the link.
+- Test push requests are opt-in, authenticated, rate-limited per user, and contain no sensitive medication/patient data. Browser registration, server push-service acceptance, and actual OS notification display are three distinct states.
+- Never overwrite an existing VAPID private key as part of local setup; doing so invalidates existing push subscriptions. Keep VAPID material in ignored local secrets or secret manager only.
