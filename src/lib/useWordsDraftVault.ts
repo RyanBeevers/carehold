@@ -266,6 +266,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
   if(discarding.current)return false;
   discarding.current=true; // Stop late debounce/background writes before deletion.
   try{
+   if(remoteBlocked.current)throw new Error('Resolve the different device drafts before discarding. Neither copy was deleted.');
    // Finish any outstanding encrypted save before deleting it, so a pending
    // write cannot resurrect an intentionally discarded draft.
    await queue.current.catch(()=>{});
