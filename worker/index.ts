@@ -433,18 +433,22 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
       ON CONFLICT(user_id) DO UPDATE SET last_sent_at=excluded.last_sent_at
       WHERE push_test_rate_limits.last_sent_at<? RETURNING last_sent_at`).bind(user.id,ts,cutoff).first();
     if(!claimed)bad(429,'Please wait one minute before testing again.');
+    // A unique test ID prevents the browser collapsing repeated test notifications
+    // under an identical tag. It carries no user or medication data.
+    const requestedId=typeof b.testId==='string'&&/^[0-9a-f-]{36}$/.test(b.testId)?b.testId:uuid();
+    const testId=requestedId;
     let sent=0,failed=0;
     for(const sub of subs.results){
       try{
         const accepted=await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
-          {title:'A moment for care',body:'Your Carehold notification test arrived.',url:'/',tag:'carehold-test'},
+          {title:'A moment for care',body:'Your Carehold notification test arrived.',url:'/',tag:'carehold-test-'+testId},
           {publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!,subject:env.VAPID_SUBJECT!});
         if(accepted)sent++;
         else{failed++;await db.prepare('DELETE FROM push_subscriptions WHERE id=? AND user_id=?').bind(sub.id,user.id).run();}
       }catch{failed++;}
     }
     if(!sent)bad(502,'The push service did not accept the test. Check your device subscription and VAPID keys.');
-    return json({accepted:sent,failed});
+    return json({accepted:sent,failed,testId});
   }
   if(path==='/api/push/subscribe'&&req.method==='POST') {
     const b=await jsonBody(req),sub=b.subscription as any;
