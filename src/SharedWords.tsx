@@ -13,9 +13,9 @@ type SpacePost={id:string,authorId:string,kind:WordPayload['kind'],createdAt:str
 type SpaceDetail={id:string,kind:'prompt'|'journal',createdBy:string,participants:WordContact[],posts:SpacePost[]};
 type VisiblePost=SpacePost&{content:WordPayload|null};
 const message=(e:unknown)=>e instanceof Error?e.message:'Something went wrong.';
-export function ShareComposer({seed,userId,householdId,identity,people,onCreated,onCancel}:{
+export function ShareComposer({seed,userId,householdId,identity,people,onCreated,onCancel,onRefreshPeople}:{
  seed:ShareSeed,userId:string,householdId:string,identity:Identity|null,people:WordContact[],
- onCreated:(spaceId:string)=>void,onCancel:()=>void
+ onCreated:(spaceId:string)=>void,onCancel:()=>void,onRefreshPeople:()=>void
 }){
  const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const eligible=people.filter(p=>p.publicKey);
@@ -42,6 +42,7 @@ export function ShareComposer({seed,userId,householdId,identity,people,onCreated
    <p>{seed.text}</p></div>
   <form onSubmit={e=>void create(e)} className="words-share-form">
    <fieldset><legend>Who would you like to include?</legend>
+    <button type="button" className="quiet small" onClick={onRefreshPeople}><RotateCw size={14}/> Refresh people</button>
     <p className="muted tiny">Select 1–10 people. Everyone selected will see the shared prompt or entry and replies in the same discussion. Private drafts and other journal entries remain separate.</p>
     <div className="words-share-people">
      {people.map(person=><label key={person.id} className="words-share-person">
