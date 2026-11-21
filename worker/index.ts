@@ -484,7 +484,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     if(memberClass[1]===user.id)bad(403,'Owners cannot reclassify themselves.');
     const target=await db.prepare('SELECT role FROM household_members WHERE household_id=? AND user_id=?')
      .bind(hid,memberClass[1]).first<{role:Role}>();
-    if(!target)bad(404,'Member not found.');
+    if(!target)throw new ApiError(404,'Member not found.');
     if(target.role==='owner')bad(403,'Owner classification is fixed as Adult.');
     const previous=await classification(db,hid,memberClass[1]);
     if(previous===b.classification)return json({classification:previous,unchanged:true});
