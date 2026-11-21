@@ -275,26 +275,32 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   tab==='write'?<section className="words-compose" aria-label="Write a private journal entry">
    <div className="words-hub-section-top"><div><span className="mono kicker">PRIVATE UNTIL YOU CHOOSE TO SHARE</span><h2>{editing?'Continue your entry.':'Write what matters.'}</h2><p className="muted">Begin freely or select a prompt from Explore. The prompt and your writing stay together in your journal.</p></div></div>
    <form onSubmit={e=>void saveJournal(e)} className="words-journal-form">
+    {(pendingPrompt||pendingNew)&&<div className="words-audience-confirm" role="alert">
+     <span>{pendingPrompt?'Start this new prompt?':'Start a fresh entry?'} Your previous unsaved draft will be cleared.</span>
+     <button type="button" className="quiet small" onClick={()=>{setPendingPrompt(null);setPendingNew(false);}}>Keep writing</button>
+     <button type="button" className="button dark small" onClick={()=>void beginFresh(pendingPrompt?.text??null)}>Start fresh</button>
+    </div>}
+    <label>Title (optional)<input maxLength={120} value={draft.title} onChange={e=>draft.setTitle(e.target.value)} placeholder="Give this entry a name"/></label>
     {draft.prompt&&<div className="words-selected-prompt"><span className="mono kicker">YOUR PROMPT</span><blockquote>{draft.prompt}</blockquote><button type="button" className="quiet small" onClick={()=>draft.setPrompt(null)}>Write without a prompt</button></div>}
     <label htmlFor="words-hub-editor">Your journal entry</label>
     <textarea id="words-hub-editor" rows={9} maxLength={2600} value={draft.text} disabled={!draft.ready||journalBusy}
      onChange={e=>draft.setText(e.target.value)} placeholder="Start wherever it feels natural…" onBlur={()=>{if(draft.enabled)void draft.flush();}}/>
-    <div className="words-editor-footer"><span className="muted tiny">{draft.enabled?draft.status==='saved'?'Encrypted draft saved on this device':draft.status==='conflict'?'Another tab updated this draft':draft.status==='error'?'Local draft autosave failed':'Encrypted local draft autosave is on':'Draft autosave is off until you enable it'}</span><span className="mono tiny">{draft.text.length} / 2600</span></div>
+    <div className="words-editor-footer"><span className="muted tiny">{draft.enabled?draft.status==='saved'?'Encrypted draft saved on this device':draft.status==='conflict'?'Another tab updated this draft':draft.status==='error'?'Local draft autosave failed':'Encrypted local draft autosave is on':'Encrypted draft autosave is starting'}</span><span className="mono tiny">{draft.text.length} / 2600</span></div>
     {draft.error&&<p className="messages-error" role="alert">{draft.error}</p>}
     {journalError&&<p className="messages-error" role="alert">{journalError}</p>}
     <div className="words-response-actions">
-     {!draft.enabled&&draft.ready&&<button type="button" className="button outline small" onClick={()=>void draft.enable()}>Enable encrypted draft autosave</button>}
+     
      {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void draft.reloadStored()}>Load other tab</button><button type="button" className="button outline small" onClick={()=>void draft.overwriteStored()}>Keep this version</button></>}
      <button type="submit" className="button outline small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}><BookOpen size={16}/>{journalBusy?'Saving…':'Save privately'}</button>
      <button type="button" className="button dark small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}
-      onClick={()=>startSharing({kind:'journal',prompt:draft.prompt,text:draft.text})}><Users size={16}/> Share this entry</button>
+      onClick={()=>startSharing({kind:'journal',prompt:draft.prompt,text:draft.text,title:draft.title})}><Users size={16}/> Share this entry</button>
     </div>
     <p className="muted tiny">Saving privately creates an encrypted journal entry on this device. Sharing creates a separate encrypted snapshot visible only to explicitly selected participants. No automatic send or silent updates.</p>
    </form>
   </section>:
   tab==='journal'?<section className="words-journal-shelf" aria-label="My private journal">
    <div className="words-hub-section-top"><div><span className="mono kicker">ONLY ON THIS DEVICE</span><h2>My journal.</h2><p className="muted">Each saved entry stays private until you deliberately share a snapshot. Clearing site data can permanently erase local entries.</p></div>
-    <button type="button" className="button dark small" onClick={()=>{setEditing(null);selectTab('write');}}><PenLine size={15}/> Write something</button></div>
+    <button type="button" className="button dark small" onClick={()=>{selectTab('write');setPendingNew(Boolean(draft.text.trim()));if(!draft.text.trim())void beginFresh();}}><PenLine size={15}/> New entry</button></div>
    <div className="words-backup-toolbar">
      <button type="button" className="quiet small" disabled={backupBusy||entries.length===0} onClick={()=>{setBackupMode(backupMode==='export'?null:'export');setBackupError('');setBackupPassphrase('');setBackupFile(null);}}><LockKeyhole size={15}/> Export encrypted backup</button>
      <button type="button" className="quiet small" disabled={backupBusy} onClick={()=>{setBackupMode(backupMode==='import'?null:'import');setBackupError('');setBackupPassphrase('');setBackupFile(null);}}><BookOpen size={15}/> Restore encrypted backup</button>
@@ -317,8 +323,16 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     {loadingJournal&&<p className="muted">Opening your local journal…</p>}
    {journalError&&<p className="messages-error" role="alert">{journalError}</p>}
    {!loadingJournal&&entries.length===0&&<p className="words-empty">No saved entries yet. The Write section is a quiet place to start.</p>}
-   <div className="words-private-ledger">{entries.map(entry=><article className="words-entry-row" key={entry.id}>
-    <span className="mono kicker">{new Date(entry.updatedAt).toLocaleDateString()} · ENCRYPTED ON THIS DEVICE</span>
+   <div className="words-filter-row">
+    <label>Search journal<input value={journalQuery} onChange={e=>{setJournalQuery(e.target.value);setJournalPage(0);}} placeholder="Title, prompt, writing…"/></label>
+    <label>Sharing<select value={journalVisibility} onChange={e=>{setJournalVisibility(e.target.value as typeof journalVisibility);setJournalPage(0);}}><option value="all">All entries</option><option value="shared">Shared snapshots</option><option value="private">Not shared</option></select></label>
+    <label>From<input type="date" value={journalFrom} onChange={e=>{setJournalFrom(e.target.value);setJournalPage(0);}}/></label>
+    <label>To<input type="date" value={journalTo} onChange={e=>{setJournalTo(e.target.value);setJournalPage(0);}}/></label>
+   </div>
+   <p className="muted tiny">{filteredJournal.length} entries · showing {visibleJournal.length}. Shared status is tracked for new shares from this device; older shares may appear private.</p>
+   <div className="words-private-ledger">{visibleJournal.map(entry=><article className="words-entry-row" key={entry.id}>
+    <span className="mono kicker">{new Date(entry.updatedAt).toLocaleDateString()} · {entry.sharedAt?'SNAPSHOT SHARED':'PRIVATE'} · ENCRYPTED ON THIS DEVICE</span>
+    {entry.title&&<h3>{entry.title}</h3>}
     {entry.prompt&&<blockquote>{entry.prompt}</blockquote>}
     <p>{entry.text}</p>
     {pendingLoad?.id===entry.id&&<div className="words-audience-confirm"><span>Replace your current in-progress writing with this entry? Your existing unsaved draft will no longer be visible.</span>
@@ -329,10 +343,15 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
      <button type="button" className="button dark small" disabled={journalBusy} onClick={()=>void removeJournal(entry.id)}>Delete</button></div>}
     <div className="words-response-actions">
      <button type="button" className="quiet small" onClick={()=>loadJournal(entry)}><PenLine size={15}/> Edit</button>
-     <button type="button" className="quiet small" onClick={()=>startSharing({kind:'journal',text:entry.text,prompt:entry.prompt})}><Send size={15}/> Share snapshot</button>
+     <button type="button" className="quiet small" onClick={()=>startSharing({kind:'journal',text:entry.text,prompt:entry.prompt,title:entry.title??'',sourceEntryId:entry.id})}><Send size={15}/> Share snapshot</button>
      <button type="button" className="quiet small" onClick={()=>setConfirmDelete(entry.id)}><Trash2 size={15}/> Delete</button>
     </div>
    </article>)}</div>
+   {filteredJournal.length>10&&<div className="words-response-actions">
+    <button type="button" className="button outline small" disabled={journalPage===0} onClick={()=>setJournalPage(p=>Math.max(0,p-1))}>Previous</button>
+    <span className="muted tiny">Page {journalPage+1} of {Math.ceil(filteredJournal.length/10)}</span>
+    <button type="button" className="button outline small" disabled={(journalPage+1)*10>=filteredJournal.length} onClick={()=>setJournalPage(p=>p+1)}>Next</button>
+   </div>}
   </section>:
   tab==='shared'?<SharedSpaces userId={userId} householdId={householdId} identity={identity} openSpaceId={openSpaceId}
    onCloseSpace={()=>setOpenSpaceId(null)} onPrivateSaved={()=>void reloadJournal().catch(e=>setJournalError(errorText(e)))}/>:
