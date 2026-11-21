@@ -124,13 +124,15 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    (journalVisibility==='all'||(journalVisibility==='shared')===Boolean(entry.sharedAt))&&
    (!journalFrom||date>=journalFrom)&&(!journalTo||date<=journalTo);
  });
- const visibleJournal=filteredJournal.slice(journalPage*10,journalPage*10+10);
+ const maxJournalPage=Math.max(0,Math.ceil(filteredJournal.length/10)-1);
+ const safeJournalPage=Math.min(journalPage,maxJournalPage);
+ const visibleJournal=filteredJournal.slice(safeJournalPage*10,safeJournalPage*10+10);
  function startJournal(entry:JournalEntry){
   draft.setText(entry.text);draft.setPrompt(entry.prompt);draft.setTitle(entry.title??'');
   setEditing({id:entry.id,revision:entry.revision,sharedAt:entry.sharedAt,spaceId:entry.spaceId});setPendingLoad(null);selectTab('write');setFeedback('Entry loaded for editing.');
  }
  function loadJournal(entry:JournalEntry){
-  if(draft.text.trim()&&(draft.text!==entry.text||draft.prompt!==entry.prompt)){setPendingLoad(entry);return;}
+  if((draft.text.trim()||draft.title.trim())&&(draft.text!==entry.text||draft.prompt!==entry.prompt||draft.title!==(entry.title??''))){setPendingLoad(entry);return;}
   startJournal(entry);
  }
  async function saveJournal(e:FormEvent){
@@ -348,9 +350,9 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     </div>
    </article>)}</div>
    {filteredJournal.length>10&&<div className="words-response-actions">
-    <button type="button" className="button outline small" disabled={journalPage===0} onClick={()=>setJournalPage(p=>Math.max(0,p-1))}>Previous</button>
-    <span className="muted tiny">Page {journalPage+1} of {Math.ceil(filteredJournal.length/10)}</span>
-    <button type="button" className="button outline small" disabled={(journalPage+1)*10>=filteredJournal.length} onClick={()=>setJournalPage(p=>p+1)}>Next</button>
+    <button type="button" className="button outline small" disabled={safeJournalPage===0} onClick={()=>setJournalPage(p=>Math.max(0,p-1))}>Previous</button>
+    <span className="muted tiny">Page {safeJournalPage+1} of {Math.ceil(filteredJournal.length/10)}</span>
+    <button type="button" className="button outline small" disabled={(safeJournalPage+1)*10>=filteredJournal.length} onClick={()=>setJournalPage(p=>p+1)}>Next</button>
    </div>}
   </section>:
   tab==='shared'?<SharedSpaces userId={userId} householdId={householdId} identity={identity} openSpaceId={openSpaceId}
