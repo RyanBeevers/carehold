@@ -4,15 +4,16 @@ import {seal,unseal,type Envelope,type PublicKey} from './message-crypto.ts';
  * This is still an unreviewed single-device, TOFU fictional-data prototype.
  */
 export type WordKind='prompt'|'journal'|'reflection'|'discussion';
-export type WordPayload={kind:WordKind,text:string,prompt:string|null};
+export type WordPayload={kind:WordKind,text:string,prompt:string|null,title?:string};
 export const MAX_WORD_WIRE_LENGTH=3000;
 export function validWordPayload(value:unknown):value is WordPayload{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const item=value as Record<string,unknown>;
- if(Object.keys(item).sort().join(',')!=='kind,prompt,text')return false;
+ if(Object.keys(item).some(key=>!['kind','prompt','text','title'].includes(key)))return false;
  return (item.kind==='prompt'||item.kind==='journal'||item.kind==='reflection'||item.kind==='discussion')&&
  typeof item.text==='string'&&item.text.trim().length>0&&item.text.length<=2600&&
- (item.prompt===null||typeof item.prompt==='string'&&item.prompt.length<=600);
+ (item.prompt===null||typeof item.prompt==='string'&&item.prompt.length<=600)&&
+ (item.title===undefined||typeof item.title==='string'&&item.title.length<=120);
 }
 export async function sealWord(payload:WordPayload,publicKey:PublicKey,spaceId:string,postId:string,recipientId:string):Promise<Envelope>{
  if(!validWordPayload(payload))throw new Error('Your writing is empty or too long.');
