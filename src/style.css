@@ -88,3 +88,45 @@
 .my-profile-summary p{max-width:580px;margin:0;color:var(--muted);font-size:13px;line-height:1.6}
 .my-profile-summary .button{flex-shrink:0}
 @media(max-width:720px){.my-profile-summary{flex-direction:column;align-items:stretch;padding:20px 18px}.my-profile-summary .button{align-self:flex-start}}
+
+/* Words: editorial writing prototype; private by default and never persisted. */
+.words-studio{margin:0 0 44px;padding:30px clamp(17px,3vw,36px);border-top:2px solid var(--ink);border-bottom:1px solid var(--line);background:var(--panel);max-width:1080px}
+.words-studio-heading{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.words-studio-heading h2{font-size:clamp(29px,3vw,44px);line-height:1.08;margin:13px 0 10px}
+.words-studio-heading p{color:var(--muted);line-height:1.65;font-size:13px;margin-bottom:0}
+.words-studio-heading .button{flex-shrink:0}
+.words-studio-notice{display:flex;gap:12px;align-items:flex-start;border-top:1px solid var(--line);margin-top:23px;padding-top:16px;color:var(--muted)}
+.words-studio-notice svg{flex-shrink:0;color:var(--coral);margin-top:2px}
+.words-studio-notice p{font-size:12px;line-height:1.65;margin:0;max-width:800px}
+.words-studio-notice strong{color:var(--ink)}
+.words-studio-editor{margin-top:25px;padding-top:22px;border-top:1px solid var(--line)}
+.words-studio-prompt{border-left:3px solid var(--violet);padding:14px 20px;margin-bottom:22px;background:var(--white)}
+.words-studio-prompt blockquote{font:550 clamp(17px,2vw,25px)/1.3 'Fraunces Variable',Georgia,serif;margin:10px 0}
+.words-studio-prompt button{display:inline-flex;align-items:center;gap:6px}
+.words-studio-draft-label{font-size:13px;display:block;margin-bottom:9px}
+.words-studio-textarea{width:100%;min-height:160px;font-size:15px;line-height:1.65;resize:vertical;padding:16px;border-radius:3px}
+.words-studio-meta{display:flex;justify-content:space-between;gap:14px;font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5}
+.words-studio-sharing{border:0;padding:0;margin:24px 0 0;min-width:0}
+.words-studio-sharing legend{font-size:13px;font-weight:700;margin-bottom:12px}
+.words-studio-modes{display:flex;flex-wrap:wrap;gap:10px}
+.words-studio-modes label{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;border:1px solid var(--line);background:var(--white);border-radius:6px;font-size:13px;min-height:46px}
+.words-studio-modes label.is-active{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.words-studio-modes label input{width:15px;height:15px;margin:0;accent-color:var(--coral)}
+.words-studio-recipient-options{margin:18px 0 0;padding:19px;border:1px solid var(--line);background:var(--white)}
+.words-studio-recipient-options p{font-size:12px;line-height:1.55;color:var(--muted);margin:0 0 12px}
+.words-studio-recipient-options strong{color:var(--ink)}
+.words-recipient-list{display:flex;flex-wrap:wrap;gap:8px}
+.words-recipient-option{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:12px;cursor:pointer}
+.words-recipient-option input{width:16px;height:16px;margin:0;accent-color:var(--coral)}
+.words-recipient-option svg{color:var(--green)}
+.words-studio-status{display:flex;gap:11px;margin-top:20px;padding:15px 16px;border:1px solid var(--line);color:var(--ink)}
+.words-studio-status>svg{color:var(--coral);flex:0 0 auto}
+.words-studio-status strong{font-size:13px;display:block;margin-bottom:5px}
+.words-studio-status span{font-size:12px;color:var(--muted);line-height:1.55;display:block}
+.words-studio-footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;padding-top:19px}
+.words-studio-footer>p{font-size:11px;color:var(--muted);max-width:400px;margin:0;line-height:1.6}
+.words-studio-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.words-studio-disabled-send{font-size:12px;font-weight:700;color:var(--muted);padding:9px 12px;border:1px dashed var(--line);border-radius:5px}
+.words-studio-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.words-studio-confirm .button{white-space:nowrap}
+@media(max-width:720px){.words-studio{padding:22px 16px}.words-studio-heading{align-items:flex-start;flex-direction:column}.words-studio-notice{margin-top:18px}.words-studio-footer{align-items:flex-start;flex-direction:column}.words-studio-actions{width:100%}.words-studio-meta{flex-wrap:wrap}.words-studio-confirm{width:100%}}
