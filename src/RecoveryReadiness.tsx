@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {api} from './lib/api';
 import {LegacyMessageMigration} from './LegacyMessageMigration';
+import {RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 import {samePublicKey,storedMessageIdentity,type PublicKey} from './lib/message-crypto';
 
 type Status='checking'|'configured'|'restore'|'legacy'|'setup'|'mismatch'|'error';
@@ -33,12 +34,12 @@ export function RecoveryReadiness({userId}:{userId:string}){
  },[userId]);
  const info:Record<Status,string>={
   checking:'Checking your encrypted account recovery…',
-  configured:'A recovery code was configured and this browser has the enrolled key. Your encrypted messages and newly synced private journals can be recovered with your saved code.',
+  configured:'Recovery is configured on this browser. Store the recovery code in a trusted password manager so you can recover encrypted messages, journals and successfully synced drafts if this device is lost.',
   restore:'This account has a recovery record, but this browser does not have the encryption key. Use your saved code to restore access.',
   legacy:'This account has an older browser key without recovery. Preserve it and use the non-destructive migration below to set up recovery.',
   setup:'Encryption recovery has not been configured. Set it up before sharing writing or saving private journals.',
   mismatch:'The key on this browser does not match the enrolled key. Do not clear browser storage or overwrite keys.',
   error:'Recovery status unavailable: '+error
  };
- return <><div className="setting-section"><div><h2>Encrypted data recovery</h2><p role="status">{info[status]}</p><p className="fine-print">Passkey sign-in alone does not restore decryption keys. Do not use private family information until legacy migration, device revocation and security review are finished.</p></div><a className="button outline" href="/words">Open Words recovery</a></div>{status==='legacy'&&<LegacyMessageMigration userId={userId}/>}</>;
+ return <><div className="setting-section"><div><h2>Encrypted data recovery</h2><p role="status">{info[status]}</p>{(status==='configured'||status==='restore')&&<p className="fine-print">Search your secure vault for <strong>{RECOVERY_SEARCH_LABEL}</strong>. Carehold cannot re-display a recovery code once setup is complete.</p>}<p className="fine-print">Passkey sign-in alone does not restore decryption keys. Do not use private family information until legacy migration, device revocation and security review are finished.</p></div><a className="button outline" href="/words">Open Words recovery</a></div>{status==='legacy'&&<LegacyMessageMigration userId={userId}/>}</>;
 }
