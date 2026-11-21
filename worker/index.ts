@@ -158,7 +158,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   }
   await requirePasskey(db,user.id);
    if(path.startsWith('/api/messages/'))return handleMessages(req,env,user,ctx);
-   if(path.startsWith('/api/words/')||path==='/api/activity'||path.startsWith('/api/activity/'))return handleWordSpaces(req,env,user,ctx);
+   if(path==='/api/words/people'||path==='/api/words/push-preference'||path==='/api/words/spaces'||path.startsWith('/api/words/spaces/')||path==='/api/activity'||path==='/api/activity/seen')return handleWordSpaces(req,env,user,ctx);
   if(path==='/api/me/audience'&&req.method==='POST') {
     const b=await jsonBody(req);
     if(!validAudience(b.audience))bad(400,'Choose parent, child or teen.');
