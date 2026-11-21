@@ -7,6 +7,7 @@ import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
 import {handleMessages} from './messages';
+import {handleWordSpaces} from './words-spaces';
 
 const dataHeaders = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'"};
 class ApiError extends Error { constructor(public code:number,message:string){super(message);} }
@@ -105,7 +106,7 @@ async function claimInvitation(db:D1Database,invitation:InvitationRow,userId:str
  if(!joined)bad(409,'Invitation was already claimed.');
  return {joined:true,householdId:invitation.household_id};
 }
-async function handle(req:Request,env:CareEnv):Promise<Response> {
+async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Response> {
   const url=new URL(req.url), path=url.pathname,db=env.DB;
   checkRequest(req,env);
   const localRedirect=localFrontendRedirect(req,env.APP_ORIGIN);
@@ -156,7 +157,8 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     return json({audience:b.audience,pendingInvitation:!!invitationId});
   }
   await requirePasskey(db,user.id);
-   if(path.startsWith('/api/messages/'))return handleMessages(req,env,user);
+   if(path.startsWith('/api/messages/'))return handleMessages(req,env,user,ctx);
+   if(path.startsWith('/api/words/spaces')||path==='/api/words/people'||path.startsWith('/api/activity'))return handleWordSpaces(req,env,user,ctx);
   if(path==='/api/me/audience'&&req.method==='POST') {
     const b=await jsonBody(req);
     if(!validAudience(b.audience))bad(400,'Choose parent, child or teen.');
@@ -395,6 +397,8 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
       db.prepare('UPDATE profiles SET linked_user_id=NULL WHERE household_id=? AND linked_user_id=?').bind(hid,memberDelete[1]),
       db.prepare("UPDATE direct_threads SET pair_key='revoked:'||id WHERE household_id=? AND id IN (SELECT thread_id FROM direct_thread_members WHERE user_id=?)").bind(hid,memberDelete[1]),
        db.prepare('DELETE FROM direct_thread_members WHERE user_id=? AND thread_id IN (SELECT id FROM direct_threads WHERE household_id=?)').bind(memberDelete[1],hid),
+       db.prepare('DELETE FROM shared_word_participants WHERE user_id=? AND space_id IN (SELECT id FROM shared_word_spaces WHERE household_id=?)').bind(memberDelete[1],hid),
+       db.prepare('DELETE FROM private_word_activity WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1]),
        db.prepare('DELETE FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1])
     ]);
     return json({revoked:true,unlinkedProfiles:linked.results.length});
@@ -553,8 +557,8 @@ async function reminders(env:CareEnv) {
   }
 }
 export default {
-  async fetch(req:Request,env:CareEnv):Promise<Response> {
-    try {return await handle(req,env);}catch(e) {
+  async fetch(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Response> {
+    try {return await handle(req,env,ctx);}catch(e) {
       if(e instanceof ApiError)return json({error:e.message},e.code);
       console.error('Unhandled carehold request error');return json({error:'Something went wrong. Please try again.'},500);
     }
