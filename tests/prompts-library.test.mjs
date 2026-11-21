@@ -16,11 +16,11 @@ test('prompt rotation sees the whole filtered group before reusing a prompt',()=
  const choices=prompts.filter(p=>p.relationship==='parent-child').slice(0,4);
  let seen=[],previous=null;const selected=[];
  for(let i=0;i<4;i++){
-  const next=rotatePrompt(choices,seen,previous,0);
+  const next=rotatePrompt(choices,seen,previous,()=>0);
   assert.ok(next.prompt);selected.push(next.prompt.id);
   previous=next.prompt.id;seen=next.seen;
  }
  assert.equal(new Set(selected).size,4);
- const next=rotatePrompt(choices,seen,previous,0);
+ const next=rotatePrompt(choices,seen,previous,()=>0);
  assert.notEqual(next.prompt.id,previous);
 });
