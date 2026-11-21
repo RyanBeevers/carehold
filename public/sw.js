@@ -3,7 +3,7 @@ self.addEventListener('push', event => {
   let msg = {};
   try { msg = event.data ? event.data.json() : {}; } catch { /* Ignore malformed payload. */ }
   const title = 'A moment for care';
-  const body = 'Open Carehold to check your care schedule.';
+  const body = msg.tag === 'carehold-test' ? 'Your Carehold notification test arrived.' : 'Open Carehold to check your care schedule.';
   event.waitUntil(self.registration.showNotification(title, {
     body, icon: '/icon-192.png', badge: '/badge-96.png',
     tag: typeof msg.tag === 'string' ? msg.tag.slice(0,100) : 'carehold-reminder',

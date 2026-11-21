@@ -47,3 +47,13 @@
 .invitation-in-progress{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin:24px 0 6px;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:13px;color:var(--ink)}
 .invitation-in-progress .button{margin-left:auto}
 @media(max-width:720px){.setting-audience{min-width:100%}.invitation-in-progress .button{margin-left:0}.prompt-item .copy-action{grid-column:1 / -1}}
+
+/* Profile ownership identity is visually separate from medication authorization. */
+.linked-summary{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:15px;color:var(--muted);font-size:12px;margin:14px 0}
+.notifications-section{align-items:flex-start}
+.notifications-section .notification-status{margin-top:14px;font-size:12px;font-weight:600;color:var(--ink)}
+.notifications-section .notification-feedback{padding:10px 12px;margin-top:12px;border-left:3px solid var(--line);background:var(--panel);max-width:610px}
+.notifications-section .notification-feedback.error{border-color:var(--coral)}
+.notifications-section .notification-feedback.success{border-color:var(--green)}
+.notification-actions{display:grid;gap:9px;justify-items:stretch;min-width:205px}
+@media(max-width:720px){.notification-actions{width:100%;min-width:0}.notification-actions .button{width:100%}}
