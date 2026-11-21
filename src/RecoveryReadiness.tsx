@@ -35,7 +35,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
   checking:'Checking your encrypted account recovery…',
   configured:'A recovery code was configured and this browser has the enrolled key. Your encrypted messages and newly synced private journals can be recovered with your saved code.',
   restore:'This account has a recovery record, but this browser does not have the encryption key. Use your saved code to restore access.',
-  legacy:'This account has an older browser key without recovery. Preserve that original browser while legacy migration is pending.',
+  legacy:'This account has an older browser key without recovery. Preserve it and use the non-destructive migration below to set up recovery.',
   setup:'Encryption recovery has not been configured. Set it up before sharing writing or saving private journals.',
   mismatch:'The key on this browser does not match the enrolled key. Do not clear browser storage or overwrite keys.',
   error:'Recovery status unavailable: '+error
