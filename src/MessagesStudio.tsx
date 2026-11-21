@@ -101,7 +101,7 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
  const [kind,setKind]=useState<Content['kind']>('message'),[topic,setTopic]=useState('All topics'),[relationship,setRelationship]=useState<Relationship|'all'>('all');
  const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
  const [library,setLibrary]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
- const retry=useRef<{text:string,kind:Content['kind'],id:string,copies:Record<string,Envelope>}|null>(null);
+ const retry=useRef<{text:string,kind:Content['kind'],id:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const available=promptsForAudience(audience).filter(p=>(topic==='All topics'||p.topic===topic)&&(relationship==='all'||p.relationship===relationship));
  const topics=[...new Set(promptsForAudience(audience).filter(p=>relationship==='all'||p.relationship===relationship).map(p=>p.topic))].sort();
  function rotate(){
@@ -115,13 +115,14 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
   try{
    if(thread.participants.length!==2||thread.participants.some(p=>!p.publicKey))
     throw new Error('Both participants must enroll a device key before sending.');
+   const publicKeys=Object.fromEntries(thread.participants.map(p=>[p.id,p.publicKey])) as Record<string,PublicKey>;
    let attempt=retry.current;
-   if(!attempt||attempt.text!==draft.text||attempt.kind!==kind){
+   if(!attempt||attempt.text!==draft.text||attempt.kind!==kind||JSON.stringify(attempt.publicKeys)!==JSON.stringify(publicKeys)){
     const id=crypto.randomUUID(),copies:Record<string,Envelope>={};
     for(const p of thread.participants)copies[p.id]=await seal({kind,text:draft.text},p.publicKey!,thread.id,id,p.id);
-    attempt={id,kind,text:draft.text,copies};retry.current=attempt;
+    attempt={id,kind,text:draft.text,copies,publicKeys};retry.current=attempt;
    }
-   await api(`/messages/threads/${encodeURIComponent(thread.id)}`,'POST',{id:attempt.id,copies:attempt.copies});
+   await api(`/messages/threads/${encodeURIComponent(thread.id)}`,'POST',{id:attempt.id,copies:attempt.copies,publicKeys:attempt.publicKeys});
    retry.current=null;
    const cleared=await draft.discard();
    setKind('message');setStatus(cleared?'Sent to your chosen recipient.':'Sent, but the local draft could not be cleared. Please discard it manually.');
