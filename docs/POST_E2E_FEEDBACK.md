@@ -6,7 +6,7 @@ The user's first full local E2E pass passed 10/10 scenarios but exposed workflow
 
 - A prior refused, skipped, missed, uncertain or *erroneously recorded* administration should never silently reopen a second scheduled dose. The unique initial occurrence record remains intact.
 - New migration **0010_dose_correction_kind.sql** adds a nullable `dose_events.correction_kind` flag. A correction explicitly labeled **Not administered — earlier record was entered in error** stores `event_type='skipped'` plus `correction_kind='not_administered'`. The **original** event remains in history, and new corrections append to the existing chain.
-- **Record a later outcome** on Today opens a factual follow-up editor for the latest recorded status. It creates a new corrective successor with actual time and reason, rather than recording a duplicate initial occurrence. The earlier refusal or error remains in history. Only the current event may be corrected.
+- **Record a later outcome** is placed beside **Correct record** in administration history, not as a second primary action on the Today ledger. It opens a factual follow-up editor for the latest recorded status. It creates a new corrective successor with actual time and reason, rather than recording a duplicate initial occurrence. The earlier refusal or error remains in history. Only the current event may be corrected.
 - This is a medication ledger, not medical advice: corrections do **not** decide whether another dose is clinically appropriate. The user checks original directions and history before administering.
 
 ## Words: journal-first without duplicated text fields
@@ -49,3 +49,20 @@ Then repeat a focused **post-E2E regression**:
 9. Confirm responsive mobile layout, account boundaries, no native browser prompts, and passkey lock/unlock.
 
 All new SQL migrations are **local-first**. Cloudflare staging and production have separate D1 stores and need explicit verification, backup and approval before migration/deploy. No production action is implied by local E2E success.
+
+## Second feedback: activity without accessible shared spaces and interrupted correction writing
+
+- **Do not confuse activity metadata with decryption success.** `WordsHub` first checks the browser-local nonextractable ECDH key against the enrolled `message_device_keys` public key. One account has **one browser-profile device key** in this pilot; signing into the same account in a different browser, incognito profile or different origin creates a different key. Do not rotate/reset the server public key to work around this; old envelopes could become unreadable. The intended remedy is to revisit the original browser profile for that account, avoiding site-data deletion. Secure multi-device/key recovery requires separate design before real data.
+- `SharedSpaces` fetches the **authorized server metadata even when `identity` is null**. A key mismatch no longer fakes an empty shared list; list entries carry encrypted-content-unavailable labels, and Activity navigation never stays indefinitely on a spinner without a specific error. A metadata-only list does not expose journal plaintext and does **not** grant access to excluded accounts. If the server returns no entries for an account, the app tells the user to check the intended **user account**, not merely a medication profile.
+- While interacting (including actual text input and composition), the inactivity hook initiates a throttled **real network** `/api/auth/get-session` refresh rather than relying on an SDK cache or background interval alone. Confirm server inactivity and away rules still apply. A session invalidated by a concurrent account switch in another tab is intentionally **not** silently carried over.
+- If a passkey lock interrupts an **unfinished dose correction**, preserve its reason, selected outcome, timestamp and idempotency key **in the same JavaScript tab's memory only**. After passkey sign-in, restore it only when the authenticated user ID and household both match. A deliberate sign-out/account change clears it, and closing or refreshing the tab still loses it. This is not durable autosave, not encrypted storage, and not a replacement for the still-unreviewed care data security model.
+- Always use separate browser profiles or separate browsers **per test account**. Switching from one account to another in the same browser profile changes the session for every tab of that profile and may trigger a defensive lock.
+
+### Focused regression for this feedback
+1. In a single browser profile/account, type a fictional correction reason continuously for 4+ minutes. Confirm no idle lock, with actual GET session refresh calls in network logs. Stop interacting for >3 minutes and verify the intended lock still works. Unlock using the **same account** and confirm the unfinished reason and chosen event are restored. Check deliberate sign-out does not restore writing.
+2. Verify the later-outcome action now appears only beside the latest non-given event in administration history.
+3. Send a fictional Words prompt to a second account that was enrolled in its **own** browser profile. Verify server metadata list, decryption, and discussion/private-notes boundaries on both profiles.
+4. Log into the recipient account from a *different* browser profile that lacks its original encryption key. Confirm Activity links to a shared space that **shows an explicit key error** and Shared Spaces still lists its metadata, not a false empty state. Return to its original profile and confirm the writing is readable there.
+5. If Activity shows an item but even the server metadata list is truly empty, inspect that exact account/household permission and the corresponding `shared_word_participants`/`shared_word_copies` D1 records without changing or deleting ciphertext.
+
+Remain in fictional-data pilot. No key replacement, reset, staging or production deployment is authorized by this corrective pass.
