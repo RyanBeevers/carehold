@@ -8,6 +8,7 @@ import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
 import {handleMessages} from './messages';
 import {handlePrivateJournal} from './private-journal';
+import {handlePrivateDrafts} from './private-drafts';
 import {handleRecoveryMigration} from './recovery-migration';
 import {handleWordSpaces} from './words-spaces';
 import {CatalogError,normalizeMedicationSearch,searchCatalog,enforceCatalogRateLimit,parseMedicationCatalog,type MedicationCatalogMetadata} from './medication-catalog';
@@ -192,6 +193,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
    if(path.startsWith('/api/messages/recovery/migration'))return handleRecoveryMigration(req,env,user);
    if(path.startsWith('/api/messages/'))return handleMessages(req,env,user,ctx);
    if(path==='/api/private-journal'||path.startsWith('/api/private-journal/'))return handlePrivateJournal(req,env,user);
+   if(path.startsWith('/api/private-drafts/'))return handlePrivateDrafts(req,env,user);
    if(path==='/api/words/people'||path==='/api/words/push-preference'||path==='/api/words/spaces'||path.startsWith('/api/words/spaces/')||path==='/api/activity'||path==='/api/activity/seen')return handleWordSpaces(req,env,user,ctx);
   if(path==='/api/me/audience'&&req.method==='POST') {
     const restricted=await db.prepare("SELECT 1 FROM household_member_classes WHERE user_id=? AND classification IN ('teen','child') LIMIT 1").bind(user.id).first();
