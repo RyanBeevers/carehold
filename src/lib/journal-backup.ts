@@ -44,10 +44,16 @@ function validateEntries(value:unknown):JournalDraft[]{
   const item=entry as Record<string,unknown>;
   if(typeof item.id!=='string'||!UUID.test(item.id)||ids.has(item.id)||
    typeof item.text!=='string'||item.text.length>3000||!item.text.trim()||
-   !(item.prompt===null||typeof item.prompt==='string'&&item.prompt.length<=600))
+   !(item.prompt===null||typeof item.prompt==='string'&&item.prompt.length<=600)||
+   !(item.title===undefined||typeof item.title==='string'&&item.title.length<=120)||
+   !(item.sharedAt===undefined||item.sharedAt===null||typeof item.sharedAt==='number'&&Number.isFinite(item.sharedAt)&&item.sharedAt>=0)||
+   !(item.spaceId===undefined||item.spaceId===null||typeof item.spaceId==='string'&&UUID.test(item.spaceId)))
    throw new Error('Invalid or repeated journal backup entry.');
   ids.add(item.id);
-  return {id:item.id,text:item.text,prompt:item.prompt as string|null};
+  return {id:item.id,text:item.text,prompt:item.prompt as string|null,
+   ...(item.title!==undefined?{title:item.title as string}:{}),
+   ...(item.sharedAt!==undefined?{sharedAt:item.sharedAt as number|null}:{}),
+   ...(item.spaceId!==undefined?{spaceId:item.spaceId as string|null}:{})};
  });
 }
 export async function createEncryptedJournalBackup(
