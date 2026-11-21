@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { passkey } from '@better-auth/passkey';
 import type { CareEnv } from './types';
+import {SESSION_IDLE_SECONDS,SESSION_REFRESH_SECONDS} from '../shared/session-policy';
 
 export function makeAuth(env:CareEnv) {
   if (!env.BETTER_AUTH_SECRET || env.BETTER_AUTH_SECRET.length < 32) throw new Error('BETTER_AUTH_SECRET must be configured');
@@ -10,6 +11,9 @@ export function makeAuth(env:CareEnv) {
     baseURL: env.APP_ORIGIN,
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [env.APP_ORIGIN],
+    // The database-backed Better Auth session also expires after inactivity.
+    // Keep cookie caching off so API requests validate revocation/expiry.
+    session: {expiresIn:SESSION_IDLE_SECONDS,updateAge:SESSION_REFRESH_SECONDS,cookieCache:{enabled:false}},
     emailAndPassword: { enabled:true, minPasswordLength:10 },
     plugins: [passkey({ rpID:origin.hostname, rpName:'carehold.', authenticatorSelection:{userVerification:'required'} })],
     advanced: { ipAddress:{ipAddressHeaders:['cf-connecting-ip']} },
