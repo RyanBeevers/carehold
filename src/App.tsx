@@ -60,6 +60,7 @@ export default function App(){
  const [households,setHouseholds]=useState<Household[]>([]),[hid,setHid]=useState('');
  const [profiles,setProfiles]=useState<Person[]>([]),[entries,setEntries]=useState<Entry[]>([]);
  const [myProfile,setMyProfile]=useState<LinkedSelfProfile|null>(null);
+ const myProfileRequest=useRef(0);
  const [members,setMembers]=useState<Member[]>([]),[memberToRemove,setMemberToRemove]=useState<Member|null>(null);
  const [page,setPage]=useState<Page>('today'),[selected,setSelected]=useState(''),[meds,setMeds]=useState<Medication[]>([]),[history,setHistory]=useState<DoseEvent[]>([]);
  const [date,setDate]=useState(''),[error,setError]=useState('');
@@ -120,7 +121,7 @@ export default function App(){
    return()=>navigator.serviceWorker.removeEventListener('message',receive);
  },[]);
  const clearSensitive=useCallback(()=>{
-   invalidatePendingApiResponses();
+   invalidatePendingApiResponses();myProfileRequest.current+=1;
    setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);
    setHouseholds([]);setHid('');setProfiles([]);setMyProfile(null);setEntries([]);setMeds([]);setHistory([]);setMembers([]);
    setSelected('');setModal(null);setPending({});setInviteCreated('');setPassword('');setEmail('');
@@ -198,12 +199,13 @@ export default function App(){
   setModal(null);setMemberToRemove(null);await refreshMembers();notice('Caregiver access was revoked.');
  }catch(e){fail(e);}finally{setSaving(false);}}
  const refreshMyProfile=useCallback(async()=>{
-   if(!hid||!user?.id||!hasPasskey)return;
+   const requestId=++myProfileRequest.current;
+   if(!hid||!user?.id||!hasPasskey){setMyProfile(null);return;}
    try{
      const result=await api<{profile:LinkedSelfProfile|null}>(`/me/linked-profile?householdId=${encodeURIComponent(hid)}`);
-     setMyProfile(result.profile);
+     if(requestId===myProfileRequest.current)setMyProfile(result.profile);
    }catch(e){
-     if(e instanceof StaleSessionRequest)return;
+     if(requestId!==myProfileRequest.current||e instanceof StaleSessionRequest)return;
      setMyProfile(null);
      fail(e);
    }
