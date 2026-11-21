@@ -19,7 +19,7 @@ A new household on the same Sara/other legacy test account **does not** remove t
 
 ## Current crypto trust and limits
 
-The recovery code is **32 bytes of uniformly random entropy**, encoded as \`CH1-\` plus base64url; it is not a user password or account email-reset code. The code never belongs in D1, logs, telemetry, URLs, clipboard persistence, or another participant's account. Account authentication gates the API; the independent recovery code gates decryption.
+The recovery code is **32 bytes of uniformly random entropy**, encoded as \`CH1-\` plus base64url; it is not a user password or account email-reset code. The code must never be written to D1, logs, telemetry, URLs, application storage, or another participant's account. The optional user-initiated Copy action puts it on the operating-system clipboard, which may be retained by clipboard managers; instruct testers to store it securely and clear their clipboard when appropriate. Account authentication gates the API; the independent recovery code gates decryption.
 
 Wrapped private keys use WebCrypto HKDF with a random 16-byte salt, SHA-256, an application-specific info string, 12-byte random AES-GCM nonce and user/public-key associated data. The P-256 public/private pairing is verified before a recovered private key is admitted. All sensitive import/export happens client-side; decrypted PKCS#8 bytes are explicitly zeroed in the JS-managed ArrayBuffer after import. This is a defense-in-depth best effort, not a memory-forensics guarantee.
 
