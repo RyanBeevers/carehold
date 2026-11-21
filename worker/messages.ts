@@ -1,4 +1,5 @@
 import type {CareEnv,SessionUser} from './types';
+import {notifyPrivateRecipients} from './words-spaces';
 import {exactParticipants,mayStartDirectMessage,pairKey,validPublicJwk,validSealedEnvelope} from './messages-policy';
 /** Fictional text only: TOFU key registry, one device/account, no reviewed E2EE.
  * API never receives plaintext. No read receipts, views or typing tracking. */
@@ -36,7 +37,7 @@ async function hash(value:string){
  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
  return Array.from(new Uint8Array(b),x=>x.toString(16).padStart(2,'0')).join('');
 }
-async function route(req:Request,env:CareEnv,user:SessionUser){
+async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionContext){
  const db=env.DB,url=new URL(req.url),path=url.pathname;
  if(path==='/api/messages/keys/me'){
   if(req.method==='GET'){
@@ -115,6 +116,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    if(!exactParticipants(Object.keys(copies),ids)||!ids.every(uid=>validSealedEnvelope(copies[uid])))
     fail(400,'Exactly two valid participant ciphertext copies required.');
    const digest=await hash(id+':'+user.id+':'+JSON.stringify(ids.sort().map(uid=>[uid,copies[uid]])));
+   const recipient=ids.find(uid=>uid!==user.id)!;
    const existing=await db.prepare('SELECT thread_id,sender_id,body_hash FROM encrypted_messages WHERE id=?')
     .bind(msgId).first<{thread_id:string,sender_id:string,body_hash:string}>();
    if(existing){
@@ -123,11 +125,14 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
     return respond({id:msgId,accepted:true,replayed:true});
    }
    try{
+    const ts=new Date().toISOString();
     await db.batch([
      db.prepare('INSERT INTO encrypted_messages(id,thread_id,sender_id,body_hash,created_at) VALUES(?,?,?,?,?)')
-      .bind(msgId,id,user.id,digest,new Date().toISOString()),
+      .bind(msgId,id,user.id,digest,ts),
      ...ids.map(uid=>db.prepare('INSERT INTO encrypted_message_copies(message_id,recipient_id,envelope_json) VALUES(?,?,?)')
-      .bind(msgId,uid,JSON.stringify(copies[uid])))
+      .bind(msgId,uid,JSON.stringify(copies[uid]))),
+     db.prepare("INSERT INTO private_word_activity(id,user_id,household_id,source_kind,source_id,event_kind,created_at) VALUES(?,?,?,'direct',?,'message',?)")
+      .bind(crypto.randomUUID(),recipient,thread.household_id,id,ts)
     ]);
    }catch{
     const replay=await db.prepare('SELECT thread_id,sender_id,body_hash FROM encrypted_messages WHERE id=?')
@@ -135,11 +140,12 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
     if(replay?.thread_id!==id||replay?.sender_id!==user.id||replay?.body_hash!==digest)
       fail(409,'Encrypted message not accepted.');
    }
+   notifyPrivateRecipients(env,ctx,thread.household_id,[recipient]);
    return respond({id:msgId,accepted:true},201);
   }
  }
  fail(404,'Messaging route not found.');
 }
-export async function handleMessages(req:Request,env:CareEnv,user:SessionUser):Promise<Response>{
- try{return await route(req,env,user);}catch(e){if(e instanceof MessageError)return respond({error:e.message},e.status);throw e;}
+export async function handleMessages(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionContext):Promise<Response>{
+ try{return await route(req,env,user,ctx);}catch(e){if(e instanceof MessageError)return respond({error:e.message},e.status);throw e;}
 }
