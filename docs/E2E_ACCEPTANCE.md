@@ -30,6 +30,11 @@ Test with at least **three fictional accounts**: A (owner and journal sender), B
 - [ ] Link B to a fictional profile. Confirm linking does **not** independently grant medication management or private journal access.
 - [ ] Limited caregiver permissions allow only their selected profiles and actions. A revoked person cannot read their former medication data, encrypted shared-space data or unread activity.
 - [ ] The app behaves predictably after the three-minute session timeout and after returning from the background; unsent encrypted drafts recover only where enabled.
+- [ ] Open **two Carehold tabs in the same persistent browser profile and same account**. Leave tab A untouched in the background for over one minute while actively typing/scrolling in tab B. Tab A must show its own local lock on return, but **tab B must remain authenticated, responsive and able to save**. Repeat with tab A foregrounded but untouched for over three minutes while B remains active.
+- [ ] Keep the cursor moving and scroll a long fictional Words entry for over three minutes; the active tab must NOT lock from inactivity. Leave the app untouched for three minutes; now only that tab must lock, displaying the inactivity reason.
+- [ ] Trigger explicit **Lock now** in one tab; unlike automatic locking, this should revoke its authenticated server session, causing other tabs to require reauthentication on their next authenticated request. Verify explicit Sign out too.
+- [ ] Disconnect the network or temporarily make the Worker return a transient error for a heartbeat. A transport/5xx failure must not clear an otherwise authenticated editing session. A genuine expired/switched session must lock after a confirming authenticated check.
+- [ ] Switch to Apple Passwords or another app for more than one minute, then return: only the Carehold tab's screen locks. Recover using the stored code/pending envelope; verify that no other active Carehold tab is involuntarily signed out.
 
 ## 2 — Medication ledger
 
