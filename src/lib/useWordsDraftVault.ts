@@ -11,8 +11,9 @@ const INITIAL:DraftDocument={text:'',prompt:null,title:''};
 
 /**
  * Debounced, serialized writes to an explicitly enabled device-local vault.
- * Text is NEVER transmitted to the API. We don't persist selected recipients.
- * The vault is not E2EE or safe for unreviewed confidential patient writing.
+ * Only AES-GCM ciphertext is sent to authenticated draft-sync APIs when
+ * account recovery is configured. We never store selected recipients.
+ * Local autosave remains functional offline; sync conflicts are never hidden.
  */
 export function useWordsDraftVault(userId:string,householdId:string){
  const [text,setTextState]=useState('');
