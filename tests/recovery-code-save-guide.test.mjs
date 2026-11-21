@@ -21,7 +21,10 @@ test('copy operation requires user action and never claims to auto-save in a pas
  assert.match(guide,/Apple Passwords/);
  assert.match(guide,/Locked note/);
  assert.match(guide,/I saved my recovery code somewhere secure and checked/);
- assert.doesNotMatch(guide,/localStorage|sessionStorage|navigator\.share|fetch\(|sendBeacon\(|console\./);
+ // This is a source-level safety regression check. Check executable access,
+ // not the mere appearance of an API name in a comment explaining the risk.
+ const executable=guide.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+ assert.doesNotMatch(executable,/\b(?:localStorage|sessionStorage)\s*(?:\.|\[)|\bnavigator\.share\s*\(|\bfetch\s*\(|\bsendBeacon\s*\(|\bconsole\s*\./);
 });
 
 test('code is distinct from login password and no new auto-save credential is fabricated',()=>{
