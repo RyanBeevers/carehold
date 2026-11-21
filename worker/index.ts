@@ -378,7 +378,11 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     const hid=required(url.searchParams.get('householdId')),role=await member(db,hid,user.id);
     const household=await db.prepare('SELECT timezone FROM households WHERE id=?').bind(hid).first<{timezone:string}>();
     const date=isoDay(url.searchParams.get('date')||localDate(new Date(),household!.timezone));
-    const rows=await db.prepare(`SELECT m.*,p.display_name,p.kind,p.household_id FROM medications m
+     const accountClass=await classification(db,hid,user.id);
+     const recordGrants=await db.prepare("SELECT profile_id FROM profile_grants WHERE user_id=? AND capability='record_dose'")
+      .bind(user.id).all<{profile_id:string}>();
+     const writableProfiles=new Set((recordGrants.results||[]).map(g=>g.profile_id));
+    const rows=await db.prepare(`SELECT m.*,p.display_name,p.kind,p.household_id,p.linked_user_id FROM medications m
       JOIN profiles p ON p.id=m.profile_id
       WHERE p.household_id=? AND p.archived_at IS NULL AND m.archived_at IS NULL
       AND (?='owner' OR EXISTS(SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))`).bind(hid,role,user.id,user.id,user.id).all<MedicationRow&ProfileRow>();
@@ -395,7 +399,9 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
         const due=localToInstant(date,x.hhmm,household!.timezone);
         entries.push({key,date,time:x.hhmm,timezone:household!.timezone,dueAt:due?.toISOString()??null,
           medicationId:m.id,medicationName:m.name,dose:m.dose,instructions:m.instructions,profileId:m.profile_id,
-          person:m.display_name,kind:m.kind,event});
+          person:m.display_name,kind:m.kind,event,
+           canRecordDose:canUseCareProfile(role,accountClass,writableProfiles.has(m.profile_id)?['record_dose']:[],
+            'record_dose',m.kind==='adult'&&(m as MedicationRow&ProfileRow&{linked_user_id?:string|null}).linked_user_id===user.id)});
       }
     }
     return json({date,timezone:household!.timezone,entries});
