@@ -18,6 +18,7 @@ export function ShareComposer({seed,userId,householdId,identity,people,onCreated
  onCreated:(spaceId:string)=>void,onCancel:()=>void,onRefreshPeople:()=>void
 }){
  const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const pending=useRef<{id:string,postId:string,recipients:string,copies:Record<string,Envelope>}|null>(null);
  const eligible=people.filter(p=>p.publicKey);
  const chosen=eligible.filter(p=>recipients.includes(p.id));
  const canSend=!!identity&&chosen.length>0&&!busy;
@@ -25,13 +26,21 @@ export function ShareComposer({seed,userId,householdId,identity,people,onCreated
   e.preventDefault();if(!canSend||!identity)return;
   setBusy(true);setError('');
   try{
-   const sid=crypto.randomUUID(),postId=crypto.randomUUID();
-   const participants=[{id:userId,name:'You',publicKey:identity.publicKey},...chosen];
-   const payload:WordPayload={kind:seed.kind,text:seed.text,prompt:seed.prompt};
-   const copies:Record<string,Envelope>={};
-   for(const p of participants)copies[p.id]=await sealWord(payload,p.publicKey!,sid,postId,p.id);
-   await api('/words/spaces','POST',{id:sid,postId,householdId,kind:seed.kind,recipientIds:chosen.map(p=>p.id),copies});
-   onCreated(sid);
+   const selected=chosen.map(p=>p.id).sort();
+   const fingerprint=selected.join(':');
+   let attempt=pending.current;
+   if(!attempt||attempt.recipients!==fingerprint){
+    const sid=crypto.randomUUID(),postId=crypto.randomUUID();
+    const participants=[{id:userId,name:'You',publicKey:identity.publicKey},...chosen];
+    const payload:WordPayload={kind:seed.kind,text:seed.text,prompt:seed.prompt};
+    const copies:Record<string,Envelope>={};
+    for(const p of participants)copies[p.id]=await sealWord(payload,p.publicKey!,sid,postId,p.id);
+    attempt={id:sid,postId,recipients:fingerprint,copies};
+    pending.current=attempt;
+   }
+   await api('/words/spaces','POST',{id:attempt.id,postId:attempt.postId,householdId,kind:seed.kind,recipientIds:selected,copies:attempt.copies});
+   pending.current=null;
+   onCreated(attempt.id);
   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
   finally{setBusy(false);}
  }
@@ -47,7 +56,7 @@ export function ShareComposer({seed,userId,householdId,identity,people,onCreated
     <div className="words-share-people">
      {people.map(person=><label key={person.id} className="words-share-person">
       <input type="checkbox" checked={recipients.includes(person.id)} disabled={!person.publicKey||(!recipients.includes(person.id)&&recipients.length>=10)||busy}
-       onChange={e=>setRecipients(v=>e.target.checked?[...v,person.id]:v.filter(id=>id!==person.id))}/>
+       onChange={e=>{pending.current=null;setRecipients(v=>e.target.checked?[...v,person.id]:v.filter(id=>id!==person.id));}}/>
       <span><strong>{person.name}</strong>{!person.publicKey&&<small>Needs to open Words or Messages on their own device first</small>}</span>
      </label>)}
     </div>
