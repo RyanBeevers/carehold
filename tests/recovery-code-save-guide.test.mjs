@@ -30,3 +30,21 @@ test('code is distinct from login password and no new auto-save credential is fa
  assert.match(fresh,/Look for <strong>\{RECOVERY_SEARCH_LABEL\}<\/strong>/);
  assert.match(legacy,/Search your Passwords app or safe notes for <strong>\{RECOVERY_SEARCH_LABEL\}<\/strong>/);
 });
+
+test('switching to iPhone Passwords cannot silently discard an unregistered recovery identity',()=>{
+ const store=readFileSync(new URL('../src/lib/message-crypto.ts',import.meta.url),'utf8');
+ assert.match(store,/indexedDB\.open\(dbName,3\)/);
+ assert.match(store,/createObjectStore\('pendingRecoveries'/);
+ assert.match(store,/storedPendingRecoveryEnvelope/);
+ assert.match(store,/storePendingRecoveryEnvelope/);
+ assert.match(store,/clearPendingRecoveryEnvelope/);
+ assert.match(store,/scope:.*createdAt:Date\.now\(\),envelope/);
+ assert.doesNotMatch(store,/pendingRecoveries.*recoveryCode/);
+ assert.match(fresh,/mode==='resume-setup'/);
+ assert.match(fresh,/storedPendingRecoveryEnvelope\(userId,'fresh'\)/);
+ assert.match(fresh,/openMessageRecoveryIdentity\(userId,code\.trim\(\),pendingResume\)/);
+ assert.match(fresh,/clearPendingRecoveryEnvelope\(userId,'fresh'\)/);
+ assert.match(legacy,/status==='resume-prestage'/);
+ assert.match(legacy,/storedPendingRecoveryEnvelope\(userId,'legacy'\)/);
+ assert.match(legacy,/clearPendingRecoveryEnvelope\(userId,'legacy'\)/);
+});
