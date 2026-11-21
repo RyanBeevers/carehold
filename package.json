@@ -17,7 +17,7 @@
     "push:setup": "node scripts/configure-local-push.mjs",
     "db:backup:local": "bash scripts/backup-local.sh",
     "preflight:staging": "node scripts/check-staging-config.mjs",
-    "verify:pre-e2e": "npm test && npm run typecheck && npm run build"
+    "verify:pre-e2e": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.0",
