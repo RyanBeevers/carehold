@@ -121,8 +121,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
   const task=queue.current.catch(()=>{}).then(async()=>{
    const result=await saveDeviceDraft(userId,householdId,snapshot,revision.current,force);
    revision.current=result.revision;
-   if(!alive.current)return;
-   setSavedAt(result.savedAt);
+   if(alive.current)setSavedAt(result.savedAt);
    if(remoteKey.current){
     if(remoteBlocked.current&&!force)throw new DraftConflictError();
     try{
@@ -137,6 +136,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
      setSynced(false);throw e;
     }
    }
+   if(!alive.current)return;
    if(edit===editNo.current){
     dirty.current=false;conflicted.current=false;setStatus('saved');setError('');
    }else setStatus('editing');
