@@ -37,3 +37,14 @@ test('a saved private journal is not automatically shared on navigation',()=>{
  assert.doesNotMatch(savePrivate,/\/words\/spaces|startSharing\(|onCreated\(/);
  assert.match(shared,/if\(!canSend\|\|!identity\)return/);
 });
+
+test('linked-profile shortcut visibly focuses its medication plan even when no medicines exist',()=>{
+ assert.match(app,/View my medication plan/);
+ assert.match(app,/setSelected\(myProfile\.id\);setPlanFocusTarget\(myProfile\.id\)/);
+ assert.match(app,/person\?\.id!==planFocusTarget/);
+ assert.match(app,/getElementById\('carehold-medication-plan-heading'\)/);
+ assert.match(app,/scrollIntoView\(\{behavior:'smooth',block:'center'\}\)/);
+ assert.match(app,/heading\.focus\(\{preventScroll:true\}\)/);
+ assert.match(app,/id="carehold-medication-plan-heading" tabIndex=\{-1\}/);
+ assert.match(app,/No active medications\./);
+});
