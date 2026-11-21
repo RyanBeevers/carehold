@@ -16,11 +16,10 @@ FROM household_members;
 
 CREATE TABLE household_member_class_changes (
  id TEXT PRIMARY KEY,
- household_id TEXT NOT NULL,
- user_id TEXT NOT NULL,
+ household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
  previous_class TEXT NOT NULL,
  next_class TEXT NOT NULL,
  changed_by TEXT NOT NULL REFERENCES user(id),
- changed_at TEXT NOT NULL,
- FOREIGN KEY(household_id,user_id) REFERENCES household_members(household_id,user_id) ON DELETE CASCADE
+ changed_at TEXT NOT NULL
 );
