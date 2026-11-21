@@ -103,7 +103,7 @@ export default function App(){
  const [pushTrace,setPushTrace]=useState<{id:string,accepted:boolean,received:boolean,displayRequested:boolean,displayError:boolean}|null>(null);
  const [localNotificationFeedback,setLocalNotificationFeedback]=useState('');
  const [linkUserId,setLinkUserId]=useState('');
- const [authMode,setAuthMode]=useState<'signup'|'signin'>('signup'),[authName,setAuthName]=useState(''),[email,setEmail]=useState(''),[password,setPassword]=useState('');
+ const [authMode,setAuthMode]=useState<'signup'|'signin'>('signin'),[authName,setAuthName]=useState(''),[email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [personName,setPersonName]=useState(''),[personKind,setPersonKind]=useState<Person['kind']>('adult');
  const [medForm,setMedForm]=useState(blankMed),[medProfile,setMedProfile]=useState('');
  const [doseStatus,setDoseStatus]=useState<(typeof statuses)[number]>('given'),[doseNote,setDoseNote]=useState(''),[doseIdempotency,setDoseIdempotency]=useState(''),[doseActualAt,setDoseActualAt]=useState(datetimeField(new Date()));

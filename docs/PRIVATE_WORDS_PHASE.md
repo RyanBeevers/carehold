@@ -48,3 +48,18 @@ The only new API is an authenticated, read-only **recipient-options** lookup. It
 ## Still not implemented
 
 Encryption/recovery, encrypted storage, real sharing and revocation, read-only recipient permissions, messages, groups, clinician workflows and minor-specific legal/consent gates. Don't call this a finished journal or communication feature.
+
+## Required next: encrypted draft autosave and authenticated restoration (2026-11-21)
+
+**Product requirement:** A user may write a substantial private note and set down their phone. The banking-style inactivity lock, temporary app backgrounding, browser refresh, loss of connectivity or another sign-in should **not** silently destroy already-composed writing once the feature is released. Recover after successful passkey sign-in, ideally at the same page and writing context.
+
+**Not implemented in the current local-only prototype.** It still discards writing on unmount, refresh, lock or sign-out, and explicitly warns users. We are postponing persistence rather than writing plaintext into localStorage/IndexedDB/D1.
+
+Before release, implement and review:
+1. **Client-side encryption before any persistence.** Autosave drafts encrypted (not plaintext) using per-user/per-device keys that are not merely Better Auth session cookies. Passkeys validate sign-in; separate encryption key unlock, protection, recovery and rotation must be designed and security reviewed. No plaintext in network logs, notifications or browser storage.
+2. **Autosave timing and feedback:** debounce ~1–2 seconds after edits, also flush safely on visibility/background events where possible. Show Saving / Saved locally / Sync pending / Save failed without misleading certainty. Support tab close/reload, interruption, mobile OS suspension and protected retries.
+3. **Identity isolation:** index encrypted drafts by authenticated account and care circle; never expose a previous user's drafts on shared devices or across household switches. Require successful reauthentication before decrypting/restoring, with clear choice of current draft and any conflict versions.
+4. **Retention and user control:** explicit Discard permanently, recovery from transient network loss, clear deletion semantics across devices/backups, bounded retention for abandoned drafts, and no silent sharing/auto-sending. Ask before replacing one existing unsent draft with another prompt.
+5. **Tests:** reauthenticate after 3-minute lock, 1-minute background expiry, refresh / direct `/words` URL, offline resume, cross-tab/device conflicts, passkey recovery, consent-revocation and no plaintext API/storage leaks. Never tie draft access to household owner role.
+
+**Separate navigation milestone now implemented:** Browser URLs such as `/words` remain stable across reload and sign-out. The page is restored *after authentication* without exposing care content before login. This navigation continuity is distinct from (and does not currently include) draft restoration.

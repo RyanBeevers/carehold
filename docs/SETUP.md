@@ -126,3 +126,19 @@ The existing Words prompts now have **Write with this**. In **Words → Try writ
 Regression: parent / teen / child prompt audiences, no cross-audience prompts, in-progress draft preserved when selecting another prompt, no recipient retained after returning to Just me, unauthorized household recipient lookup denied, and no health data or plaintext writing in network requests.
 
 Mac push still requires real native delivery validation, and phone push should be tested **only after a staged HTTPS deployment**, compatible installed PWA setup and notification permissions. Do not treat upstream acceptance as delivered.
+
+## Direct URL navigation and returning after sign-in
+
+Carehold uses explicit, non-sensitive routes: `/today`, `/people`, `/words`, `/circle`, and `/settings`. The legacy `/` route normalizes to `/today`. Sidebar and mobile navigation use real anchor links, preserve browser Back/Forward, support native Open in New Tab and update the URL without a full reload. Page state initializes from `window.location.pathname`.
+
+The URL is deliberately retained when locked, signed out or held behind passkey/account/household gates. After authentication and successful household loading, Carehold returns to the **same page** (not automatically Today). It never uses the URL to grant access and does not put patient/profile IDs, household IDs, drafts, medication details or recipients in the URL.
+
+`wrangler.jsonc` now enables `assets.not_found_handling="single-page-application"` while keeping `run_worker_first=["/api/*"]`: direct requests to `/words` and other page routes should serve the SPA on staging/production and still protect the API. The Vite dev server supports page reloads automatically.
+
+**Manual checks:**
+1. Navigate to People, Words, Care circle and Settings; confirm the address bar changes and mobile/desktop active links follow.
+2. Refresh on `/words` and `/settings`; verify the same page returns after authentication, never the Today default.
+3. From `/words`, lock / wait for the idle timeout / sign out. Confirm the URL remains `/words`, the app masks data until real sign-in, and post-login returns to Words.
+4. Use browser Back/Forward across pages; test a copied `/people` link opened in a new tab and direct `/circle` refresh on the Worker-served build.
+5. Visit `/`, `/words/` and an unknown path; confirm canonical safe navigation goes to a known page and no data is exposed before authentication.
+6. Verify leaving the local-only Words studio or refreshing still **discards** its fictional writing. Encrypted autosave is a documented next phase, not part of this routing patch.

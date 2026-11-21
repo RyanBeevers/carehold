@@ -76,3 +76,8 @@ Household-only use does **not** waive baseline security. Stop new sensitive-data
 - `src/WordsDraftStudio.tsx` intentionally keeps fictional draft text only in mounted React state. Never add autosave, telemetry, background sync, WebSocket, server POST, copy-to-clipboard, browser storage, or a "send" control without the E2EE/consent release gate.
 - Sharing selection is a **preview only**, defaults to "Just me," clears selections when returning to private, and must not infer access rights from household membership. `GET /api/words/recipient-options` is names/IDs only, permission-scoped; it is not a message-recipient authorization token.
 - The prototype should unmount and discard drafts on page change and banking-style lock. Don't make it look like a production confidential journal.
+
+## URL navigation and encrypted draft backlog
+- The active page must be addressable by `/today`, `/people`, `/words`, `/circle`, `/settings`; restore it after refresh, lock and reauthentication. Respect browser Back/Forward and new-tab link semantics. Keep the SPA fallback configured in Wrangler without routing API requests to `index.html`.
+- Route URLs are public navigation labels only. Never embed profile/household IDs, medication names, recipient IDs, journal content or credentials in URL paths/search/hash. The route does not authorize access.
+- **High-priority next slice:** autosave encrypted private writing, with restoration after inactivity locking / sign-in and refresh. Do **not** implement draft persistence without client-side encryption, independent key management, recovery, account isolation, deletion and security tests. Current Words text is fictional, unsaved and erased on navigation/sign-out.

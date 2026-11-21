@@ -54,3 +54,9 @@ Self-link lookup is scoped to the authenticated user and household membership. I
 The Words draft editor is currently **React memory only** and intentionally includes no save/send action. It is unmounted when navigating away from Words or locking Carehold; content is not placed in localStorage, IndexedDB, D1, push payloads, URL parameters, analytics or log output. Recipient preview requests contain only householdId and return scoped account IDs/names after membership and role checks; no journal content is transmitted.
 
 This remains a **privacy UX prototype, not an encryption/privacy-control implementation**. An in-memory browser field is not proof of end-to-end confidentiality. No minor, medical or clinical writing should be entered before approved persistence, key management, consent, recovery, deletion and security review.
+
+## Public route continuity without private-draft persistence
+
+Page navigation uses only five constant paths (Today / People / Words / Circle / Settings), so browser history remains useful while signed out and during passkey reauthentication, without encoding personally identifying, medical or journal information in URLs. Access to every protected API still requires the server-side Better Auth session and scoped permissions. An old URL must never bypass the screen lock.
+
+Navigation restoration intentionally does not restore unsaved local-only writing. Future autosave requires client-side encryption, device-bound key protection/recovery, authenticated restoration and account/household isolation before any persistent drafts are introduced. Never solve the usability issue by persisting plaintext drafts in browser storage.
