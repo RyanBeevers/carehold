@@ -1,6 +1,6 @@
 import type {CareEnv,SessionUser} from './types';
 import {notifyPrivateRecipients} from './words-spaces';
-import {exactParticipants,mayStartDirectMessage,pairKey,validPublicJwk,validSealedEnvelope} from './messages-policy';
+import {exactParticipants,matchesKeyRoster,mayStartDirectMessage,pairKey,validPublicJwk,validSealedEnvelope} from './messages-policy';
 import {validStoredRecoveryEnvelope} from './message-recovery-policy';
 /** Fictional text only: TOFU public key registry, not reviewed E2EE.
  * Fresh-account recovery wraps a stable account key; legacy keys stay intact.
@@ -152,6 +152,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msgId))
     fail(400,'Invalid message identifier.');
    if(!b.copies||typeof b.copies!=='object'||Array.isArray(b.copies))fail(400,'Missing encrypted copies.');
+   if(!matchesKeyRoster(b.publicKeys,participants))
+    fail(409,'A participant encryption key changed. Refresh recipients and re-encrypt before sending.');
    const copies=b.copies as Record<string,unknown>,ids=participants.map(p=>p.id);
    if(!exactParticipants(Object.keys(copies),ids)||!ids.every(uid=>validSealedEnvelope(copies[uid])))
     fail(400,'Exactly two valid participant ciphertext copies required.');
