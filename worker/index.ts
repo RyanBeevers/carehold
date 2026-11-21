@@ -143,6 +143,21 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   const localRedirect=localFrontendRedirect(req,env.APP_ORIGIN);
   if(localRedirect)return localRedirect;
   if(path==='/api/health'&&req.method==='GET')return json({ok:true,product:'carehold'});
+  // Content-free readiness probe; confirms D1 and the latest required tables.
+  if(path==='/api/health/ready'&&req.method==='GET'){
+    try{
+      await Promise.all([
+        db.prepare('SELECT 1 FROM user LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM message_account_recovery LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM private_draft_sync LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM account_key_migrations LIMIT 1').first()
+      ]);
+      return json({ok:true,product:'carehold'});
+    }catch{
+      // Never return schema details, SQL errors or account information publicly.
+      return json({ok:false,product:'carehold'},503);
+    }
+  }
   if(path.startsWith('/api/auth/')) {
     if(path==='/api/auth/sign-up/email'&&req.method==='POST') {
       if(!env.PILOT_ACCESS_CODE||env.PILOT_ACCESS_CODE.length<16)bad(503,'Pilot registration is not configured.');
