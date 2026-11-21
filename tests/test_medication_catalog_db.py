@@ -14,8 +14,12 @@ class MedicationCatalogDBTest(unittest.TestCase):
     def setUp(self):
         self.db=sqlite3.connect(':memory:')
         self.db.execute('PRAGMA foreign_keys=ON')
-        for migration in sorted((ROOT/'migrations').glob('*.sql')):
-            self.db.executescript(migration.read_text())
+        # Build the existing pre-catalog schema, insert medication data, then
+        # upgrade to 0009 to verify this is a non-destructive in-place migration.
+        migration_paths=sorted((ROOT/'migrations').glob('*.sql'))
+        for migration in migration_paths:
+            if migration.name!='0009_medication_catalog.sql':
+                self.db.executescript(migration.read_text())
         self.db.execute("INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES('owner','Owner','owner@test.invalid',0,1,1)")
         self.db.execute("INSERT INTO households VALUES('h','Home','America/New_York','owner','now')")
         self.db.execute("INSERT INTO household_members VALUES('h','owner','owner','now')")
@@ -23,6 +27,7 @@ class MedicationCatalogDBTest(unittest.TestCase):
             self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,created_at) VALUES(?,'h',?,?,'now')",(pid,pid,kind))
             self.db.execute("INSERT INTO medications(id,profile_id,name,dose,cadence,start_date,created_at,updated_at) VALUES(?,?,?,?,'daily','2026-11-01','now','now')",
                 ('med_'+pid,pid,'Original Name','1 prescribed tablet'))
+        self.db.executescript((ROOT/'migrations'/'0009_medication_catalog.sql').read_text())
 
     def test_old_records_are_unmodified_and_metadata_is_nullable(self):
         columns={r[1] for r in self.db.execute('PRAGMA table_info(medications)')}
