@@ -338,3 +338,14 @@
  .med-catalog-options{max-height:200px}
  .med-catalog-selection .quiet{margin-left:0}
 }
+
+
+/* Distinguish encrypted device-only notes from explicitly shared board replies. */
+.words-discussion-ledger .words-private-note{
+ border-left:3px solid var(--coral);
+ background:var(--panel);
+ padding:14px 16px;
+ border-radius:4px;
+}
+.words-discussion-ledger .words-private-note .kicker{color:var(--ink);font-weight:750}
+.words-discussion-ledger .words-private-note p{white-space:pre-wrap;overflow-wrap:anywhere}
