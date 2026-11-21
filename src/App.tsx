@@ -260,22 +260,32 @@ export default function App(){
     lockNow(message,false);
   },()=>{
    const epoch=authEpochRef.current,expectedUserId=user?.id;
-   // A real network request (not a possibly cached client-side session read)
-   // keeps Better Auth's sliding short session alive while someone is typing.
-   void fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store',
-     headers:{Accept:'application/json'}})
-    .then(async response=>{
-     if(epoch!==authEpochRef.current||!expectedUserId)return;
-     if(response.status===401||response.status===403){
-       lockNow('Your authenticated session is no longer valid. An unfinished correction is retained only in this tab for the same account.',false);
+   if(!expectedUserId)return;
+   const stillCurrent=()=>epoch===authEpochRef.current&&!lockingRef.current;
+   // A real auth endpoint request refreshes Better Auth's sliding session.
+   // If it reports a missing/mismatched session, confirm that with a second
+   // authenticated request before locking an otherwise active Carehold tab.
+   void (async()=>{
+     const response=await fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store',
+       headers:{Accept:'application/json'}});
+     if(!stillCurrent())return;
+     if(!response.ok&&response.status!==401&&response.status!==403)return;
+     const session=response.ok
+       ? await response.json() as {user?:{id:string}|null}|null
+       : null;
+     if(!stillCurrent()||session?.user?.id===expectedUserId)return;
+     const confirmed=await fetch('/api/me',{credentials:'same-origin',cache:'no-store',
+       headers:{Accept:'application/json','X-Carehold-Request':'1'}});
+     if(!stillCurrent())return;
+     if(confirmed.ok){
+       const state=await confirmed.json() as {user?:{id:string}|null};
+       if(!stillCurrent()||state.user?.id===expectedUserId)return;
+     }else if(confirmed.status!==401&&confirmed.status!==403){
+       // Worker/network trouble alone does not prove the user signed out.
        return;
      }
-     if(!response.ok)return;
-     const result=await response.json() as {user?:{id:string}|null}|null;
-     if(epoch!==authEpochRef.current)return;
-     if(result?.user?.id!==expectedUserId)
-       lockNow('This browser’s session expired or switched accounts. Your unfinished correction is retained in this tab for the same account.',false);
-    }).catch(()=>{/* A transient network error is not an authenticated sign-out. */});
+     if(stillCurrent())lockNow('This browser’s session expired or switched accounts. Your unfinished correction is retained in this tab for the same account.',false);
+   })().catch(()=>{/* Connectivity or parse errors must not force sign-out. */});
  });
  const refreshHouseholds=useCallback(async()=>{
    if(!user||!hasPasskey)return;
