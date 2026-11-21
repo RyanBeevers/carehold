@@ -65,6 +65,7 @@ export default function App(){
  const [profiles,setProfiles]=useState<Person[]>([]),[entries,setEntries]=useState<Entry[]>([]);
  const [myProfile,setMyProfile]=useState<LinkedSelfProfile|null>(null);
  const myProfileRequest=useRef(0);
+ const [planFocusTarget,setPlanFocusTarget]=useState<string|null>(null);
  const [members,setMembers]=useState<Member[]>([]),[memberToRemove,setMemberToRemove]=useState<Member|null>(null);
  const [page,setPage]=useState<Page>(()=>restorePage(window.location.pathname,()=>window.localStorage.getItem(LAST_PAGE_KEY))),[selected,setSelected]=useState(''),[meds,setMeds]=useState<Medication[]>([]),[history,setHistory]=useState<DoseEvent[]>([]);
  // Public navigation remains in the URL through reloads, sign-out, the passkey
@@ -470,6 +471,14 @@ export default function App(){
    catch(e){fail(e);}finally{setSaving(false);}
  }
  const person=profiles.find(x=>x.id===selected);
+ useEffect(()=>{
+  if(page!=='people'||!planFocusTarget||person?.id!==planFocusTarget)return;
+  const heading=document.getElementById('carehold-medication-plan-heading');
+  if(!heading)return;
+  heading.scrollIntoView({behavior:'smooth',block:'center'});
+  heading.focus({preventScroll:true});
+  setPlanFocusTarget(null);
+ },[page,planFocusTarget,person?.id]);
  const visibleProfiles=profiles.filter(p=>showArchivedProfiles||!p.archived_at);
  const visibleMeds=meds.filter(m=>showArchivedMeds||!m.archived_at);
  const toastView=toast&&<div className={`app-toast ${toast.kind}`} role={toast.kind==='error'?'alert':'status'} aria-live={toast.kind==='error'?'assertive':'polite'} aria-atomic="true">
@@ -502,7 +511,7 @@ export default function App(){
  </>}
  {page==='people'&&<><PageTitle eyebrow="THOSE WE HOLD CLOSE" title="Your people & pets" subtitle="A home for each person’s medication schedule, past records, and trusted caregivers."/>{myProfile&&<section className="my-profile-summary" aria-label="My linked care profile">
    <div><span className="mono kicker">MY CARE PROFILE</span><h2>{myProfile.displayName}</h2><p>{myProfile.canViewSchedule?'This account has been granted medication schedule access.':'This account is linked to your profile, but schedule details have not been shared with you.'} Your identity link does not grant private journal or conversation access.</p></div>
-   {myProfile.canViewSchedule&&<button className="button outline" type="button" onClick={()=>{setSelected(myProfile.id);}}><ArrowUpRight size={16}/> View my medication plan</button>}
+   {myProfile.canViewSchedule&&<button className="button outline" type="button" onClick={()=>{setSelected(myProfile.id);setPlanFocusTarget(myProfile.id);}}><ArrowUpRight size={16}/> View my medication plan</button>}
  </section>}<div className="section-heading"><span>ACTIVE PROFILES / {profiles.filter(p=>!p.archived_at).length.toString().padStart(2,'0')}</span>{owner&&<div className="words-response-actions">
    {profiles.some(p=>p.archived_at)&&<button type="button" className="button outline small" onClick={()=>{
     const next=!showArchivedProfiles;setShowArchivedProfiles(next);
@@ -517,7 +526,7 @@ export default function App(){
    {owner&&(person.archived_at?
     <button type="button" className="button outline" disabled={saving} onClick={()=>void restoreProfile(person)}>Restore profile</button>:
     <button type="button" className="quiet small" onClick={()=>{setPending({profile:person});setModal('archive-profile');}}>Archive profile</button>)}
-  </div></div>{person.kind!=='pet'&&(person.linked_user_id||person.is_self===1)&&<p className="linked-summary"><Check size={15}/>{person.is_self===1?'This profile is linked to your account.':owner?`Linked to ${members.find(x=>x.user_id===person.linked_user_id)?.name||'a circle member'}.`:'Linked account'}</p>}<h3 className="subsection-title">Medication plan <span>{meds.filter(m=>!m.archived_at).length.toString().padStart(2,'0')}</span></h3>
+  </div></div>{person.kind!=='pet'&&(person.linked_user_id||person.is_self===1)&&<p className="linked-summary"><Check size={15}/>{person.is_self===1?'This profile is linked to your account.':owner?`Linked to ${members.find(x=>x.user_id===person.linked_user_id)?.name||'a circle member'}.`:'Linked account'}</p>}<h3 id="carehold-medication-plan-heading" tabIndex={-1} className="subsection-title">Medication plan <span>{meds.filter(m=>!m.archived_at).length.toString().padStart(2,'0')}</span></h3>
   {meds.some(m=>m.archived_at)&&<button type="button" className="quiet small" onClick={()=>setShowArchivedMeds(v=>!v)}>{showArchivedMeds?'Hide archived medications':'Show archived medications'}</button>}
   {visibleMeds.length===0?<p className="muted">No active medications.</p>:visibleMeds.map(m=><div className="med-row" key={m.id}><div><span className="mono muted tiny">{m.archived_at?'ARCHIVED · ':''}{m.cadence.replace('_',' ').toUpperCase()} · {m.catalog_source==='rxterms'?'RXTERMS MATCH':'CUSTOM ENTRY'}</span><h4>{m.name}</h4><p>{m.dose} {m.form?` · ${m.form}`:''}</p>{m.product_strength&&<p className="muted tiny">Catalog product: {m.product_strength} (not the prescribed dose)</p>}<p className="muted tiny">{m.cadence==='prn'?'As-needed medication':m.times.join(' / ')}</p></div><div className="med-row-actions">
    {m.archived_at?
