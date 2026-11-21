@@ -1,7 +1,8 @@
 import type {Audience} from '../../shared/audience';
-export type Prompt={id:string,audience:Audience|'all',topic:string,text:string};
+export type Relationship='parent-child'|'parent-teen'|'child-parent'|'teen-parent'|'family';
+export type Prompt={id:string,audience:Audience|'all',topic:string,text:string,relationship?:Relationship};
 /** Static prompt copy only. No private journaling or activity is persisted. */
-export const prompts:readonly Prompt[]=[
+const starterPrompts:readonly Prompt[]=[
  {id:'p1',audience:'parent',topic:'Check-in',text:'What felt easier today, and what felt harder?'},
  {id:'p2',audience:'parent',topic:'Listening',text:'Would you like me to listen, help solve it, or just be with you?'},
  {id:'p3',audience:'parent',topic:'Autonomy',text:'Is there something you wish you had more say in lately?'},
@@ -30,6 +31,167 @@ export const prompts:readonly Prompt[]=[
  {id:'a2',audience:'all',topic:'Care',text:'Something that helped me today was…'},
  {id:'a3',audience:'all',topic:'Together',text:'One small thing we could do together this week is…'},
 ];
+/** Curated relationship-specific prompts are static copy, never telemetry. */
+type Group={audience:Audience|'all',relationship:Relationship,topic:string,lines:string[]};
+const groups:readonly Group[]=[
+ {audience:'parent',relationship:'parent-child',topic:'Feelings',lines:[
+  'Did something feel confusing today? We can figure it out together.',
+  'Would you like to show me how you feel with a word, a drawing, or a face?',
+  'Was there a moment today when you felt really proud or really upset?',
+  'Is there a feeling you wish I noticed more often?'
+ ]},
+ {audience:'parent',relationship:'parent-child',topic:'Connection',lines:[
+  'Would a little one-on-one time together feel good this week?',
+  'What is something you would enjoy teaching me?',
+  'Do you want a hug, some space, or to sit together?',
+  'Is there a game or activity you would like us to do together?'
+ ]},
+ {audience:'parent',relationship:'parent-child',topic:'Asking for help',lines:[
+  'Is there a part of your day that feels too hard to do alone?',
+  'When something goes wrong, how can I make helping feel better?',
+  'Would you like help starting, help finishing, or just company?',
+  'What is one thing I could make a little easier tomorrow?'
+ ]},
+ {audience:'parent',relationship:'parent-child',topic:'Repairing conflict',lines:[
+  'I think I missed what you were trying to tell me. Can we try again?',
+  'Was there a time I sounded upset when you needed kindness?',
+  'Is there something I should apologize for?',
+  'What could we do differently the next time we disagree?'
+ ]},
+ {audience:'parent',relationship:'parent-child',topic:'Celebrating progress',lines:[
+  'What did you try lately that took courage?',
+  'Did you learn something about yourself this week?',
+  'What small win deserves a celebration?',
+  'What would you like to keep practicing at your own pace?'
+ ]},
+ {audience:'parent',relationship:'parent-teen',topic:'Being heard',lines:[
+  'Is there something I have been misunderstanding about your perspective?',
+  'Would you rather I listen first and hold off on advice?',
+  'Do you feel there is room to disagree with me safely?',
+  'What would help a conversation with me feel less loaded?'
+ ]},
+ {audience:'parent',relationship:'parent-teen',topic:'Boundaries and independence',lines:[
+  'Where would you like more room to make your own decisions?',
+  'Is there a boundary you want me to understand more clearly?',
+  'What could I do to show trust while still checking on your safety?',
+  'Can we revisit a rule that no longer seems to fit?'
+ ]},
+ {audience:'parent',relationship:'parent-teen',topic:'Trust and honesty',lines:[
+  'Have I reacted in a way that made honesty feel harder?',
+  'What helps you know you can tell me something uncomfortable?',
+  'Is there a promise you wish I were better at keeping?',
+  'What would rebuilding trust look like from your side?'
+ ]},
+ {audience:'parent',relationship:'parent-teen',topic:'Stress and overwhelm',lines:[
+  'Is there anything quietly taking up a lot of your energy?',
+  'What do you wish adults understood about your stress lately?',
+  'Would time together help, or would you prefer room to recharge?',
+  'What is one pressure we might be able to reduce together?'
+ ]},
+ {audience:'parent',relationship:'parent-teen',topic:'Difficult conversations',lines:[
+  'Is there a subject you want to approach slowly, without having to explain everything at once?',
+  'Would a written conversation make this easier than talking out loud?',
+  'What do you need from me before we talk about something sensitive?',
+  'You can tell me you are not ready. Would checking in another day feel better?'
+ ]},
+ {audience:'child',relationship:'child-parent',topic:'Feelings',lines:[
+  'I felt left out when ___ happened.',
+  'I had a big feeling today and I want someone to listen.',
+  'Can you help me find words for how I feel?'
+ ]},
+ {audience:'child',relationship:'child-parent',topic:'Asking for help',lines:[
+  'Could you help me with something that feels tricky?',
+  'I want help, but I do not know how to ask.',
+  'Can you stay near me while I try this?'
+ ]},
+ {audience:'child',relationship:'child-parent',topic:'Space',lines:[
+  'I need a quiet break before we talk.',
+  'Can we talk after I have had time to calm down?',
+  'I want to be alone for a little bit, then reconnect.'
+ ]},
+ {audience:'child',relationship:'child-parent',topic:'School and daily life',lines:[
+  'Something at school or at home has been on my mind.',
+  'Can I tell you the best and hardest parts of my day?',
+  'I want you to know what happened without being in trouble.'
+ ]},
+ {audience:'child',relationship:'child-parent',topic:'Appreciation',lines:[
+  'Thank you for helping me when ___.',
+  'One thing I like doing with you is ___.',
+  'I noticed something kind you did for me.'
+ ]},
+ {audience:'teen',relationship:'teen-parent',topic:'Independence',lines:[
+  'I would like more say in this decision. Can we work through it together?',
+  'I need space to figure this out before hearing other opinions.',
+  'I want you to trust me with a little more responsibility.'
+ ]},
+ {audience:'teen',relationship:'teen-parent',topic:'Overwhelm',lines:[
+  'I have been carrying more stress than I have shown.',
+  'I do not need solutions yet. I could use some understanding.',
+  'I am overwhelmed and could use help making one thing manageable.'
+ ]},
+ {audience:'teen',relationship:'teen-parent',topic:'Repairing conflict',lines:[
+  'I wish we could reset the tone of our last conversation.',
+  'I felt dismissed when we talked about ___.',
+  'I want to own my part, and I would like you to hear mine too.'
+ ]},
+ {audience:'teen',relationship:'teen-parent',topic:'Things that are hard to say',lines:[
+  'Something matters to me that I am nervous to bring up.',
+  'I am not ready to explain everything, but I want to start somewhere.',
+  'Could you respond gently to what I am about to share?'
+ ]},
+ {audience:'teen',relationship:'teen-parent',topic:'Connection',lines:[
+  'I miss feeling like we can just hang out without a serious talk.',
+  'Could we plan time together where I choose the activity?',
+  'I want to be closer, even if I have been quiet lately.'
+ ]},
+ {audience:'all',relationship:'family',topic:'Daily check-ins',lines:[
+  'What was one moment today you would like to keep?',
+  'What is one thing you hope goes a little better tomorrow?'
+ ]},
+ {audience:'all',relationship:'family',topic:'Gratitude',lines:[
+  'Something I appreciate about our family lately is ___.',
+  'Who helped you feel supported this week?'
+ ]},
+ {audience:'all',relationship:'family',topic:'Support and reassurance',lines:[
+  'What kind of support would feel good right now?',
+  'You do not have to answer quickly. I just want you to know I am here.'
+ ]},
+ {audience:'all',relationship:'family',topic:'Celebrating progress',lines:[
+  'What small step are you glad you took?',
+  'What is something we got through together?'
+ ]},
+ {audience:'all',relationship:'family',topic:'Connection',lines:[
+  'What is one tradition you would like us to start?',
+  'When do you feel most connected to the people around you?'
+ ]}
+];
+export const prompts:readonly Prompt[]=[
+ ...starterPrompts,
+ ...groups.flatMap((group,index)=>group.lines.map((line,offset)=>({
+  id:'curated-'+index+'-'+offset,audience:group.audience,relationship:group.relationship,topic:group.topic,text:line
+ })))
+];
+export const RELATIONSHIP_LABELS:Record<Relationship,string>={
+ 'parent-child':'Parent → Child','parent-teen':'Parent → Teen',
+ 'child-parent':'Child → Parent','teen-parent':'Teen → Parent','family':'Family'
+};
+export function relationshipOptions(audience:Audience):Relationship[]{
+ return audience==='parent'?['parent-child','parent-teen','family']:
+  audience==='child'?['child-parent','family']:['teen-parent','family'];
+}
+/** A shuffle bag: do not repeat until the current filtered set is exhausted. */
+export function rotatePrompt(list:readonly Prompt[],seen:readonly string[],previousId:string|null,random=Math.random):
+ {prompt:Prompt|null,seen:string[]}{
+ if(!list.length)return {prompt:null,seen:[]};
+ let pool=list.filter(p=>!seen.includes(p.id));
+ let reset=false;
+ if(!pool.length){pool=list.filter(p=>p.id!==previousId);reset=true;}
+ if(!pool.length)pool=[...list];
+ const index=Math.min(pool.length-1,Math.max(0,Math.floor(random()*pool.length)));
+ const picked=pool[index];
+ return {prompt:picked,seen:reset?[picked.id]:[...seen,picked.id]};
+}
+
 export function promptsForAudience(audience:Audience):Prompt[]{
  return prompts.filter(p=>p.audience==='all'||p.audience===audience);
 }

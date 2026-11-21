@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {webcrypto} from 'node:crypto';
 import {seal,unseal} from '../src/lib/message-crypto.ts';
-globalThis.crypto=webcrypto;
 globalThis.btoa=v=>Buffer.from(v,'binary').toString('base64');
 globalThis.atob=v=>Buffer.from(v,'base64').toString('binary');
 async function identity(){

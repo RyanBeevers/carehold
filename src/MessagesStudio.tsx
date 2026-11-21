@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import type {Audience} from '../shared/audience';
 import {api,StaleSessionRequest} from './lib/api';
-import {promptsForAudience,type Prompt} from './lib/prompts';
+import {promptsForAudience,relationshipOptions,RELATIONSHIP_LABELS,rotatePrompt,type Prompt,type Relationship} from './lib/prompts';
 import {deviceIdentity,samePublicKey,seal,unseal,type Identity,type PublicKey,type Envelope,type Content} from './lib/message-crypto';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
 type Contact={id:string,name:string,publicKey:PublicKey|null};
@@ -87,19 +87,15 @@ export function MessagesStudio({userId,householdId,audience}:{userId:string,hous
 }
 function Composer({thread,userId,householdId,audience,onSent}:{thread:Thread,userId:string,householdId:string,audience:Audience,onSent:()=>void}){
  const draft=useWordsDraftVault(userId,householdId+':direct:'+thread.id);
- const [kind,setKind]=useState<Content['kind']>('message'),[topic,setTopic]=useState('All topics');
+ const [kind,setKind]=useState<Content['kind']>('message'),[topic,setTopic]=useState('All topics'),[relationship,setRelationship]=useState<Relationship|'all'>('all');
  const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
  const [library,setLibrary]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
  const retry=useRef<{text:string,kind:Content['kind'],id:string,copies:Record<string,Envelope>}|null>(null);
- const available=promptsForAudience(audience).filter(p=>topic==='All topics'||p.topic===topic);
+ const available=promptsForAudience(audience).filter(p=>(topic==='All topics'||p.topic===topic)&&(relationship==='all'||p.relationship===relationship));
  const topics=[...new Set(promptsForAudience(audience).map(p=>p.topic))].sort();
  function rotate(){
-  let pool=available.filter(p=>!seen.includes(p.id));
-  if(!pool.length)pool=available.filter(p=>p.id!==suggested?.id);
-  if(!pool.length)pool=available;
-  if(!pool.length)return;
-  const next=pool[Math.floor(Math.random()*pool.length)];
-  setSuggested(next);setSeen(old=>[...old.filter(id=>pool.length!==available.length),next.id]);
+  const result=rotatePrompt(available,seen,suggested?.id??null);
+  setSuggested(result.prompt);setSeen(result.seen);
  }
  function choose(p:Prompt){draft.setText(p.text);setSuggested(p);setKind('prompt');setLibrary(false);retry.current=null;}
  async function send(e:FormEvent){
@@ -124,7 +120,7 @@ function Composer({thread,userId,householdId,audience,onSent}:{thread:Thread,use
  }
  return <div className="messages-composer">
   <div className="messages-subhead"><h3>Your words</h3><button className="quiet small" type="button" onClick={()=>setLibrary(v=>!v)}>{library?'Close prompts':'Guided prompts'}</button></div>
-  {library&&<div className="messages-prompts"><label>Category<select value={topic} onChange={e=>{setTopic(e.target.value);setSeen([]);setSuggested(null);}}><option>All topics</option>{topics.map(t=><option key={t}>{t}</option>)}</select></label>
+  {library&&<div className="messages-prompts"><label>Relationship<select value={relationship} onChange={e=>{setRelationship(e.target.value as Relationship|'all');setSeen([]);setSuggested(null);}}><option value="all">All relationships</option>{relationshipOptions(audience).map(r=><option value={r} key={r}>{RELATIONSHIP_LABELS[r]}</option>)}</select></label><label>Category<select value={topic} onChange={e=>{setTopic(e.target.value);setSeen([]);setSuggested(null);}}><option>All topics</option>{topics.map(t=><option key={t}>{t}</option>)}</select></label>
    <button type="button" className="button outline small" onClick={rotate} disabled={!available.length}>Another prompt</button>
    {suggested&&<blockquote>{suggested.text}<button type="button" className="button dark small" onClick={()=>choose(suggested)}>Use and edit</button></blockquote>}
    <div className="messages-prompts-list">{available.map(p=><button type="button" key={p.id} onClick={()=>choose(p)}>{p.text}</button>)}</div>
