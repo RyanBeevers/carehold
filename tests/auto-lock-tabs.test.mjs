@@ -28,3 +28,12 @@ test('lock notices distinguish true inactivity and background timeout',()=>{
  assert.match(app,/locked after three minutes without detected activity/i);
  assert.match(app,/setLockError\(reason\)/);
 });
+
+test('a single suspect auth heartbeat cannot lock the active tab',()=>{
+ assert.match(app,/const stillCurrent=\(\)=>epoch===authEpochRef\.current&&!lockingRef\.current/);
+ assert.match(app,/await fetch\('\/api\/auth\/get-session'/);
+ assert.match(app,/await fetch\('\/api\/me'/);
+ assert.match(app,/state\.user\?\.id===expectedUserId\)return/);
+ assert.match(app,/confirmed\.status!==401&&confirmed\.status!==403/);
+ assert.match(app,/if\(stillCurrent\(\)\)lockNow\(/);
+});
