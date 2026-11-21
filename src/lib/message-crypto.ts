@@ -14,6 +14,13 @@ import type {MessageRecoveryEnvelope} from './message-recovery.ts';
 const dbName='carehold-direct-message-keys-v1';
 export type RecoverySetupFlow='fresh'|'legacy';
 type PendingRecovery={scope:string,createdAt:number,envelope:MessageRecoveryEnvelope};
+function committed(tx:IDBTransaction):Promise<void>{
+ return new Promise((resolve,reject)=>{
+  tx.oncomplete=()=>resolve();
+  tx.onerror=()=>reject(tx.error??new Error('Encrypted recovery setup could not be saved.'));
+  tx.onabort=()=>reject(tx.error??new Error('Encrypted recovery setup was interrupted.'));
+ });
+}
 const pendingScope=(userId:string,flow:RecoverySetupFlow)=>{
  if(!userId||userId.length>200||!['fresh','legacy'].includes(flow))throw new Error('Sign in to preserve encrypted setup.');
  return flow+':'+userId;
@@ -89,9 +96,10 @@ export async function storePendingRecoveryEnvelope(userId:string,flow:RecoverySe
    throw new Error('An unfinished recovery enrollment already exists. Resume or discard it before generating a new key.');
   }
   try{
-   await requestValue(db.transaction('pendingRecoveries','readwrite').objectStore('pendingRecoveries').add({
+   const tx=db.transaction('pendingRecoveries','readwrite'),done=committed(tx);
+   await Promise.all([requestValue(tx.objectStore('pendingRecoveries').add({
     scope,createdAt:Date.now(),envelope
-   } satisfies PendingRecovery));
+   } satisfies PendingRecovery)),done]);
   }catch(e){
    const competing=await requestValue<PendingRecovery|undefined>(db.transaction('pendingRecoveries','readonly').objectStore('pendingRecoveries').get(scope));
    if(competing&&JSON.stringify(competing.envelope)===JSON.stringify(envelope))return;
@@ -102,7 +110,8 @@ export async function storePendingRecoveryEnvelope(userId:string,flow:RecoverySe
 export async function clearPendingRecoveryEnvelope(userId:string,flow:RecoverySetupFlow):Promise<void>{
  const scope=pendingScope(userId,flow),db=await getDb();
  try{
-  await requestValue(db.transaction('pendingRecoveries','readwrite').objectStore('pendingRecoveries').delete(scope));
+  const tx=db.transaction('pendingRecoveries','readwrite'),done=committed(tx);
+  await Promise.all([requestValue(tx.objectStore('pendingRecoveries').delete(scope)),done]);
  }finally{db.close();}
 }
 
