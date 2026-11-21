@@ -10,7 +10,7 @@ const KIND='carehold.private-journal.backup';
 const ITERATIONS=400000;
 const MAX_ENTRIES=1500;
 const MAX_CIPHERTEXT_LENGTH=9_000_000;
-const MAX_JSON_LENGTH=6_000_000;
+const MAX_JSON_LENGTH=4_000_000; // Keeps base64 backups within the UI's 7 MB import cap.
 const aad=new TextEncoder().encode('carehold:private-journal:backup:v1');
 const encoder=new TextEncoder(),decoder=new TextDecoder();
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
