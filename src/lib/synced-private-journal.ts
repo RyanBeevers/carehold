@@ -61,7 +61,7 @@ export async function listSyncedPrivateJournal(uid:string,hid:string,key:CryptoK
  let offset=0,hasMore=true;
  while(hasMore){
   if(offset>10000)throw new Error('The journal contains too many entries to load safely.');
-  const url='/private-journal?householdId='+encodeURIComponent(hid)+'&offset='+offset;
+  const url='/private-journal?householdId='+encodeURIComponent(hid)+'&accountId='+encodeURIComponent(uid)+'&offset='+offset;
   const page=await api<{entries:CipherEntry[],hasMore:boolean}>(url);
   const decrypted=await Promise.all(page.entries.map(row=>unseal(uid,hid,row,key)));
   entries.push(...decrypted);
@@ -77,7 +77,7 @@ export async function saveSyncedPrivateJournal(
  checkScope(uid,hid,key);validate(entry);
  if(!Number.isSafeInteger(expectedRevision)||expectedRevision<0)throw new Error('Invalid expected revision.');
  const sealed=await seal(uid,hid,entry,expectedRevision+1,key);
- const url='/private-journal/'+encodeURIComponent(entry.id)+'?householdId='+encodeURIComponent(hid);
+ const url='/private-journal/'+encodeURIComponent(entry.id)+'?householdId='+encodeURIComponent(hid)+'&accountId='+encodeURIComponent(uid);
  const saved=await api<{id:string,revision:number,createdAt:number,updatedAt:number}>(
   url,'PUT',{...sealed,expectedRevision}
  );
@@ -90,6 +90,6 @@ export async function deleteSyncedPrivateJournal(
  checkScope(uid,hid,key);
  if(!UUID.test(id)||!Number.isSafeInteger(expectedRevision)||expectedRevision<1)
   throw new Error('Invalid journal deletion.');
- const url='/private-journal/'+encodeURIComponent(id)+'?householdId='+encodeURIComponent(hid);
+ const url='/private-journal/'+encodeURIComponent(id)+'?householdId='+encodeURIComponent(hid)+'&accountId='+encodeURIComponent(uid);
  await api(url,'DELETE',{expectedRevision});
 }
