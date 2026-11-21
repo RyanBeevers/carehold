@@ -10,7 +10,19 @@ The repository contains a functional **source implementation** for the invite-on
 2. Copy `.env.example` to `.dev.vars`, replace `BETTER_AUTH_SECRET` with a cryptographically random secret of at least 32 bytes and `PILOT_ACCESS_CODE` with a different long random string. Run `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"` twice for two distinct values. Never commit `.dev.vars`.
 3. Apply migrations locally: `npm run db:local`. The zero UUID D1 database in the local `wrangler.jsonc` config is only a **local placeholder**; replace it with a real database ID for any remote environment. Validate `migrations/0001_auth.sql` against the installed Better Auth **1.7.x + passkey plugin** schema, using the official CLI/check-schema tooling. If the schema differs, create a reviewed migration; do not disable schema validation.
 4. Generate a Web Push VAPID pair with `node --input-type=module -e 'import {generateVapidKeys} from "@mmmike/web-push/vapid"; console.log(await generateVapidKeys())'`. Place the public key in `VAPID_PUBLIC_KEY`, private key in `VAPID_PRIVATE_KEY`, and a real sender `mailto:` address in `VAPID_SUBJECT`, all in `.dev.vars` (not in Git). Confirm the package's Web Push encryption and Worker compatibility before deploying.
-5. Build the static shell with `npm run build`. Start API with `npm run dev:worker` (port 8787). In a second terminal start `npm run dev` (Vite port 5173; `/api` proxy targets 8787). **Open `http://localhost:5173`, not `http://localhost:8787`.** Wrangler can serve the built frontend on 8787, but WebAuthn rejects passkeys registered on 8787 because `APP_ORIGIN` is 5173. The Worker redirects HTML navigation from local Wrangler to the Vite frontend to avoid this mistake; the API and origin checks remain strict. If Better Auth still rejects proxy-origin cookies, inspect the actual `Host`, `Origin`, `APP_ORIGIN`, and RP ID; do **not** disable origin/CSRF validation.
+5. Build the static shell with `npm run build`. Start API with `npm run dev:worker` (port 8787). In a second terminal start `npm run dev` (Vite port 5173; `/api` proxy targets 8787). Vite binds **localhost only** and uses `strictPort: true` because passkey verification requires an exact origin; if 5173 is busy, Vite will stop with a port error rather than silently switch to 5174. **Open `http://localhost:5173`, not `http://localhost:8787` or 5174.** Wrangler can serve the built frontend on 8787, but WebAuthn rejects passkeys registered on 8787 because `APP_ORIGIN` is 5173. The Worker redirects HTML navigation from local Wrangler to the Vite frontend to avoid this mistake; the API and origin checks remain strict. If Better Auth still rejects proxy-origin cookies, inspect the actual `Host`, `Origin`, `APP_ORIGIN`, and RP ID; do **not** disable origin/CSRF validation.
+
+### Vite says port 5173 is already in use
+
+An earlier Carehold/Vite server or an unrelated local app is already listening on the required port. Do **not** use the fallback at 5174; Better Auth deliberately trusts only `APP_ORIGIN=http://localhost:5173`.
+
+From a Mac terminal, run:
+
+```bash
+lsof -nP -iTCP:5173 -sTCP:LISTEN
+```
+
+Inspect the PID's command (`ps -p PID -o pid,command`) and close the corresponding terminal/server. If it is a stale process you recognize, run `kill PID` (replace PID with its actual numeric value), then start `npm run dev` again. Leave the Wrangler process on port 8787 untouched. You must see Vite announce `http://localhost:5173/` before attempting a passkey. Access Carehold via `localhost` (not a LAN IP, 127.0.0.1, or an alternate port) because WebAuthn checks the browser's actual origin.
 
 ### Passkey error: `Invalid origin: http://localhost:8787`
 
