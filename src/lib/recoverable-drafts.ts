@@ -1,4 +1,4 @@
-import {api} from './api';
+import {api} from './api.ts';
 import type {DraftDocument} from './words-vault';
 
 /** Recovery-key-backed account-owned draft sync; no plaintext enters the Worker. */
