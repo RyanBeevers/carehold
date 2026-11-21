@@ -209,7 +209,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    </article>)}</div>
   </section>:
   tab==='shared'?<SharedSpaces userId={userId} householdId={householdId} identity={identity} openSpaceId={openSpaceId}
-   onPrivateSaved={()=>void reloadJournal().catch(e=>setJournalError(errorText(e)))}/>:
+   onCloseSpace={()=>setOpenSpaceId(null)} onPrivateSaved={()=>void reloadJournal().catch(e=>setJournalError(errorText(e)))}/>:
   <section className="words-activity" aria-label="New shared writing">
    <div className="words-hub-section-top"><div><span className="mono kicker">YOUR PRIVATE INBOX</span><h2>What's new.</h2><p className="muted">New invitations and discussion updates. No one else can see if or when you open them.</p></div>
     <button type="button" className="quiet small" onClick={()=>void reloadActivity().catch(e=>setPushError(errorText(e)))}><RotateCw size={16}/> Refresh</button></div>
