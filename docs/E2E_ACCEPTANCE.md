@@ -113,7 +113,7 @@ The initial local household E2E checklist was reported passing. Subsequent usabi
 
 This section is **not yet passed**. A new household with existing accounts does not reset account-scoped encryption keys; use new fictional user accounts for fresh-enrollment testing. Do not delete the old Sara/browser-test keys or D1 ciphertext to make a test pass.
 
-- [ ] Back up and verify restore of the local/staging fictional D1 database; apply additive migration 0011 only to the reviewed environment.
+- [ ] Back up and verify restore of the local/staging fictional D1 database; apply additive migrations 0011–0015 only to a backed-up local test database (and later separately reviewed staging).
 - [ ] Create fresh account A and fresh account B, each with a passkey; create a new household and join B explicitly.
 - [ ] Open Words/Messages as A; generate a unique recovery code, record it securely outside the browser, confirm storage and complete enrollment.
 - [ ] Complete equivalent enrollment as B; verify two distinct public keys and ciphertext-only recovery rows.
@@ -131,10 +131,10 @@ This section is **not yet passed**. A new household with existing accounts does 
 - [ ] Save a **new v2 encrypted journal entry** on A, recover A on another browser using the saved code, and verify the entire title, text and prompt decrypt. Confirm D1 contains ciphertext only.
 - [ ] Edit the same journal on two recovered devices: stale revision must yield conflict without silently losing data.
 - [ ] Import an old local-only journal entry explicitly and confirm original IndexedDB copy remains intact after successful remote encryption.
-- [ ] Confirm local unsent drafts still explicitly disclose their device-only limitation; no false recovery promise.
+- [ ] On a v2 recovery account, save an unsent draft and verify it hydrates on a second browser after recovery. When offline, verify local encrypted save continues but does not falsely say 'synced'.
 - [ ] Execute all automated tests, TypeScript check and build using \`npm run verify:pre-e2e\`; record actual results and unresolved failures.
 
-**Not a production sign-off.** Distinct device keys, secure revocation, legacy data migration, journal sync, classification/permissions and independent security review must be completed separately.
+**Not a production sign-off.** Distinct device keys, cryptographic revocation, key authentication and independent security review still require separate architecture and release gates. The legacy migration, journal sync and permissions implemented in this draft must pass the tests below.
 
 
 ## Authoritative account-class regression (unverified)
@@ -147,3 +147,24 @@ This section is **not yet passed**. A new household with existing accounts does 
 - [ ] Adult Member cannot read or edit another unrelated Adult profile without a grant.
 - [ ] Owner/Caregiver authority to change medicines does not grant journal or message decryption.
 - [ ] Removing a household member cascades account-class records and does not expose shared writing or restore revoked threads.
+
+
+## Focused final E2E additions — 0014/0015 (NOT YET EXECUTED)
+
+Use **fictional accounts and writing only**. The older shared account key and its historical ciphertext must be retained throughout the test. Run the automated suite on the exact latest draft commit first, then apply local migrations 0011–0015 and verify the D1 backup is restorable. Do not start staging or production deployments from this checklist.
+
+- [ ] **Legacy fixture:** On a test account whose original trusted browser still has its non-exportable legacy ECDH private key, send a direct message and shared Words prompt/reply. Confirm another selected recipient can read their own copy.
+- [ ] **Proof gate:** A signed-in account with no original private key must not be able to stage migration. A wrong/expired challenge proof must return 403; the active key must remain unchanged.
+- [ ] **Staging:** Original browser decrypts challenge, generates a new saved recovery code, stages its v2 key and begins migrating each authorized direct/Words copy. Existing message and Words reads must still use the old ciphertext until finalization.
+- [ ] **Resume:** Interrupt migration after a few copies, refresh Settings, enter the saved code and resume. Already-uploaded copies must verify and skip without 409 duplicates or plaintext loss.
+- [ ] **Cancellation:** Stage again on a fictional fixture, cancel using original-key proof. Confirm old public key, all old ciphertext and other participants' access remain intact; abandoned replacement copies are removed.
+- [ ] **Finalize:** Verify no authorized copies are missing before changing the active key. After finalizing, restore the account on a new browser with only the saved code and confirm all older direct and Words items decrypt. The original per-recipient copies in D1 must remain unchanged.
+- [ ] **Recipient-key continuity:** Start sending a message or a shared reply while the other account is staged. The Worker must reject it without accepting stale ciphertext; after refresh/finalization, re-encrypt with the new public key and send successfully.
+- [ ] **Drafts:** On a v2 account, type an unsent Words/Message/Discussion draft, wait for encrypted sync, log into the same account with its recovery code on another browser, and confirm the exact content returns. Neither message recipient nor household owner receives draft plaintext.
+- [ ] **Offline drafts:** Disconnect networking, continue typing and verify local autosave still works without a 'synced' claim. Restore connectivity and explicitly retry if necessary. Simulate a concurrent edit on another device and verify no automatic overwrite; exercise BOTH remote-copy and local-copy choices.
+- [ ] **Discard and tombstone:** After remote sync, discard a draft and confirm it does not reappear on either device after refresh. If another device changed the draft meanwhile, deletion must fail safely and preserve both copies.
+- [ ] **Session switch:** Start a draft sync, switch to another account in the same browser, then let the old request finish. It must not write into the new account's journal/draft record; Worker must reject stale account IDs.
+- [ ] **Database:** No plaintext content, prompts, titles, recovery codes, original private keys, medication notes, or unverified sender-key rosters in logs, D1 recovery rows, migrated copies or draft-sync rows.
+- [ ] **Regression:** Check direct/Words activity privacy, Household Member Adult/Teen/Child profile permissions, passkey setup, Today light/dark mode and all medication history/correction flows.
+
+**Important residual risk:** Restoring the same P-256 account key to several browsers is not a cryptographically independent per-device hierarchy. Revoking a session or removing a passkey does not revoke a private key already copied to another device. This remains a release-blocking design decision before real family/confidential use.
