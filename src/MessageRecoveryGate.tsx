@@ -83,7 +83,7 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    try{
     const existing=await api<RecoveryStatus>('/messages/recovery');
     if(existing.configured&&existing.envelope){
-     if(pending&&samePublicKey(existing.envelope.publicKey,pending.identity.publicKey)){
+     if(pending&&samePublicKey(existing.envelope.publicKey,pending.identity.publicKey)&&JSON.stringify(existing.envelope)===JSON.stringify(pending.envelope)){
       await storeRecoveredMessageIdentity(userId,pending.identity);
       await clearPendingRecoveryEnvelope(userId,'fresh').catch(()=>{});
       onReady(pending.identity);announceRecovery();setMode('ready');setPending(null);
@@ -125,7 +125,7 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
     try{await api('/messages/recovery','POST',{envelope:pendingResume});}
     catch(e){
      const current=await api<RecoveryStatus>('/messages/recovery');
-     if(!current.configured||!current.envelope||!samePublicKey(current.envelope.publicKey,identity.publicKey))throw e;
+     if(!current.configured||!current.envelope||!samePublicKey(current.envelope.publicKey,identity.publicKey)||JSON.stringify(current.envelope)!==JSON.stringify(pendingResume))throw e;
     }
    }
    await storeRecoveredMessageIdentity(userId,identity);
