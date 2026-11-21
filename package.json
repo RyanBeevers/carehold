@@ -13,7 +13,8 @@
     "db:remote": "wrangler d1 migrations apply carehold-staging --remote",
     "auth:check": "npx @better-auth/cli check schema",
     "deploy:staging": "wrangler deploy --env staging",
-    "push:setup": "node scripts/configure-local-push.mjs"
+    "push:setup": "node scripts/configure-local-push.mjs",
+    "db:backup:local": "bash scripts/backup-local.sh"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.0",
