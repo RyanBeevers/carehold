@@ -25,3 +25,8 @@ A passkey proves account/device possession. It is **not** automatically a client
 ## Incomplete for public launch
 
 Email verification, caregiver revocation, anti-enumeration and rate limits, threat-model review, external security testing, child/guardian policy and legal review, user consent, professional records, incident response, deletion/export/retention, backups/restore, production monitoring, CSP/cookie review, server-permission integration tests, and signed dependency audit. See `AGENTS.md` for the full discovery list.
+
+## Account prompt audience and invite staging (pilot)
+The `parent`, `child`, and `teen` labels select **local, prewritten prompt copy only**. They do not alter profile grants, clinical access, consent rights, or privacy policies; a self-declared label cannot establish a minor's age or a clinician's status. No exact DOB is collected in the pilot.
+
+An invitation may be referenced by user ID and invitation ID after sign-up but before passkey registration. The staging record does **not** create household membership, expose household details, or store the bearer code. Actual acceptance still requires an authenticated passkey and checks the one-time invitation state. Clinical enrollment and children's age/guardian validation are deliberately deferred.

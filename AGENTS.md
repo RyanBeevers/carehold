@@ -50,3 +50,9 @@ Carehold is an invite-only household care pilot, built to grow into a subscripti
 - Billing compliance, beta/public launch checklist, international availability, support model, and professional contract terms.
 
 Household-only use does **not** waive baseline security. Stop new sensitive-data features if the necessary controls cannot be implemented safely.
+## Pilot prompt audiences and invitation flow
+- `account_audiences` stores a self-declared **parent / child / teen** prompt preference. This is NEVER an access-control role, age verification, guardian consent or a clinician identity. Authorization continues through `household_members` and `profile_grants`.
+- Never enable a `doctor` account type or professional access solely based on an onboarding dropdown. Professional enrollment/referral and consent require their own verified workflow and release gate.
+- The curated Words library must show parent-to-child prompts only to the parent audience and age-distinct child/teen-to-parent prompts only to their selected audience. Shared prompts are allowed. Never log read, view, copy, draft or unshared response activity.
+- A signup invitation can be staged before passkey completion as `pending_household_invites.user_id -> invitation_id` with NO reusable plaintext code stored. Stage ≠ acceptance; only a fully authenticated passkey-enabled user may claim it, and claim must honor revocation, expiry, duplicate membership and profile grants.
+- Do not collect minors' exact dates of birth before consent, retention and age-transition decisions are made. A UI prompt audience remains self-selected and intentionally non-authoritative.

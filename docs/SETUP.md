@@ -52,3 +52,15 @@ Do not execute the staging deploy script or production migrations until specific
 - No encrypted journaling or messages are stored. `Words` is a **static prompt library**, not secure chat.
 - The scheduler supports daily, weekdays, interval, and PRN; skipped DST local times require review. Complex prescriptions (tapers, alternating doses, etc.) need a future explicit scheduling model.
 - Cloudflare cron notifications are best-effort. This app is a care log, not an emergency alert or clinical decision system.
+
+## Role-aware prompt and single-entry invitation regression (2026-11)
+
+Apply `npm run db:local` **after pulling**; migration `0003_audience_invites.sql` adds non-privileged account prompt audiences and a pending invitation reference table. Local data is preserved; do not recreate your test account or D1 database. Do not run remote migrations without authorization.
+
+- Existing test accounts with passkeys will be prompted once to choose **Parent / caregiver**, **Child** or **Teen**. This is the prompt audience, **not** a role that grants access to any profile or care records. It is editable in Settings. A new parent/caregiver can create a care circle; child/teen audiences must join by invitation.
+- New invited user: create a one-time invitation, sign out, create a new fictional test account with **that code once** and a chosen prompt audience, then add a passkey. The account stores only the invitation's database ID while waiting for passkey setup. After passkey registration, the app claims the original invitation automatically and joins the intended household; it does not require retyping. If automatic acceptance fails, the onboarding screen shows a **Finish joining** retry. Invitation expiry, revocation, one-use constraints and profile grants remain enforced.
+- Existing signed-in users can still accept a new invitation under **Care circle** with the code. Don't mistake account audience for membership role or medication capabilities.
+- Parent Words must show parent + shared prompts, never child/teen prompts. Child and teen libraries are distinct. Copy a prompt and confirm **Copied** beside the button; copy an invitation and confirm **Copied** inside the dialog. Failed clipboard access shows a nearby error and leaves the text selectable.
+- Changes to a prompt audience do **not** grant new rights. Verify child/teen accounts cannot see unshared medication profiles or create a household; permission checks remain server-side.
+- This pilot intentionally **does not collect dates of birth or offer doctor accounts**. DOB/age verification, guardian consent, teen age transitions, professional consent, clinical record access and encrypted communication remain release decisions. Self-selected audience is only a presentation preference. It is NOT age verification or evidence of guardian consent.
+- After the browser checks, complete the two outstanding tests: real mobile layout/contrast/navigation and real opt-in push delivery on an installed supported device. The cron warning in Wrangler local dev is expected.
