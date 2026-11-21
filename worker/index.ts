@@ -187,6 +187,20 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
   }
   // Identity association is distinct from authorization. The member can
   // learn only which profile is linked to their own account, not its care data.
+  // Private Words is a LOCAL-ONLY prototype. Return minimal display names
+  // only to authorized household members, and never journal content or email.
+  // Non-owners can preview sharing with household owners, not other minors.
+  if(path==='/api/words/recipient-options'&&req.method==='GET'){
+    const hid=required(url.searchParams.get('householdId'));
+    const viewerRole=await member(db,hid,user.id);
+    const rows=await db.prepare(`SELECT u.id,u.name FROM household_members hm
+      JOIN user u ON u.id=hm.user_id
+      WHERE hm.household_id=? AND hm.user_id<>?
+      AND (?='owner' OR hm.role='owner')
+      ORDER BY hm.joined_at LIMIT 30`).bind(hid,user.id,viewerRole)
+      .all<{id:string,name:string}>();
+    return json({recipients:rows.results||[]});
+  }
   if(path==='/api/me/linked-profile'&&req.method==='GET'){
     const hid=required(url.searchParams.get('householdId'));
     const role=await member(db,hid,user.id);
