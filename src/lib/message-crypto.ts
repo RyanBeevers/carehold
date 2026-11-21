@@ -1,3 +1,4 @@
+import type {MessageRecoveryEnvelope} from './message-recovery.ts';
 /**
  * Fictional-data pilot, NOT reviewed E2EE. Legacy device keys are non-exportable
  * and browser-bound; a separate explicit recovery-code flow now exists for
@@ -10,7 +11,6 @@ export type Identity={privateKey:CryptoKey,publicKey:PublicKey,journalKey?:Crypt
 export type Content={kind:'prompt'|'message',text:string};
 export type Envelope={v:1,epk:PublicKey,iv:string,salt:string,ct:string};
 const enc=new TextEncoder(),dec=new TextDecoder();
-import type {MessageRecoveryEnvelope} from './message-recovery.ts';
 const dbName='carehold-direct-message-keys-v1';
 export type RecoverySetupFlow='fresh'|'legacy';
 type PendingRecovery={scope:string,createdAt:number,envelope:MessageRecoveryEnvelope};
@@ -55,8 +55,12 @@ function getDb():Promise<IDBDatabase>{
    if(!request.result.objectStoreNames.contains('pendingRecoveries'))
     request.result.createObjectStore('pendingRecoveries',{keyPath:'scope'});
   };
-  request.onsuccess=()=>resolve(request.result);
+  request.onsuccess=()=>{
+   request.result.onversionchange=()=>request.result.close();
+   resolve(request.result);
+  };
   request.onerror=()=>reject(request.error??new Error('Cannot open device key store.'));
+  request.onblocked=()=>reject(new Error('Another Carehold tab is blocking encrypted recovery setup. Close the older tab and retry.'));
  });
 }
 function requestValue<T>(request:IDBRequest<T>):Promise<T>{
