@@ -32,6 +32,9 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
     if(!live)return;
     setEnrolledPublic(remote.publicKey);
     if(remote.publicKey&&local&&samePublicKey(remote.publicKey,local.publicKey)){
+     const status=await api<RecoveryStatus>('/messages/recovery');
+     if(!live)return;
+     if(!status.configured)setNotice('Legacy message key detected: recovery is not configured. Preserve this browser until a safe migration is available.');
      onReady(local);setMode('ready');return;
     }
     if(!remote.publicKey){
@@ -69,7 +72,21 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    onReady(pending.identity);setMode('ready');
    setCode('');setPending(null);setNotice('Encryption recovery configured. Keep your recovery code offline.');
   }catch(e){
-   setError(errorText(e)+' Keep the displayed recovery code. If enrollment was completed on the server, you can use it to restore on this browser.');
+   try{
+    const existing=await api<RecoveryStatus>('/messages/recovery');
+    if(existing.configured&&existing.envelope){
+     if(pending&&samePublicKey(existing.envelope.publicKey,pending.identity.publicKey)){
+      await storeRecoveredMessageIdentity(userId,pending.identity);
+      onReady(pending.identity);setMode('ready');setPending(null);
+      setNotice('Enrollment was already completed; this browser recovered the saved identity.');
+      return;
+     }
+     setPending(null);setSaved(false);setMode('blocked');
+     setError('Another browser enrolled a different encryption identity. The code generated in this tab is not valid for that identity. Keep the original browser and its recovery code; no keys were reset.');
+     return;
+    }
+   }catch{}
+   setError(errorText(e)+' Enrollment could not be confirmed. Preserve this displayed code, do not generate another yet, and retry after connectivity returns.');
   }finally{setBusy(false);}
  }
  async function restore(e:FormEvent){
