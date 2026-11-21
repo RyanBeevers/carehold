@@ -172,6 +172,8 @@ Use **fictional accounts and writing only**. The older shared account key and it
 ## Recovery-code custody and iPhone Passwords UX (NOT YET TESTED)
 
 - [ ] Start fresh enrollment on iPhone Safari and the installed Carehold PWA. Confirm the recovery code is visible, the default storage instructions are for Apple Passwords, and the searchable label is **Carehold — Encryption Recovery Key**.
+- [ ] Copy the key, background Carehold long enough to trigger its inactivity lock, save the code in Apple Passwords, then sign in again. Confirm enrollment resumes from the **same encrypted envelope**, accepts the saved code and does not generate a different key. Repeat for the original-browser legacy migration before server staging.
+- [ ] Discard an unregistered pending setup when the code wasn't saved; confirm the active account key and all historic ciphertext stay intact. An enrollment already staged or completed must not offer destructive cancellation.
 - [ ] Tap **Copy recovery code**, open **Passwords**, create a *separate* password entry with the code and a Carehold recovery label, then return. Ensure a copy operation alone does **not** mark enrollment complete.
 - [ ] Confirm a user can switch to **another password manager**, **locked note**, or **offline copy** without losing the displayed secret. Do not open a native browser alert or show a fake “Saved to Passwords” notification.
 - [ ] Without selecting the save confirmation, the enrollment and legacy-migration completion buttons remain disabled. Once saved is explicitly confirmed, enrollment can proceed.
