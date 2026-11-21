@@ -230,7 +230,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    </header>
    <section className="words-space-discussion">
      <div className="words-hub-section-top"><div><span className="mono kicker">TALK ABOUT IT</span><h3>Discussion</h3></div><MessageCircle size={19}/></div>
-     <p className="muted tiny">One place to talk together or keep a private note. Private notes stay encrypted on this device and are visible only to you; shared replies are visible to all selected participants.</p>
+     <p className="muted tiny">One place to talk together or keep a private note. Private notes are encrypted for your account and synchronized when recovery is configured; shared replies are visible to all selected participants.</p>
      {board.length===0&&<p className="muted">No notes or replies yet. Add something whenever you are ready.</p>}
      <ol className="words-discussion-ledger">
       {board.map(note=><li key={note.id} className={note.private?'words-private-note':''}>
@@ -253,6 +253,13 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
       <button type="button" className="button dark small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'} onClick={()=>void send('discussion')}>
        <Send size={15}/> {busy==='discussion'?'Posting…':'Post reply · everyone'}</button>
      </div>
+     {discussion.status==='conflict'&&<div className="words-audience-confirm">
+      <span>{discussion.remoteConflict?'Another device has a different encrypted draft. Neither copy was overwritten.':'Another tab edited this local draft.'}</span>
+      <button type="button" className="button outline small" onClick={()=>void (discussion.remoteConflict?discussion.loadRemote():discussion.reloadStored())}>{discussion.remoteConflict?'Use other device copy':'Load local saved copy'}</button>
+      <button type="button" className="button outline small" onClick={()=>void discussion.overwriteStored()}>Keep this device’s draft</button>
+     </div>}
+     {discussion.status==='error'&&discussion.syncEnabled&&<button type="button" className="button outline small" onClick={()=>void discussion.retrySync()}>Retry encrypted draft sync</button>}
+     <p className="muted tiny">{discussion.syncEnabled?(discussion.synced?'Draft encrypted and synchronized privately.':'Draft kept locally; sync may still be pending.'):'Encrypted draft stored on this device until recovery is configured.'}</p>
      {discussion.error&&<p className="messages-error" role="alert">{discussion.error}</p>}
     </section>
     {status&&<p className="words-status" role="status"><Check size={15}/>{status}</p>}
