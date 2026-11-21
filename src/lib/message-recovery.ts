@@ -7,8 +7,8 @@ import {samePublicKey,type Identity,type PublicKey} from './message-crypto.ts';
  * private key AND independently random 256-bit journal key locally. Only the ciphertext and public key may be uploaded.
  * This does not recover legacy, non-extractable browser keys.
  *
- * TODO before launch: verified device enrollment, device revocation/rotation,
- * journal encrypted sync, legacy-key migration, independent security review.
+ * TODO before launch: verified device enrollment, device-specific revocation,
+ * audited migration boundaries, offline conflicts and security review.
  */
 export type MessageRecoveryEnvelope = {
  v:2;
