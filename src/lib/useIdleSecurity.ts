@@ -1,5 +1,5 @@
 import {useEffect,useRef} from 'react';
-import {INACTIVITY_LOCK_MS,BACKGROUND_LOCK_MS,HEARTBEAT_ACTIVE_WINDOW_MS,HEARTBEAT_INTERVAL_MS,lockReason} from '../../shared/session-policy';
+import {INACTIVITY_LOCK_MS,BACKGROUND_LOCK_MS,HEARTBEAT_ACTIVE_WINDOW_MS,HEARTBEAT_INTERVAL_MS,lockReason,type LockReason} from '../../shared/session-policy';
 
 /**
  * UI lock that masks the whole screen on inactivity or when returning after
@@ -7,7 +7,7 @@ import {INACTIVITY_LOCK_MS,BACKGROUND_LOCK_MS,HEARTBEAT_ACTIVE_WINDOW_MS,HEARTBE
  * on the server. The background timer is checked on resume because iOS may
  * suspend JavaScript intervals while the app is not visible.
  */
-export function useIdleSecurity(enabled:boolean,onLock:()=>void,onHeartbeat:()=>void){
+export function useIdleSecurity(enabled:boolean,onLock:(reason:LockReason)=>void,onHeartbeat:()=>void){
  const lockRef=useRef(onLock),heartbeatRef=useRef(onHeartbeat);
  lockRef.current=onLock;heartbeatRef.current=onHeartbeat;
  useEffect(()=>{
@@ -17,8 +17,9 @@ export function useIdleSecurity(enabled:boolean,onLock:()=>void,onHeartbeat:()=>
    let wasLocked=false;
    const attemptLock=()=>{
      if(wasLocked)return true;
-     if(lockReason(Date.now(),lastInteraction,hiddenAt)!==null){
-       wasLocked=true;lockRef.current();return true;
+     const reason=lockReason(Date.now(),lastInteraction,hiddenAt);
+     if(reason!==null){
+       wasLocked=true;lockRef.current(reason);return true;
      }
      return false;
    };
@@ -50,7 +51,7 @@ export function useIdleSecurity(enabled:boolean,onLock:()=>void,onHeartbeat:()=>
    // Input and composition events cover mobile keyboards, dictation, autofill and
    // accessibility typing that may not emit keydown. Never treat the mere
    // passage of time or a background tab as authenticated activity.
-   const activityEvents=['pointerdown','keydown','touchstart','wheel','input','change','compositionupdate'];
+   const activityEvents=['pointerdown','pointermove','keydown','touchstart','touchmove','wheel','input','change','compositionupdate'];
    for(const name of activityEvents)window.addEventListener(name,noteActivity,{passive:true});
    document.addEventListener('visibilitychange',onVisibility);
    window.addEventListener('pageshow',onVisibility);
