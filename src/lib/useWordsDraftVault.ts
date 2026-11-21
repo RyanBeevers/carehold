@@ -3,6 +3,8 @@ import {
  DraftConflictError,enableDeviceVault,inspectDeviceVault,saveDeviceDraft,discardDeviceDraft,
  type DraftDocument
 } from './words-vault';
+import {storedMessageIdentity} from './message-crypto';
+import {readSyncedDraft,saveSyncedDraft,deleteSyncedDraft} from './recoverable-drafts';
 
 export type DraftSaveStatus='loading'|'off'|'ready'|'editing'|'saving'|'saved'|'restored'|'conflict'|'error';
 const INITIAL:DraftDocument={text:'',prompt:null,title:''};
@@ -21,6 +23,9 @@ export function useWordsDraftVault(userId:string,householdId:string){
  const [status,setStatus]=useState<DraftSaveStatus>('loading');
  const [savedAt,setSavedAt]=useState<number|null>(null);
  const [error,setError]=useState('');
+ const [syncEnabled,setSyncEnabled]=useState(false),[synced,setSynced]=useState(false);
+ const [remoteConflict,setRemoteConflict]=useState(false);
+ const remoteKey=useRef<CryptoKey|null>(null),remoteRevision=useRef(0),remoteBlocked=useRef(false);
  const current=useRef<DraftDocument>({...INITIAL});
  const revision=useRef(0),editNo=useRef(0),lastQueued=useRef(-1);
  const dirty=useRef(false),isEnabled=useRef(false),conflicted=useRef(false),discarding=useRef(false);
@@ -32,6 +37,8 @@ export function useWordsDraftVault(userId:string,householdId:string){
   const gen=++generation.current;
   setReady(false);isReady.current=false;
   setStatus('loading');setError('');setEnabled(false);isEnabled.current=false;
+  setSyncEnabled(false);setSynced(false);setRemoteConflict(false);
+  remoteKey.current=null;remoteRevision.current=0;remoteBlocked.current=false;
   void (async()=>{
    let result=await inspectDeviceVault(userId,householdId);
    if(!result.enabled){
@@ -39,17 +46,50 @@ export function useWordsDraftVault(userId:string,householdId:string){
     await enableDeviceVault(userId,householdId);
     result=await inspectDeviceVault(userId,householdId);
    }
-   return result;
-  })().then(result=>{
+   let cloudError='',cloudConflict=false,cloudSynced=false;
+   try{
+    const identity=await storedMessageIdentity(userId);
+    if(identity?.journalKey){
+     remoteKey.current=identity.journalKey;
+     const remote=await readSyncedDraft(userId,householdId,identity.journalKey);
+     remoteRevision.current=remote.revision;
+     if(remote.document&&result.document){
+      cloudConflict=JSON.stringify(remote.document)!==JSON.stringify(result.document);
+      cloudSynced=!cloudConflict;
+     }else if(remote.document&&!result.document){
+      const restored=await saveDeviceDraft(userId,householdId,remote.document,result.revision);
+      result={...result,document:remote.document,revision:restored.revision,savedAt:restored.savedAt};
+      cloudSynced=true;
+     }else if(!remote.document&&result.document&&!remote.deleted){
+      const saved=await saveSyncedDraft(userId,householdId,identity.journalKey,result.document,remote.revision);
+      remoteRevision.current=saved.revision;
+      cloudSynced=true;
+     }else if(!remote.document&&remote.deleted&&result.document){
+      cloudConflict=true;
+     }else cloudSynced=true;
+    }
+   }catch(e){
+    cloudError=e instanceof Error?e.message:'Draft sync is unavailable.';
+   }
+   return {result,cloudError,cloudConflict,cloudSynced};
+  })().then(({result,cloudError,cloudConflict,cloudSynced})=>{
    if(!alive.current||gen!==generation.current)return;
    isEnabled.current=result.enabled;setEnabled(result.enabled);
    const restored=result.document??{...INITIAL};
    current.current=restored;
    setTextState(restored.text);setPromptState(restored.prompt);setTitleState(restored.title??'');
    revision.current=result.revision;
-   dirty.current=false;conflicted.current=false;lastQueued.current=-1;editNo.current=0;
-   setSavedAt(result.savedAt);
-   setStatus(result.enabled?(result.document?'restored':'ready'):'off');
+   dirty.current=false;conflicted.current=cloudConflict;lastQueued.current=-1;editNo.current=0;
+   remoteBlocked.current=cloudConflict;
+   setSavedAt(result.savedAt);setSyncEnabled(!!remoteKey.current);
+   setSynced(cloudSynced);setRemoteConflict(cloudConflict);
+   if(cloudConflict){
+    setError('This device and another device have different saved drafts. Choose which copy to keep; neither was overwritten.');
+    setStatus('conflict');
+   }else if(cloudError){
+    setError('Local draft retained. Private sync unavailable: '+cloudError);
+    setStatus('error');
+   }else setStatus(result.enabled?(result.document?'restored':'ready'):'off');
   }).catch(e=>{
    if(!alive.current||gen!==generation.current)return;
    setError(e instanceof Error?e.message:'Cannot load device storage.');
@@ -65,7 +105,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
   if(!isReady.current||discarding.current)return;
   current.current=next;
   setTextState(next.text);setPromptState(next.prompt);setTitleState(next.title??'');
-  dirty.current=true;editNo.current+=1;
+  dirty.current=true;editNo.current+=1;setSynced(false);
   if(!conflicted.current)setStatus(isEnabled.current?'editing':'off');
  }
  const setText=useCallback((value:string)=>editField({...current.current,text:value}),[]);
