@@ -8,6 +8,7 @@ import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
 import {handleMessages} from './messages';
 import {handleWordSpaces} from './words-spaces';
+import {CatalogError,normalizeMedicationSearch,searchCatalog,enforceCatalogRateLimit,parseMedicationCatalog,type MedicationCatalogMetadata} from './medication-catalog';
 
 const dataHeaders = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'"};
 class ApiError extends Error { constructor(public code:number,message:string){super(message);} }
@@ -82,6 +83,10 @@ function parseSchedule(b:Record<string,unknown>):{schedule:Schedule,times:string
   if(schedule.cadence==='prn'&&times.length)bad(400,'As-needed medicines do not have scheduled times.');
   if(times.some(t=>!validTime(t))||new Set(times).size!==times.length)bad(400,'Times must be unique in HH:MM format.');
   return {schedule,times:times.sort()};
+}
+function catalogFields(b:Record<string,unknown>,name:string,old?:MedicationRow):MedicationCatalogMetadata{
+ try{return parseMedicationCatalog(b,name,old);}
+ catch(e){if(e instanceof CatalogError)bad(e.status,e.message);throw e;}
 }
 function medSchedule(m:MedicationRow):Schedule {return {cadence:m.cadence,weekdays:JSON.parse(m.weekdays_json),intervalDays:m.interval_days??undefined,anchorDate:m.anchor_date??undefined,startDate:m.start_date,endDate:m.end_date};}
 type InvitationRow={
@@ -269,7 +274,18 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     }
     return json({linkedUserId:nextId,linked:true});
   }
-  if(path==='/api/medications'&&req.method==='GET') {
+  if(path==='/api/medications/search'&&req.method==='GET') {
+     // Search is allowed only for an account entitled to manage this profile.
+     const pid=required(url.searchParams.get('profileId'));
+     await profileAccess(db,pid,user.id,'manage_medication');
+     try{
+       const query=normalizeMedicationSearch(url.searchParams.get('q'));
+       await enforceCatalogRateLimit(db,user.id);
+       const results=await searchCatalog(query);
+       return json({source:'rxterms',results});
+     }catch(e){if(e instanceof CatalogError)bad(e.status,e.message);throw e;}
+   }
+   if(path==='/api/medications'&&req.method==='GET') {
     const pid=required(url.searchParams.get('profileId'));await profileAccess(db,pid,user.id,'view_schedule');
     const meds=await db.prepare('SELECT * FROM medications WHERE profile_id=? AND archived_at IS NULL ORDER BY name').bind(pid).all<MedicationRow>();
     const withTimes=await Promise.all((meds.results||[]).map(async m=>({
@@ -280,9 +296,9 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   if(path==='/api/medications'&&req.method==='POST') {
     const b=await jsonBody(req),pid=required(b.profileId),name=required(b.name,150),dose=required(b.dose,100);
     await profileAccess(db,pid,user.id,'manage_medication');
-    const {schedule,times}=parseSchedule(b),id=uuid(),ts=now();
-    const queries=[db.prepare(`INSERT INTO medications(id,profile_id,name,form,dose,instructions,cadence,weekdays_json,interval_days,anchor_date,start_date,end_date,clinician,refill_note,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,pid,name,trim(b.form),dose,trim(b.instructions,2000),schedule.cadence,JSON.stringify(schedule.weekdays||[]),schedule.intervalDays??null,schedule.anchorDate??null,schedule.startDate,schedule.endDate??null,trim(b.clinician),trim(b.refillNote),ts,ts),
+    const {schedule,times}=parseSchedule(b),id=uuid(),ts=now(),catalog=catalogFields(b,name);
+    const queries=[db.prepare(`INSERT INTO medications(id,profile_id,name,form,dose,instructions,cadence,weekdays_json,interval_days,anchor_date,start_date,end_date,clinician,refill_note,created_at,updated_at,catalog_source,catalog_identifier,normalized_name,brand_name,product_strength,dosage_form)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,pid,name,trim(b.form),dose,trim(b.instructions,2000),schedule.cadence,JSON.stringify(schedule.weekdays||[]),schedule.intervalDays??null,schedule.anchorDate??null,schedule.startDate,schedule.endDate??null,trim(b.clinician),trim(b.refillNote),ts,ts,catalog.catalogSource,catalog.catalogIdentifier,catalog.normalizedName,catalog.brandName,catalog.productStrength,catalog.dosageForm),
       ...times.map(t=>db.prepare('INSERT INTO medication_times(medication_id,hhmm) VALUES(?,?)').bind(id,t)),
       db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)').bind(uuid(),id,user.id,ts,null,JSON.stringify({...b,times}))];
     await db.batch(queries);return json({id},201);
@@ -290,10 +306,10 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   const medMatch=path.match(/^\/api\/medications\/([0-9a-f-]+)$/);
   if(medMatch&&req.method==='PATCH') {
     const old=await medication(db,medMatch[1]);await profileAccess(db,old.profile_id,user.id,'manage_medication');
-    const b=await jsonBody(req),{schedule,times}=parseSchedule(b),ts=now(),name=required(b.name,150),dose=required(b.dose,100);
+    const b=await jsonBody(req),{schedule,times}=parseSchedule(b),ts=now(),name=required(b.name,150),dose=required(b.dose,100),catalog=catalogFields(b,name,old);
     const before=await db.prepare('SELECT hhmm FROM medication_times WHERE medication_id=?').bind(old.id).all();
     await db.batch([
-      db.prepare(`UPDATE medications SET name=?,form=?,dose=?,instructions=?,cadence=?,weekdays_json=?,interval_days=?,anchor_date=?,start_date=?,end_date=?,clinician=?,refill_note=?,updated_at=? WHERE id=?`).bind(name,trim(b.form),dose,trim(b.instructions,2000),schedule.cadence,JSON.stringify(schedule.weekdays||[]),schedule.intervalDays??null,schedule.anchorDate??null,schedule.startDate,schedule.endDate??null,trim(b.clinician),trim(b.refillNote),ts,old.id),
+      db.prepare(`UPDATE medications SET name=?,form=?,dose=?,instructions=?,cadence=?,weekdays_json=?,interval_days=?,anchor_date=?,start_date=?,end_date=?,clinician=?,refill_note=?,updated_at=?,catalog_source=?,catalog_identifier=?,normalized_name=?,brand_name=?,product_strength=?,dosage_form=? WHERE id=?`).bind(name,trim(b.form),dose,trim(b.instructions,2000),schedule.cadence,JSON.stringify(schedule.weekdays||[]),schedule.intervalDays??null,schedule.anchorDate??null,schedule.startDate,schedule.endDate??null,trim(b.clinician),trim(b.refillNote),ts,catalog.catalogSource,catalog.catalogIdentifier,catalog.normalizedName,catalog.brandName,catalog.productStrength,catalog.dosageForm,old.id),
       db.prepare('DELETE FROM medication_times WHERE medication_id=?').bind(old.id),
       ...times.map(t=>db.prepare('INSERT INTO medication_times(medication_id,hhmm) VALUES(?,?)').bind(old.id,t)),
       db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)').bind(uuid(),old.id,user.id,ts,JSON.stringify({...old,times:before.results.map((x:any)=>x.hhmm)}),JSON.stringify({...b,times}))
