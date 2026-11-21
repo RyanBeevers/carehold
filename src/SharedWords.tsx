@@ -4,6 +4,7 @@ import {api,StaleSessionRequest} from './lib/api';
 import {sealWord,unsealWord,type WordPayload} from './lib/words-space-crypto';
 import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
 import {savePrivateJournal,listPrivateJournal,type JournalEntry} from './lib/private-journal';
+import {saveSyncedPrivateJournal,listSyncedPrivateJournal} from './lib/synced-private-journal';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
 
 export type WordContact={id:string,name:string,publicKey:PublicKey|null};
@@ -140,7 +141,9 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    catch{return {...p,content:null};}
   }));
   setDetail({...r,posts});
-  try{setPrivateNotes((await listPrivateJournal(userId,householdId)).filter(e=>e.spaceId===spaceId));}
+  try{setPrivateNotes((await (identity.journalKey
+   ?listSyncedPrivateJournal(userId,householdId,identity.journalKey)
+   :listPrivateJournal(userId,householdId))).filter(e=>e.spaceId===spaceId));}
   catch(e){setError(message(e));}
   // A missing or undecipherable entry must not silently clear this recipient's inbox.
   // This acknowledgement remains recipient-private and never reaches the sender.
@@ -196,11 +199,14 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   if(!discussion.ready||!discussion.text.trim()||busy)return;
   setBusy('save');setError('');setStatus('');
   try{
-   const note=await savePrivateJournal(userId,householdId,{id:crypto.randomUUID(),
-    title:'Private discussion note',prompt:prompt||null,text:discussion.text,spaceId});
+   if(!identity)throw new Error('Set up encryption recovery before saving private notes.');
+   const draft={id:crypto.randomUUID(),title:'Private discussion note',prompt:prompt||null,text:discussion.text,spaceId};
+   const note=identity.journalKey
+    ?await saveSyncedPrivateJournal(userId,householdId,identity.journalKey,draft)
+    :await savePrivateJournal(userId,householdId,draft);
    setPrivateNotes(old=>[...old,note]);
    const cleared=await discussion.discard();
-   setStatus(cleared?'Private note added on this device only. No one else can see it.':
+   setStatus(cleared?identity.journalKey?'Private note encrypted and synchronized. No one else can see it.':'Private note added on this device only. No one else can see it.':
     'Saved privately, but the extra device draft could not be cleared.');
    onPrivateSaved();
   }catch(e){setError(message(e));}
