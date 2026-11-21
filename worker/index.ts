@@ -199,7 +199,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     return json(joined);
   }
   if(path==='/api/households'&&req.method==='GET') {
-    const h=await db.prepare('SELECT h.id,h.name,h.timezone,m.role FROM households h JOIN household_members m ON m.household_id=h.id WHERE m.user_id=? ORDER BY h.created_at').bind(user.id).all();
+    const h=await db.prepare('SELECT h.id,h.name,h.timezone,m.role,COALESCE(c.classification,'unverified') classification FROM households h JOIN household_members m ON m.household_id=h.id LEFT JOIN household_member_classes c ON c.household_id=m.household_id AND c.user_id=m.user_id WHERE m.user_id=? ORDER BY h.created_at').bind(user.id).all();
     return json({households:h.results});
   }
   if(path==='/api/households'&&req.method==='POST') {
