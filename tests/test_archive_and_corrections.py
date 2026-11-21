@@ -14,7 +14,7 @@ class ArchiveAndCorrections(unittest.TestCase):
         self.db.execute("INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES('u','Owner','test@test.invalid',0,1,1)")
         self.db.execute("INSERT INTO households VALUES('h','Test circle','America/New_York','u','now')")
         self.db.execute("INSERT INTO household_members VALUES('h','u','owner','now')")
-        self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,created_at) VALUES('p','Fictional person','adult','now')")
+        self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,created_at) VALUES('p','h','Fictional person','adult','now')")
         self.db.execute("""INSERT INTO medications(id,profile_id,name,dose,cadence,start_date,created_at,updated_at)
                             VALUES('m','p','Fictional medication','Recorded label','daily','2026-11-01','now','now')""")
         self.db.execute("INSERT INTO medication_times VALUES('m','08:00')")
