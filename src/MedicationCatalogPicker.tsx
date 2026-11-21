@@ -75,7 +75,7 @@ export function MedicationCatalogPicker({profileId,value,catalog,isPet,disabled=
   <div className="med-catalog-input">
    <Search size={17} aria-hidden="true"/>
    <input id={listId+'-input'} role="combobox" aria-autocomplete="list"
-    aria-controls={listVisible&&results.length>0?listId+'-options':undefined} aria-expanded={listVisible} aria-haspopup="listbox"
+    aria-controls={listVisible&&results.length>0?listId+'-options':undefined} aria-expanded={listVisible&&results.length>0} aria-haspopup="listbox"
     aria-activedescendant={listVisible&&active>=0?listId+'-option-'+active:undefined}
     required maxLength={150} autoComplete="off" spellCheck={false} value={value} disabled={disabled}
     placeholder="Search medication name (no patient details)"
