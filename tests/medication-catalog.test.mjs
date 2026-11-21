@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {
- CatalogError,normalizeMedicationSearch,parseRxTermsResponse,fetchRxTerms,parseMedicationCatalog
+ CatalogError,normalizeMedicationSearch,parseRxTermsResponse,fetchRxTerms,parseMedicationCatalog,searchCatalog,enforceCatalogRateLimit
 } from '../worker/medication-catalog.ts';
 
 const sample=[
@@ -112,4 +112,41 @@ test('autocomplete suppresses stale results and keeps manual-entry option access
  assert.match(app,/onSelect=\{item=>setMedForm/);
  assert.match(worker,/profileAccess\(db,pid,user\.id,'manage_medication'\)/);
  assert.match(worker,/enforceCatalogRateLimit\(db,user\.id\)/);
+});
+
+test('worker uses bounded cached results without repeating identical upstream searches',async()=>{
+ let calls=0;
+ const stub=async()=>{calls++;return new Response(JSON.stringify(sample),{status:200});};
+ const first=await searchCatalog('carehold test search ingredient',stub);
+ const second=await searchCatalog('carehold  test search ingredient',stub);
+ assert.deepEqual(first,second);
+ assert.equal(calls,1);
+});
+
+test('per-account limiter rejects denied D1 upsert and binds only account window values',async()=>{
+ let values;
+ const allowed={
+  prepare(sql){
+   assert.match(sql,/medication_catalog_search_limits/);
+   return {bind(...args){values=args;return {run:async()=>({meta:{changes:1}})};}};
+  }
+ };
+ await enforceCatalogRateLimit(allowed,'user-a');
+ assert.equal(values[0],'user-a');
+ assert.equal(values.length,5);
+ const denied={prepare(){return {bind(){return {run:async()=>({meta:{changes:0}})};}};}};
+ await assert.rejects(enforceCatalogRateLimit(denied,'user-a'),e=>e instanceof CatalogError&&e.status===429);
+});
+
+test('search is authorized before proxy lookup and medication writes keep dose separate',()=>{
+ const worker=readFileSync(new URL('../worker/index.ts',import.meta.url),'utf8');
+ const start=worker.indexOf("if(path==='/api/medications/search'");
+ const end=worker.indexOf("if(path==='/api/medications'&&req.method==='GET')",start);
+ assert.ok(start>=0&&end>start);
+ const section=worker.slice(start,end);
+ assert.ok(section.indexOf("profileAccess(db,pid,user.id,'manage_medication')")<section.indexOf('searchCatalog(query)'));
+ assert.match(section,/normalizeMedicationSearch\(url\.searchParams\.get\('q'\)\)/);
+ assert.match(worker,/catalogFields\(b,name,old\)/);
+ assert.match(worker,/catalog\.productStrength/);
+ assert.doesNotMatch(section,/dose|startDate|cadence/);
 });
