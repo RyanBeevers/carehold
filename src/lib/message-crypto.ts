@@ -2,8 +2,8 @@
  * Fictional-data pilot, NOT reviewed E2EE. Legacy device keys are non-exportable
  * and browser-bound; a separate explicit recovery-code flow now exists for
  * NEW accounts. This module preserves legacy keys on all enrollment paths.
- * Public key discovery remains unverified TOFU. Per-device revocation, legacy
- * migration, and journal recovery are NOT supported yet.
+ * Public key discovery remains unverified TOFU. The staged original-browser
+ * migration is experimental. Per-device crypto revocation is NOT supported.
  */
 export type PublicKey={kty:'EC',crv:'P-256',x:string,y:string};
 export type Identity={privateKey:CryptoKey,publicKey:PublicKey,journalKey?:CryptoKey};
