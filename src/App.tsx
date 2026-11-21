@@ -196,7 +196,7 @@ export default function App(){
    setPushEnabled(false);setPushConfig(null);setPushFeedback(null);setPushSubscriptionCount(0);setPushTrace(null);setLocalNotificationFeedback('');
    setError('');setToast(null);setAuthMode('signin');
  },[]);
- const lockNow=(reason='')=>{
+ const lockNow=(reason='',revokeSession=true)=>{
    if(lockingRef.current)return;
    // Preserve a draft only across the same-tab passkey lock; do not retain
    // plaintext in browser storage or share it with another signed-in account.
@@ -208,9 +208,11 @@ export default function App(){
    lockingRef.current=true;authEpochRef.current+=1;
    setLocked(true);setLockError(reason);
    clearSensitive();
-   logoutInFlight.current=authClient.signOut().catch(()=>{
+   // If another tab switched the shared browser cookie to a different user,
+   // do not accidentally sign out *that other user's* session.
+   logoutInFlight.current=revokeSession?authClient.signOut().catch(()=>{
      setLockError('Unable to contact the server. Reconnect before unlocking.');
-   });
+   }):Promise.resolve();
  };
  const refreshIdentity=useCallback(async()=>{
    const epoch=authEpochRef.current;
@@ -253,7 +255,7 @@ export default function App(){
      const result=await response.json() as {user?:{id:string}|null}|null;
      if(epoch!==authEpochRef.current)return;
      if(result?.user?.id!==expectedUserId)
-       lockNow('This browser’s session expired or switched accounts. Your unfinished correction is retained in this tab for the same account.');
+       lockNow('This browser’s session expired or switched accounts. Your unfinished correction is retained in this tab for the same account.',false);
     }).catch(()=>{/* A transient network error is not an authenticated sign-out. */});
  });
  const refreshHouseholds=useCallback(async()=>{
@@ -526,7 +528,7 @@ export default function App(){
    <button type="button" aria-label="Dismiss message" onClick={()=>setToast(null)}><X size={17}/></button>
  </div>;
 
- if(locked)return <div className="gate-shell lock-screen"><div className="lock-mark"><Mark size={67}/></div><div className="form-index">YOUR CIRCLE IS PROTECTED</div><h1>Carehold is<br/><em>locked.</em></h1><p>We lock after three minutes without activity, or one minute away from Carehold. Unlock with your passkey to continue.</p>{lockError&&<Banner kind="error" text={lockError} close={()=>setLockError('')}/>}<button className="button primary big" type="button" disabled={saving} onClick={()=>void unlockWithPasskey()}><KeyRound size={19}/>{saving?'Verifying…':'Unlock with passkey'}</button><button className="text-link" type="button" disabled={saving} onClick={()=>void showPasswordSignin()}>Use email and password instead</button><p className="fine-print">Your care data stays hidden until you authenticate again.</p></div>;
+ if(locked)return <div className="gate-shell lock-screen"><div className="lock-mark"><Mark size={67}/></div><div className="form-index">YOUR CIRCLE IS PROTECTED</div><h1>Carehold is<br/><em>locked.</em></h1><p>We lock after three minutes without activity, or one minute away from Carehold. Unlock with your passkey to continue.</p>{correctionAfterLock.current&&<p className="muted">Your unfinished correction is temporarily retained in this tab. Unlock with the same account to resume; closing this tab will discard it.</p>}{lockError&&<Banner kind="error" text={lockError} close={()=>setLockError('')}/>}<button className="button primary big" type="button" disabled={saving} onClick={()=>void unlockWithPasskey()}><KeyRound size={19}/>{saving?'Verifying…':'Unlock with passkey'}</button><button className="text-link" type="button" disabled={saving} onClick={()=>void showPasswordSignin()}>Use email and password instead</button><p className="fine-print">Your care data stays hidden until you authenticate again.</p></div>;
  if(loading)return <div className="loading"><Mark size={70}/><p>Finding your place…</p></div>;
  if(!user)return <>{toastView}<div className="entry-shell"><div className="entry-aside"><Mark size={76}/><div className="entry-tag">NOTHING GETS LOST IN THE SHUFFLE</div><h1>Care, held<br/><em>together.</em></h1><div className="hand-drawn-rule"/><p>The small everyday moments matter. One gentle place to keep track of them.</p><div className="entry-foot">PRIVATE HOUSEHOLD PILOT <span>✳</span> BUILT WITH CARE</div></div><div className="entry-panel"><div className="entry-toolbar"><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><div className="form-index">01 / WELCOME IN</div><h2>{authMode==='signup'?'Make room for care.':'Welcome back.'}</h2><p>{authMode==='signup'?'Create your account, then secure it with a passkey. You’ll need a pilot or household invitation code.':'Your circle is waiting.'}</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<form onSubmit={authSubmit} className="form-stack" noValidate>
  {authMode==='signup'&&<><label>Your name<input required autoComplete="name" value={authName} onChange={e=>setAuthName(e.target.value)} placeholder="What should we call you?"/></label><AudienceField value={signupAudience} onChange={setSignupAudience}/><p className="fine-print">This chooses age-appropriate conversation starters, not medication access. Professional accounts come later. We do not collect children's birth dates in this pilot.</p></>}
