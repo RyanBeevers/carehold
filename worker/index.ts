@@ -254,8 +254,8 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
       CASE WHEN p.linked_user_id=? THEN 1 ELSE 0 END AS is_self
       FROM profiles p
       WHERE p.household_id=? AND (?=1 OR p.archived_at IS NULL) AND (?='owner' OR EXISTS
-        (SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule'))
-      ORDER BY p.archived_at IS NOT NULL,p.created_at`).bind(role,user.id,hid,includeArchived?1:0,role,user.id).all();
+        (SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))
+      ORDER BY p.archived_at IS NOT NULL,p.created_at`).bind(role,user.id,hid,includeArchived?1:0,role,user.id,user.id,user.id).all();
     return json({profiles:results.results});
   }
   if(path==='/api/profiles'&&req.method==='POST') {
@@ -375,7 +375,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     const rows=await db.prepare(`SELECT m.*,p.display_name,p.kind,p.household_id FROM medications m
       JOIN profiles p ON p.id=m.profile_id
       WHERE p.household_id=? AND p.archived_at IS NULL AND m.archived_at IS NULL
-      AND (?='owner' OR EXISTS(SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule'))`).bind(hid,role,user.id).all<MedicationRow&ProfileRow>();
+      AND (?='owner' OR EXISTS(SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))`).bind(hid,role,user.id,user.id,user.id).all<MedicationRow&ProfileRow>();
     const entries:unknown[]=[];
     for(const m of rows.results||[]) {
       if(!scheduledOn(medSchedule(m),date))continue;
