@@ -125,7 +125,7 @@ export default function App(){
    setHouseholds([]);setHid('');setProfiles([]);setMyProfile(null);setEntries([]);setMeds([]);setHistory([]);setMembers([]);
    setSelected('');setModal(null);setPending({});setInviteCreated('');setPassword('');setEmail('');
    setMedForm(blankMed());setDoseNote('');setCorrectionReason('');setPersonName('');
-   setPushEnabled(false);setPushConfig(null);setPushFeedback(null);setPushSubscriptionCount(0);
+   setPushEnabled(false);setPushConfig(null);setPushFeedback(null);setPushSubscriptionCount(0);setPushTrace(null);setLocalNotificationFeedback('');
    setError('');setToast(null);setAuthMode('signin');
  },[]);
  const lockNow=useCallback(()=>{

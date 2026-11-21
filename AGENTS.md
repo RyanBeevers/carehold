@@ -66,3 +66,8 @@ Household-only use does **not** waive baseline security. Stop new sensitive-data
 - Keep **server-enforced short sessions** (three-minute sliding expiry) independent of UI presentation. The frontend's three-minute idle or one-minute background timer must mask all care content and attempt actual sign-out; require passkey/password authentication to return. Do not make a cosmetic PIN overlay that leaves an authorized session usable indefinitely.
 - Never send session tokens or medication records to browser persistence for unlock. Avoid refresh heartbeats when hidden/inactive. Respect OS suspension: check elapsed time on visibility/focus/pageshow.
 - Every user action should have local visible feedback. Prefer inline errors for form/dialog fields and notification settings, and a fixed, accessible toast for page-wide success/error. Do not force a scroll to a page-header banner.
+
+## Next phase: private words release prerequisite
+- Linked self-profile metadata may help users recognize their profile but MUST NOT be used as implicit permission for medication records or future private messages.
+- Future journaling/messaging requires an independently reviewed client-side E2EE design; do not store readable private content in D1, introduce tracking/read receipts, or grant a parent/professional automatic access to private words.
+- Distinguish push gateway acceptance, service worker receipt, and notification display request. None proves the OS showed the alert; confirm natively. No sensitive data in diagnostics or lockscreens.

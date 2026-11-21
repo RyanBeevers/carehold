@@ -43,3 +43,8 @@ Better Auth server sessions use a three-minute sliding expiration with periodic 
 The client must not treat timestamps, background events, or a toast as an authorization boundary. A paused/offline client may not complete sign-out immediately; sensitive APIs must reject expired/revoked sessions. The app clears care state on lock and rejects stale identity responses. Confirm WebAuthn, session expiry and reauthentication behavior during real device testing before clinical use.
 
 A one-time database migration explicitly revokes long-lived sessions minted before this stricter policy. Merely lowering the `expiresIn` configuration cannot be assumed to invalidate already-issued cookies or rows. Running the migration signs all users out once, preserving their account/passkey and care records.
+
+## Web Push diagnostics and linked self metadata
+Push diagnostics report three distinct states: upstream gateway acceptance, service-worker push event receipt and browser's `showNotification()` completion. None proves macOS displayed a banner. Service-worker messages carry only a random test ID and an enum state; never medical data or endpoints.
+
+Self-link lookup is scoped to the authenticated user and household membership. It exposes limited self-profile identity and per-capability flags, **not** actual records. Any medication/history endpoint retains its independent grant checks. Linking identity is not permission or implied consent to future communication.

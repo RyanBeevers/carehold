@@ -98,3 +98,23 @@ Carehold uses `SESSION_IDLE_SECONDS=180` and `SESSION_REFRESH_SECONDS=30` in **B
 ### One-time session migration
 
 Migration `0005_revoke_legacy_sessions.sql` deliberately revokes **all existing login sessions** after replacing the former 7-day default. This is important because changing Better Auth's `expiresIn` does not necessarily shorten sessions that were already issued under the old policy. After `npm run db:local`, users will need to **sign in again once** with their existing passkeys/passwords; medication, household and account data are not deleted. This migration is not approved for remote execution without reviewing its effect on all currently signed-in users.
+
+## Push troubleshooting: accepted is not displayed (2026-11-21)
+
+The server's `/api/push/test` reports only whether the upstream Web Push service accepted the encrypted message. The service worker now uses a **unique per-test tag** (avoiding replacement/collapse of previous notifications) and can send ephemeral, non-sensitive status messages to an open Carehold tab: `received`, `display-requested`, or `display-error`. These messages contain only the randomly generated test ID. They are **not** stored or logged.
+
+In Settings → Gentle reminders:
+1. Click **Test local display** to call `ServiceWorkerRegistration.showNotification()` without an upstream push service. If this reports success but macOS shows nothing, check macOS **System Settings → Notifications** for Chrome or the installed Carehold PWA, its alert style and **Focus / Do Not Disturb** settings; also check Notification Center. Browser permission `granted` does not prove OS display.
+2. Click **Send push test**. After the gateway reports acceptance, inspect **Delivery diagnostics**. If the service worker reports **received**, the push reached the browser; if **display requested**, `showNotification()` completed, but macOS visibility still isn't proved. If **not observed**, check that Carehold's browser tab is open, service worker is active and controls the origin, browser push subscriptions are current, and the browser has network connectivity. The service-worker message is best-effort and may be missed if no matching page is open.
+3. If a test is run again within 60 seconds, the authenticated server cooldown intentionally responds 429. Wait before retrying. Do not rotate previously generated VAPID keys just to troubleshoot.
+4. On macOS Chrome 152+, installed PWAs can appear as their own app under System Settings → Notifications, distinct from Chrome. Use a real installed device to confirm banner display.
+
+This diagnostic explicitly does **not** include patient names, medication names, subscription endpoints, push keys or journal content.
+
+## Next feature slice: identify a linked self profile without granting care access
+
+The `GET /api/me/linked-profile?householdId=...` endpoint returns at most one **self-linked** profile name/kind and booleans for explicitly granted schedule, dose-recording and history capabilities, after rechecking membership. It returns no medication records and does not infer access from `linked_user_id`. The **People** page displays a `My care profile` summary only when this self association exists. The button to open the person's medication view appears **only** with `view_schedule` permission; other users receive a truthful explanation rather than new access.
+
+Regression: invite a fictional teen user into the household **without any grants** and link them to a profile. They should see the identity association but **no medication details**. After an owner explicitly invites/grants the view capability, confirm the medication view is accessible. Revoke membership and verify the association is cleaned up. Do not test with real health or minor data.
+
+This lays the identity foundation for private communication but does not enable new storage, encryption keys, journals, clinical referrals or messages.
