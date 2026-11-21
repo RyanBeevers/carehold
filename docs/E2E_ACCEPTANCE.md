@@ -128,7 +128,22 @@ This section is **not yet passed**. A new household with existing accounts does 
 - [ ] Test two tabs enrolling at once; only one identity must win and old ciphertext must remain intact.
 - [ ] Confirm the existing legacy account with lost Incognito key is blocked with an actionable warning and is NEVER silently rotated.
 - [ ] Verify the Today summary strip in light/dark themes and on phone.
-- [ ] Confirm private journals **do not falsely claim automatic recovery/sync**. Full encrypted journal persistence and legacy migration remain release blockers.
+- [ ] Save a **new v2 encrypted journal entry** on A, recover A on another browser using the saved code, and verify the entire title, text and prompt decrypt. Confirm D1 contains ciphertext only.
+- [ ] Edit the same journal on two recovered devices: stale revision must yield conflict without silently losing data.
+- [ ] Import an old local-only journal entry explicitly and confirm original IndexedDB copy remains intact after successful remote encryption.
+- [ ] Confirm local unsent drafts still explicitly disclose their device-only limitation; no false recovery promise.
 - [ ] Execute all automated tests, TypeScript check and build using \`npm run verify:pre-e2e\`; record actual results and unresolved failures.
 
 **Not a production sign-off.** Distinct device keys, secure revocation, legacy data migration, journal sync, classification/permissions and independent security review must be completed separately.
+
+
+## Authoritative account-class regression (unverified)
+
+- [ ] New Owner has Adult classification; invited Member begins Unverified until Owner sets classification.
+- [ ] Owner can assign Adult, Teen or Child and sees the updated status after reload.
+- [ ] Teen/Child/Unverified accounts cannot record, correct, add, edit, archive or restore medication through forged API requests, regardless of grants.
+- [ ] Teen/Child cannot change their classification via Words audience, onboarding, another client, or another household.
+- [ ] Adult Member linked to their own Adult profile can view/add/edit medication and record their own administrations without caregiver promotion.
+- [ ] Adult Member cannot read or edit another unrelated Adult profile without a grant.
+- [ ] Owner/Caregiver authority to change medicines does not grant journal or message decryption.
+- [ ] Removing a household member cascades account-class records and does not expose shared writing or restore revoked threads.
