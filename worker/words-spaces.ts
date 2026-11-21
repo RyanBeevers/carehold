@@ -108,8 +108,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   if(req.method==='POST'){
    if(typeof b?.enabled!=='boolean')fail(400,'Choose whether to enable notifications.');
    await db.prepare(`INSERT INTO private_word_push_preferences(user_id,household_id,enabled) VALUES(?,?,?)
-    ON CONFLICT(user_id,household_id) DO UPDATE SET enabled=excluded.enabled`).bind(user.id,hid,b.enabled?1:0).run();
-   return respond({enabled:b.enabled});
+    ON CONFLICT(user_id,household_id) DO UPDATE SET enabled=excluded.enabled`).bind(user.id,hid,b?.enabled===true?1:0).run();
+   return respond({enabled:b?.enabled===true});
   }
  }
  if(path==='/api/words/people'&&req.method==='GET'){
