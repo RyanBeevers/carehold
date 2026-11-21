@@ -21,7 +21,7 @@ async function readStage(db:D1Database,userId:string):Promise<Stage|null>{
   .bind(userId).first<Stage>()??null;
 }
 const inventorySql= [
- "SELECT kind,source_id,context_id,envelope_json FROM (",
+ "SELECT legacy.kind,legacy.source_id,legacy.context_id,legacy.envelope_json,migrated.envelope_json AS new_envelope_json FROM (",
  "SELECT 'direct' kind,m.id source_id,m.thread_id context_id,c.envelope_json",
  "FROM encrypted_message_copies c JOIN encrypted_messages m ON m.id=c.message_id",
  "JOIN direct_threads t ON t.id=m.thread_id",
@@ -33,7 +33,7 @@ const inventorySql= [
  "JOIN shared_word_spaces s ON s.id=p.space_id",
  "JOIN shared_word_participants sp ON sp.space_id=s.id AND sp.user_id=?",
  "JOIN household_members hm ON hm.household_id=s.household_id AND hm.user_id=?",
- "WHERE c.recipient_id=?) ORDER BY kind,source_id LIMIT ? OFFSET ?"
+ "WHERE c.recipient_id=?) legacy LEFT JOIN account_migrated_copies migrated ON migrated.user_id=? AND migrated.source_kind=legacy.kind AND migrated.source_id=legacy.source_id ORDER BY legacy.kind,legacy.source_id LIMIT ? OFFSET ?"
 ].join(' ');
 const missingSql=[
  "SELECT COUNT(*) missing FROM (",
@@ -94,11 +94,11 @@ async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>
   const raw=url.searchParams.get('offset')??'0';
   if(!/^(0|[1-9]\d{0,5})$/.test(raw)||Number(raw)>100000)fail(400,'Invalid page offset.');
   const offset=Number(raw),limit=100;
-  const rows=await db.prepare(inventorySql).bind(user.id,user.id,user.id,user.id,user.id,user.id,limit+1,offset)
-   .all<{kind:Kind,source_id:string,context_id:string,envelope_json:string}>();
+  const rows=await db.prepare(inventorySql).bind(user.id,user.id,user.id,user.id,user.id,user.id,user.id,limit+1,offset)
+   .all<{kind:Kind,source_id:string,context_id:string,envelope_json:string,new_envelope_json:string|null}>();
   const values=rows.results||[];
   return send({copies:values.slice(0,limit).map(v=>({
-   kind:v.kind,sourceId:v.source_id,contextId:v.context_id,envelope:JSON.parse(v.envelope_json)
+   kind:v.kind,sourceId:v.source_id,contextId:v.context_id,envelope:JSON.parse(v.envelope_json),migratedEnvelope:v.new_envelope_json?JSON.parse(v.new_envelope_json):null
   })),hasMore:values.length>limit});
  }
  if(path==='/api/messages/recovery/migration/copies'&&req.method==='POST'){
