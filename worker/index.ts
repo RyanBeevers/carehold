@@ -118,6 +118,7 @@ async function claimInvitation(db:D1Database,invitation:InvitationRow,userId:str
   await db.batch([
    db.prepare('UPDATE invitations SET claimed_by=?,claimed_at=? WHERE id=? AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at>?').bind(userId,ts,invitation.id,ts),
    db.prepare('INSERT INTO household_members(household_id,user_id,role,joined_at) SELECT household_id,?,role,? FROM invitations WHERE id=? AND claimed_by=? AND claimed_at=?').bind(userId,ts,invitation.id,userId,ts),
+   db.prepare('INSERT INTO household_member_classes(household_id,user_id,classification,updated_at) VALUES(?,?,?,?)').bind(invitation.household_id,userId,'unverified',ts),
    ...grants.flatMap(g=>g.capabilities.map(cap=>db.prepare(`INSERT INTO profile_grants(household_id,profile_id,user_id,capability,created_at) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM household_members WHERE household_id=? AND user_id=?)`).bind(invitation.household_id,g.profileId,userId,cap,ts,invitation.household_id,userId)))
   ]);
  } catch {
@@ -182,6 +183,8 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
    if(path==='/api/private-journal'||path.startsWith('/api/private-journal/'))return handlePrivateJournal(req,env,user);
    if(path==='/api/words/people'||path==='/api/words/push-preference'||path==='/api/words/spaces'||path.startsWith('/api/words/spaces/')||path==='/api/activity'||path==='/api/activity/seen')return handleWordSpaces(req,env,user,ctx);
   if(path==='/api/me/audience'&&req.method==='POST') {
+    const restricted=await db.prepare("SELECT 1 FROM household_member_classes WHERE user_id=? AND classification IN ('teen','child') LIMIT 1").bind(user.id).first();
+    if(restricted)bad(403,'A household administrator must manage a minor’s account classification and Words audience.');
     const b=await jsonBody(req);
     if(!validAudience(b.audience))bad(400,'Choose parent, child or teen.');
     await db.prepare(`INSERT INTO account_audiences(user_id,audience,updated_at) VALUES(?,?,?)
@@ -208,6 +211,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     await db.batch([
       db.prepare('INSERT INTO households(id,name,timezone,created_by,created_at) VALUES(?,?,?,?,?)').bind(id,name,zone,user.id,ts),
       db.prepare('INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES(?,?,?,?)').bind(id,user.id,'owner',ts),
+      db.prepare('INSERT INTO household_member_classes(household_id,user_id,classification,assigned_by,updated_at) VALUES(?,?,?,?,?)').bind(id,user.id,'adult',user.id,ts),
     ]);
     return json({id,name,timezone:zone},201);
   }
