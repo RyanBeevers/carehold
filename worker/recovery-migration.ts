@@ -121,6 +121,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>
   }catch{fail(409,'Another migration started. Reload without resetting keys.');}
   return send({state:'staged'},201);
  }
+ if(path==='/api/messages/recovery/migration/finalize'&&req.method==='POST'&&stage?.state==='complete')
+  return send({state:'complete',publicKey:JSON.parse(stage.next_jwk),replayed:true});
  if(!stage||stage.state!=='staged')fail(409,'Begin or resume a migration first.');
  const current=await db.prepare('SELECT public_jwk FROM message_device_keys WHERE user_id=?')
   .bind(user.id).first<{public_jwk:string}>();
