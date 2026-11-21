@@ -22,7 +22,8 @@ export type MedicationCatalogMetadata={
  dosageForm:string|null;
 };
 export class CatalogError extends Error{
- constructor(public status:number,message:string){super(message);}
+ status:number;
+ constructor(status:number,message:string){super(message);this.status=status;}
 }
 const MAX_RESULTS=15;
 const TTL_MS=10*60*1000;
