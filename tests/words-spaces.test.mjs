@@ -12,7 +12,7 @@ async function identity(){
 test('prompt, journal, reflection and discussion are structured inside ciphertext',async()=>{
  const alice=await identity(),bob=await identity(),other=await identity();
  const space='00000000-0000-4000-8000-000000000011',post='00000000-0000-4000-8000-000000000012';
- const input={kind:'journal',prompt:'Fictional question for a test household?',text:'Only fictional words here.'};
+ const input={kind:'journal',prompt:'Fictional question for a test household?',text:'Only fictional words here.',title:'A fictional title'};
  assert.equal(validWordPayload(input),true);
  const a=await sealWord(input,alice.publicKey,space,post,'alice');
  const b=await sealWord(input,bob.publicKey,space,post,'bob');
