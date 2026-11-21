@@ -61,4 +61,25 @@ class SharedWordsIntegrity(unittest.TestCase):
         self.db.execute("INSERT INTO private_word_push_preferences VALUES('teen','h',1)")
         self.assertEqual(self.db.execute("SELECT enabled FROM private_word_push_preferences WHERE user_id='teen' AND household_id='h'").fetchone()[0],1)
 
+    def test_unread_activity_has_shared_metadata_even_without_client_key(self):
+        # An activity badge and a shared-space listing must agree for each
+        # authorized recipient. Decryption keys live only in browser IndexedDB
+        # and do not participate in this server-side metadata query.
+        self.db.execute("INSERT INTO private_word_activity(id,user_id,household_id,source_kind,source_id,event_kind,created_at) VALUES('notice','teen','h','words','s','shared','now')")
+        query="""SELECT s.id,s.initial_kind,s.created_by,s.created_at,u.name creator_name,
+          p.id initial_post_id,c.envelope_json FROM shared_word_spaces s
+          JOIN shared_word_participants own ON own.space_id=s.id AND own.user_id=?
+          JOIN user u ON u.id=s.created_by
+          JOIN shared_word_posts p ON p.space_id=s.id AND p.kind IN ('prompt','journal')
+          JOIN shared_word_copies c ON c.post_id=p.id AND c.recipient_id=?
+          WHERE s.household_id=? ORDER BY s.created_at DESC LIMIT 100"""
+        row=self.db.execute(query,('teen','teen','h')).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0],'s')
+        self.assertEqual(row[1],'prompt')
+        # Other circle members aren't allowed to browse this private space,
+        # even though its metadata can be returned without local keys.
+        self.assertIsNone(self.db.execute(query,('owner','owner','h')).fetchone())
+        self.assertIsNone(self.db.execute(query,('teen','teen','other-h')).fetchone())
+
 if __name__=='__main__':unittest.main()
