@@ -78,6 +78,19 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   }catch(e){setError(errText(e));setStatus('resume');}
   finally{setBusy(false);}
  }
+ async function cancelStaged(){
+  if(!oldKey||busy)return;
+  setBusy(true);setError('');
+  try{
+   const challenge=await api<{envelope:Envelope}>('/messages/recovery/migration/challenge','POST',{});
+   const proof=await unseal(challenge.envelope,oldKey.privateKey,'carehold-legacy-proof-v1',userId,userId);
+   if(proof.kind!=='message')throw new Error('Original device key verification failed.');
+   await api('/messages/recovery/migration/cancel','POST',{proof:proof.text});
+   setStage({state:'none',publicKey:null,envelope:null});
+   setPending(null);setSavedCode(false);setRecoveryCode('');setStatus('legacy');
+  }catch(e){setError(errText(e)+' Original encrypted history remains unchanged.');}
+  finally{setBusy(false);}
+ }
  async function convert(next:Identity,legacy:Identity){
   setStatus('running');setProgress({completed:0,verified:0});
   let offset=0,completed=0,verified=0,hasMore=true;
@@ -135,7 +148,9 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    <label className="recovery-confirm"><input type="checkbox" checked={savedCode} onChange={e=>setSavedCode(e.target.checked)}/>I stored this code separately from this browser.</label>
    <button type="button" className="button primary" disabled={!savedCode||busy} onClick={()=>void start()}>{busy?'Converting…':'Encrypt and verify all my older messages'}</button></>}
   {status==='resume'&&<><p>A migration is already staged. Do not generate a replacement key. On the original browser, enter the recovery code saved when you started.</p><label>Saved recovery code<input type="password" autoComplete="off" spellCheck={false} value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value)} placeholder="CH1-…"/></label>
-   <button type="button" className="button primary" disabled={busy||!recoveryCode.trim()} onClick={()=>void resume()}>{busy?'Resuming…':'Resume verified migration'}</button></>}
+   <button type="button" className="button primary" disabled={busy||!recoveryCode.trim()} onClick={()=>void resume()}>{busy?'Resuming…':'Resume verified migration'}</button>
+   <button type="button" className="button outline small" disabled={busy} onClick={()=>void cancelStaged()}>Safely cancel with original browser key</button>
+   <p className="fine-print">Cancellation discards only uncommitted replacement copies. The original account key, messages, and other participants’ copies remain intact.</p></>}
   {status==='running'&&<p role="status">Encrypted and verified {progress.verified} of {progress.completed} examined recipient copies. Do not close the browser until completion.</p>}
   {error&&<p role="alert" className="messages-error">{error}</p>}
  </div>;
