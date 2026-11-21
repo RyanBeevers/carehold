@@ -140,11 +140,12 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
   </div>}
   <form onSubmit={e=>void send(e)}><label htmlFor="message-draft">Private draft — visible only after you press Send</label>
    <textarea id="message-draft" rows={4} value={draft.text} maxLength={3000} disabled={!draft.ready||sending} onChange={e=>{draft.setText(e.target.value);retry.current=null;}} placeholder="Write something you’d like to share…"/>
-   <div className="messages-meta"><span>{draft.enabled?draft.status==='saved'?'Encrypted draft saved locally':draft.status==='conflict'?'Two tabs have edited this draft':'Experimental encrypted autosave enabled':'Draft not saved until you opt in'}</span><span>{draft.text.length}/3000</span></div>
+   <div className="messages-meta"><span>{draft.enabled?draft.status==='saved'?(draft.syncEnabled&&draft.synced?'Encrypted draft synchronized privately':'Encrypted draft saved locally'):draft.status==='conflict'?(draft.remoteConflict?'Another device has a different draft':'Two tabs have edited this draft'):'Experimental encrypted autosave enabled':'Draft not saved until you opt in'}</span><span>{draft.text.length}/3000</span></div>
    {(error||draft.error)&&<p className="messages-error" role="alert">{error||draft.error}</p>}{status&&<p role="status">{status}</p>}
    <div className="messages-actions">
     {!draft.enabled&&draft.ready&&<button type="button" className="button outline small" onClick={()=>void draft.enable()}>Enable encrypted device autosave</button>}
-    {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void draft.reloadStored()}>Load saved version</button><button type="button" className="button outline small" onClick={()=>void draft.overwriteStored()}>Keep this version</button></>}
+    {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void (draft.remoteConflict?draft.loadRemote():draft.reloadStored())}>{draft.remoteConflict?'Use other device copy':'Load saved version'}</button><button type="button" className="button outline small" onClick={()=>void draft.overwriteStored()}>Keep this device’s draft</button></>}
+    {draft.status==='error'&&draft.syncEnabled&&<button type="button" className="button outline small" onClick={()=>void draft.retrySync()}>Retry encrypted sync</button>}
     <button type="button" className="quiet small" disabled={sending} onClick={()=>void draft.discard().then(()=>{retry.current=null;setKind('message');})}>Discard draft</button>
     <button className="button primary" disabled={!draft.ready||!draft.text.trim()||sending||draft.status==='conflict'}>{sending?'Sending…':error&&retry.current?'Retry send':'Send intentionally'}</button>
    </div>
