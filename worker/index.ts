@@ -164,7 +164,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
   }
   if(path==='/api/invitations/accept-pending'&&req.method==='POST') {
     const pending=await db.prepare(`SELECT i.* FROM pending_household_invites p JOIN invitations i ON i.id=p.invitation_id WHERE p.user_id=?`).bind(user.id).first<InvitationRow>();
-    if(!pending)bad(404,'No pending household invitation.');
+    if(!pending)throw new ApiError(404,'No pending household invitation.');
     const joined=await claimInvitation(db,pending,user.id);
     await db.prepare('DELETE FROM pending_household_invites WHERE user_id=?').bind(user.id).run();
     return json(joined);
