@@ -20,6 +20,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
  const url=new URL(req.url),match=url.pathname.match(/^\/api\/private-drafts\/([a-f0-9]{64})$/);
  if(!match||!SHA.test(match[1]))fail(404,'Draft not found.');
  const scope=match[1],hid=url.searchParams.get('householdId');
+ if(url.searchParams.get('accountId')!==user.id)fail(403,'Account changed. Reopen this draft after signing in.');
  if(!hid||hid.length>200)fail(400,'Select a care circle.');
  const db=env.DB,member=await db.prepare('SELECT 1 FROM household_members WHERE household_id=? AND user_id=?')
   .bind(hid,user.id).first();
