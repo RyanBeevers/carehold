@@ -1,0 +1,144 @@
+import {useEffect,useRef,useState,type FormEvent} from 'react';
+import type {Audience} from '../shared/audience';
+import {api,StaleSessionRequest} from './lib/api';
+import {promptsForAudience,type Prompt} from './lib/prompts';
+import {deviceIdentity,samePublicKey,seal,unseal,type Identity,type PublicKey,type Envelope,type Content} from './lib/message-crypto';
+import {useWordsDraftVault} from './lib/useWordsDraftVault';
+type Contact={id:string,name:string,publicKey:PublicKey|null};
+type Thread={id:string,createdAt:string,participants:Contact[]};
+type Wire={id:string,senderId:string,createdAt:string,envelope:Envelope};
+type Visible=Wire&{content:Content|null};
+const errorText=(e:unknown)=>e instanceof Error?e.message:'Please try again.';
+export function MessagesStudio({userId,householdId,audience}:{userId:string,householdId:string,audience:Audience}){
+ const [key,setKey]=useState<Identity|null>(null),[contacts,setContacts]=useState<Contact[]>([]),[threads,setThreads]=useState<Thread[]>([]);
+ const [active,setActive]=useState(''),[items,setItems]=useState<Visible[]>([]),[busy,setBusy]=useState(true),[error,setError]=useState('');
+ const [refresh,setRefresh]=useState(0);
+ const chosen=threads.find(t=>t.id===active);
+ async function directory(){
+  const [c,t]=await Promise.all([
+   api<{contacts:Contact[]}>(`/messages/contacts?householdId=${encodeURIComponent(householdId)}`),
+   api<{conversations:Thread[]}>(`/messages/conversations?householdId=${encodeURIComponent(householdId)}`)
+  ]);
+  setContacts(c.contacts);setThreads(t.conversations);
+ }
+ useEffect(()=>{
+  let live=true;setKey(null);setContacts([]);setThreads([]);setActive('');setBusy(true);setError('');
+  void (async()=>{
+   try{
+    const identity=await deviceIdentity(userId);
+    const remote=await api<{publicKey:PublicKey|null}>('/messages/keys/me');
+    if(remote.publicKey&&!samePublicKey(identity.publicKey,remote.publicKey))
+     throw new Error('A different device owns this account’s message key. Recovery is not implemented. Do not erase the original device’s browser data.');
+    await api('/messages/keys/me','POST',{publicKey:identity.publicKey});
+    if(!live)return;
+    setKey(identity);
+    await directory();
+   }catch(e){if(live&&!(e instanceof StaleSessionRequest))setError(errorText(e));}
+   finally{if(live)setBusy(false);}
+  })();
+  return()=>{live=false;};
+ },[userId,householdId]);
+ useEffect(()=>{
+  if(!active||!key){setItems([]);return;}
+  let live=true;
+  async function load(){
+   try{
+    const r=await api<{messages:Wire[]}>(`/messages/threads/${encodeURIComponent(active)}`);
+    const values=await Promise.all(r.messages.map(async m=>{
+     try{return {...m,content:await unseal(m.envelope,key!.privateKey,active,m.id,userId)};}
+     catch{return {...m,content:null};}
+    }));
+    if(live)setItems(values);
+   }catch(e){if(live&&!(e instanceof StaleSessionRequest))setError(errorText(e));}
+  }
+  setItems([]);void load();
+  const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void load();},12000);
+  return()=>{live=false;window.clearInterval(timer);};
+ },[active,key,userId,refresh]);
+ async function start(recipient:Contact){
+  if(!recipient.publicKey)return;
+  setBusy(true);setError('');
+  try{
+   const r=await api<{id:string}>('/messages/conversations','POST',{householdId,recipientId:recipient.id});
+   await directory();setActive(r.id);
+  }catch(e){if(!(e instanceof StaleSessionRequest))setError(errorText(e));}
+  finally{setBusy(false);}
+ }
+ return <section aria-label="Messages" className="messages-studio">
+  <div className="messages-warning"><strong>Fictional messages only — security review pending.</strong><p>Messages are encrypted in the browser, but recipient keys are not independently verified. Only one device per account is currently supported; recovery and secure device changes are not implemented. Do not use confidential family, medical, or therapeutic content.</p></div>
+  {error&&<p role="alert" className="messages-error">{error}</p>}
+  {busy&&!key&&<p role="status">Preparing this device for fictional messaging…</p>}
+  {key&&<div className="messages-layout">
+   <aside className="messages-directory"><div className="messages-subhead"><h2>Conversations</h2><button className="quiet small" type="button" onClick={()=>void directory().catch(e=>setError(errorText(e)))}>Refresh</button></div>
+    {threads.length===0&&<p className="muted">No conversations yet.</p>}
+    {threads.map(t=><button className={active===t.id?'messages-contact selected':'messages-contact'} key={t.id} type="button" onClick={()=>setActive(t.id)}><strong>{t.participants.find(p=>p.id!==userId)?.name||'Conversation'}</strong><span>Direct conversation</span></button>)}
+    <div className="messages-subhead"><h3>Start with someone</h3></div>
+    {contacts.map(c=><button className="messages-contact" key={c.id} disabled={!c.publicKey||busy} type="button" onClick={()=>void start(c)}><strong>{c.name}</strong><span>{c.publicKey?'Start a message':'They must open Messages first'}</span></button>)}
+    <p className="muted tiny">A medication grant or household role never exposes private messages.</p>
+   </aside>
+   <div className="messages-thread">
+    {chosen?<><div className="messages-thread-header"><div><span className="mono kicker">ONLY EXPLICIT PARTICIPANTS</span><h2>{chosen.participants.find(p=>p.id!==userId)?.name||'Conversation'}</h2></div><button className="button outline small" type="button" onClick={()=>setRefresh(n=>n+1)}>Refresh replies</button></div>
+     <ol className="messages-history">{items.length===0&&<li className="muted">Nothing shared yet.</li>}{items.map(m=><li key={m.id} className={m.senderId===userId?'messages-entry mine':'messages-entry'}><small>{m.senderId===userId?'You':'Them'} · {new Date(m.createdAt).toLocaleString()}</small><p>{m.content?.text??'Unable to decrypt on this device.'}</p>{m.content?.kind==='prompt'&&<small>Guided prompt</small>}</li>)}</ol>
+     <Composer key={chosen.id} thread={chosen} userId={userId} householdId={householdId} audience={audience} onSent={()=>setRefresh(n=>n+1)}/>
+    </>:<div className="messages-intro"><h2>A little space to talk.</h2><p>Choose someone, then write an original message or share a gentle prompt. They can answer when they choose. No read receipts.</p></div>}
+   </div>
+  </div>}
+ </section>;
+}
+function Composer({thread,userId,householdId,audience,onSent}:{thread:Thread,userId:string,householdId:string,audience:Audience,onSent:()=>void}){
+ const draft=useWordsDraftVault(userId,householdId+':direct:'+thread.id);
+ const [kind,setKind]=useState<Content['kind']>('message'),[topic,setTopic]=useState('All topics');
+ const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
+ const [library,setLibrary]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
+ const retry=useRef<{text:string,kind:Content['kind'],id:string,copies:Record<string,Envelope>}|null>(null);
+ const available=promptsForAudience(audience).filter(p=>topic==='All topics'||p.topic===topic);
+ const topics=[...new Set(promptsForAudience(audience).map(p=>p.topic))].sort();
+ function rotate(){
+  let pool=available.filter(p=>!seen.includes(p.id));
+  if(!pool.length)pool=available.filter(p=>p.id!==suggested?.id);
+  if(!pool.length)pool=available;
+  if(!pool.length)return;
+  const next=pool[Math.floor(Math.random()*pool.length)];
+  setSuggested(next);setSeen(old=>[...old.filter(id=>pool.length!==available.length),next.id]);
+ }
+ function choose(p:Prompt){draft.setText(p.text);setSuggested(p);setKind('prompt');setLibrary(false);retry.current=null;}
+ async function send(e:FormEvent){
+  e.preventDefault();if(!draft.ready||!draft.text.trim()||sending)return;
+  setSending(true);setError('');setStatus('');
+  try{
+   if(thread.participants.length!==2||thread.participants.some(p=>!p.publicKey))
+    throw new Error('Both participants must enroll a device key before sending.');
+   let attempt=retry.current;
+   if(!attempt||attempt.text!==draft.text||attempt.kind!==kind){
+    const id=crypto.randomUUID(),copies:Record<string,Envelope>={};
+    for(const p of thread.participants)copies[p.id]=await seal({kind,text:draft.text},p.publicKey!,thread.id,id,p.id);
+    attempt={id,kind,text:draft.text,copies};retry.current=attempt;
+   }
+   await api(`/messages/threads/${encodeURIComponent(thread.id)}`,'POST',{id:attempt.id,copies:attempt.copies});
+   retry.current=null;
+   const cleared=await draft.discard();
+   setKind('message');setStatus(cleared?'Sent to your chosen recipient.':'Sent, but the local draft could not be cleared. Please discard it manually.');
+   onSent();
+  }catch(e){if(!(e instanceof StaleSessionRequest))setError(errorText(e));}
+  finally{setSending(false);}
+ }
+ return <div className="messages-composer">
+  <div className="messages-subhead"><h3>Your words</h3><button className="quiet small" type="button" onClick={()=>setLibrary(v=>!v)}>{library?'Close prompts':'Guided prompts'}</button></div>
+  {library&&<div className="messages-prompts"><label>Category<select value={topic} onChange={e=>{setTopic(e.target.value);setSeen([]);setSuggested(null);}}><option>All topics</option>{topics.map(t=><option key={t}>{t}</option>)}</select></label>
+   <button type="button" className="button outline small" onClick={rotate} disabled={!available.length}>Another prompt</button>
+   {suggested&&<blockquote>{suggested.text}<button type="button" className="button dark small" onClick={()=>choose(suggested)}>Use and edit</button></blockquote>}
+   <div className="messages-prompts-list">{available.map(p=><button type="button" key={p.id} onClick={()=>choose(p)}>{p.text}</button>)}</div>
+  </div>}
+  <form onSubmit={e=>void send(e)}><label htmlFor="message-draft">Private draft — visible only after you press Send</label>
+   <textarea id="message-draft" rows={4} value={draft.text} maxLength={3000} disabled={!draft.ready||sending} onChange={e=>{draft.setText(e.target.value);retry.current=null;}} placeholder="Write something you’d like to share…"/>
+   <div className="messages-meta"><span>{draft.enabled?draft.status==='saved'?'Encrypted draft saved locally':draft.status==='conflict'?'Two tabs have edited this draft':'Experimental encrypted autosave enabled':'Draft not saved until you opt in'}</span><span>{draft.text.length}/3000</span></div>
+   {(error||draft.error)&&<p className="messages-error" role="alert">{error||draft.error}</p>}{status&&<p role="status">{status}</p>}
+   <div className="messages-actions">
+    {!draft.enabled&&draft.ready&&<button type="button" className="button outline small" onClick={()=>void draft.enable()}>Enable encrypted device autosave</button>}
+    {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void draft.reloadStored()}>Load saved version</button><button type="button" className="button outline small" onClick={()=>void draft.overwriteStored()}>Keep this version</button></>}
+    <button type="button" className="quiet small" disabled={sending} onClick={()=>void draft.discard().then(()=>{retry.current=null;setKind('message');})}>Discard draft</button>
+    <button className="button primary" disabled={!draft.ready||!draft.text.trim()||sending||draft.status==='conflict'}>{sending?'Sending…':error&&retry.current?'Retry send':'Send intentionally'}</button>
+   </div>
+  </form><p className="muted tiny">Only explicitly sent replies are shared. No recipient can see drafts, opens or response activity.</p>
+ </div>;
+}

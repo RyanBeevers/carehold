@@ -2,9 +2,9 @@
  * Public navigation only. Never add household/profile identifiers, medication
  * data, notes, recipient IDs, drafts or authentication tokens to routes.
  */
-export type AppPage='today'|'people'|'words'|'circle'|'settings';
+export type AppPage='today'|'people'|'words'|'messages'|'circle'|'settings';
 export const APP_PATHS:Readonly<Record<AppPage,string>>={
- today:'/today',people:'/people',words:'/words',circle:'/circle',settings:'/settings'
+ today:'/today',people:'/people',words:'/words',messages:'/messages',circle:'/circle',settings:'/settings'
 };
 const entries=Object.entries(APP_PATHS) as [AppPage,string][];
 export function pagePath(page:AppPage):string{return APP_PATHS[page];}

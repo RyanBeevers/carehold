@@ -6,8 +6,8 @@ const wrangler=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.u
 
 test('each app page has a unique, shareable, non-sensitive URL',()=>{
  const paths=Object.values(APP_PATHS);
- assert.deepEqual(paths,['/today','/people','/words','/circle','/settings']);
- assert.equal(new Set(paths).size,5);
+ assert.deepEqual(paths,['/today','/people','/words','/messages','/circle','/settings']);
+ assert.equal(new Set(paths).size,6);
  for(const [page,path] of Object.entries(APP_PATHS)){
   assert.equal(pagePath(page),path);
   assert.equal(pageFromPath(path),page);
