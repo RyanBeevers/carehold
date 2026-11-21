@@ -4,7 +4,8 @@ import type {Audience} from '../shared/audience';
 import {api,StaleSessionRequest} from './lib/api';
 import {promptsForAudience,relationshipOptions,RELATIONSHIP_LABELS,rotatePrompt,type Prompt,type Relationship} from './lib/prompts';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
-import {deviceIdentity,samePublicKey,type Identity,type PublicKey} from './lib/message-crypto';
+import type {Identity} from './lib/message-crypto';
+import {MessageRecoveryGate} from './MessageRecoveryGate';
 import {listPrivateJournal,savePrivateJournal,deletePrivateJournal,type JournalEntry} from './lib/private-journal';
 import {createEncryptedJournalBackup,openEncryptedJournalBackup} from './lib/journal-backup';
 import {ShareComposer,SharedSpaces,type ShareSeed,type WordContact} from './SharedWords';
@@ -73,16 +74,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  useEffect(()=>{
   let live=true;
   void reloadJournal().catch(e=>{if(live)setJournalError(errorText(e));}).finally(()=>{if(live)setLoadingJournal(false);});
-  void (async()=>{
-   try{
-    const id=await deviceIdentity(userId);
-    const remote=await api<{publicKey:PublicKey|null}>('/messages/keys/me');
-    if(remote.publicKey&&!samePublicKey(id.publicKey,remote.publicKey))
-     throw new Error('A different device key is already enrolled for this account. Do not clear the original device; recovery has not been implemented.');
-    await api('/messages/keys/me','POST',{publicKey:id.publicKey});
-    if(live)setIdentity(id);
-   }catch(e){if(live&&!(e instanceof StaleSessionRequest))setKeyError(errorText(e));}
-  })();
+  setIdentity(null);setKeyError('');
   void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`)
    .then(r=>{if(live){setPeople(r.people);setContactsError('');}})
    .catch(e=>{if(live&&!(e instanceof StaleSessionRequest))setContactsError(errorText(e));});
@@ -234,7 +226,8 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  }
  return <div className="words-hub">
   <div className="words-hub-warning" role="note"><LockKeyhole size={18}/><div><strong>Fictional writing only — security review pending.</strong>
-   <p>Private journals and unsent drafts are encrypted locally on this browser. Shared spaces use experimental per-recipient encryption; device recovery and minor-specific privacy review are not ready. Do not enter confidential family, health or therapeutic information.</p></div></div>
+   <p>Private journals and unsent drafts are encrypted locally on this browser. Shared spaces use experimental per-recipient encryption. New-account message recovery is experimental; private journals still need encrypted synchronization and minor-specific privacy review. Do not enter confidential family, health or therapeutic information.</p></div></div>
+  {!identity&&<MessageRecoveryGate userId={userId} onReady={setIdentity} onError={setKeyError}/>}
   <nav className="words-hub-tabs" aria-label="Words sections">{TABS.map(item=><button type="button" key={item.id} className={tab===item.id&&!seed?'selected':''} aria-current={tab===item.id&&!seed?'page':undefined} onClick={()=>{setSeed(null);selectTab(item.id);setFeedback('');}}>
    <span>{item.title}{item.id==='activity'&&activity.length>0&&<b className="words-activity-count">{activity.length}</b>}</span>
    <small>{item.description}</small></button>)}</nav>
