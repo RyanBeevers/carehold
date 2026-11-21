@@ -56,7 +56,8 @@ test('one shared discussion composer handles both private and public writing',()
  assert.match(shared,/spaceId\}\)/);
  assert.match(shared,/Post private note · only me/);
  assert.match(shared,/Post reply · everyone/);
- assert.match(shared,/Move old draft/);
+ assert.match(shared,/Copy old draft/);
+ assert.doesNotMatch(shared,/onClick=\{\(\)=>\{discussion\.setText\(reflection\.text\);void reflection\.discard\(\);\}\}/);
  const detail=shared.slice(shared.indexOf('function SharedSpaceDetail'));
  assert.equal((detail.match(/<textarea/g)||[]).length,1);
 });
