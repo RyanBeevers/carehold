@@ -19,7 +19,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
  onCreated:(spaceId:string)=>void,onCancel:()=>void,onRefreshPeople:()=>void
 }){
  const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const pending=useRef<{id:string,postId:string,recipients:string,copies:Record<string,Envelope>}|null>(null);
+ const pending=useRef<{id:string,postId:string,recipients:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const eligible=people.filter(p=>p.publicKey);
  const chosen=eligible.filter(p=>recipients.includes(p.id));
  const canSend=!!identity&&chosen.length>0&&!busy;
@@ -29,17 +29,18 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
   try{
    const selected=chosen.map(p=>p.id).sort();
    const fingerprint=selected.join(':');
+   const publicKeys=Object.fromEntries([{id:userId,publicKey:identity.publicKey},...chosen].map(p=>[p.id,p.publicKey!])) as Record<string,PublicKey>;
    let attempt=pending.current;
-   if(!attempt||attempt.recipients!==fingerprint){
+   if(!attempt||attempt.recipients!==fingerprint||JSON.stringify(attempt.publicKeys)!==JSON.stringify(publicKeys)){
     const sid=crypto.randomUUID(),postId=crypto.randomUUID();
     const participants=[{id:userId,name:'You',publicKey:identity.publicKey},...chosen];
     const payload:WordPayload={kind:seed.kind,text:seed.text,prompt:seed.prompt,...(seed.title?.trim()?{title:seed.title.trim()}:{})};
     const copies:Record<string,Envelope>={};
     for(const p of participants)copies[p.id]=await sealWord(payload,p.publicKey!,sid,postId,p.id);
-    attempt={id:sid,postId,recipients:fingerprint,copies};
+    attempt={id:sid,postId,recipients:fingerprint,copies,publicKeys};
     pending.current=attempt;
    }
-   await api('/words/spaces','POST',{id:attempt.id,postId:attempt.postId,householdId,kind:seed.kind,recipientIds:selected,copies:attempt.copies});
+   await api('/words/spaces','POST',{id:attempt.id,postId:attempt.postId,householdId,kind:seed.kind,recipientIds:selected,copies:attempt.copies,publicKeys:attempt.publicKeys});
    pending.current=null;
    onCreated(attempt.id);
   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
@@ -131,7 +132,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
  const [detail,setDetail]=useState<(Omit<SpaceDetail,'posts'>&{posts:VisiblePost[]})|null>(null);
  const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]);
  const [error,setError]=useState(''),[busy,setBusy]=useState<'reflection'|'discussion'|'save'|null>(null),[status,setStatus]=useState('');
- const retry=useRef<{kind:'reflection'|'discussion',text:string,id:string,copies:Record<string,Envelope>}|null>(null);
+ const retry=useRef<{kind:'reflection'|'discussion',text:string,id:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const lastInteraction=useRef(Date.now());
  async function load(){
   if(!identity)return;
@@ -179,14 +180,15 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   setBusy(kind);setError('');setStatus('');
   try{
    if(detail.participants.some(p=>!p.publicKey))throw new Error('A participant has no registered device key.');
+   const publicKeys=Object.fromEntries(detail.participants.map(p=>[p.id,p.publicKey!])) as Record<string,PublicKey>;
    let attempt=retry.current;
-   if(!attempt||attempt.kind!==kind||attempt.text!==text){
+   if(!attempt||attempt.kind!==kind||attempt.text!==text||JSON.stringify(attempt.publicKeys)!==JSON.stringify(publicKeys)){
     const postId=crypto.randomUUID(),copies:Record<string,Envelope>={};
     const payload:WordPayload={kind,text,prompt:null};
     for(const p of detail.participants)copies[p.id]=await sealWord(payload,p.publicKey!,spaceId,postId,p.id);
-    attempt={kind,text,id:postId,copies};retry.current=attempt;
+    attempt={kind,text,id:postId,copies,publicKeys};retry.current=attempt;
    }
-   await api(`/words/spaces/${encodeURIComponent(spaceId)}/posts`,'POST',{id:attempt.id,kind,copies:attempt.copies});
+   await api(`/words/spaces/${encodeURIComponent(spaceId)}/posts`,'POST',{id:attempt.id,kind,copies:attempt.copies,publicKeys:attempt.publicKeys});
    retry.current=null;
    const cleared=await vault.discard();
    setStatus(cleared?(kind==='reflection'?'Your journal response was shared deliberately.':'Your reply was posted.'):
