@@ -32,7 +32,7 @@ Do not execute the staging deploy script or production migrations until specific
 ## Limitations to resolve before production
 
 - Passkey challenge flow and generated Better Auth schema have not yet been runtime-verified.
-- Email verification, password recovery, rate-limit hardening, explicit caregiver revocation UI, profile archival, enrollment of a child's own account, accessibility audit, and real mobile push delivery still need work.
+- Email verification, password recovery, rate-limit hardening, caregiver role/grant editing UI, profile archival, enrollment of a child's own account, accessibility audit, and real mobile push delivery still need work.
 - No encrypted journaling or messages are stored. `Words` is a **static prompt library**, not secure chat.
 - The scheduler supports daily, weekdays, interval, and PRN; skipped DST local times require review. Complex prescriptions (tapers, alternating doses, etc.) need a future explicit scheduling model.
 - Cloudflare cron notifications are best-effort. This app is a care log, not an emergency alert or clinical decision system.

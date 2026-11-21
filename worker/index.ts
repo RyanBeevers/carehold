@@ -23,7 +23,8 @@ const isoDay=(s:unknown)=>{if(typeof s!=='string'||!validDate(s))bad(400,'Invali
 const jsonBody=async(req:Request):Promise<Record<string,unknown>>=>{
   if(!req.headers.get('content-type')?.startsWith('application/json'))bad(415,'Use JSON.');
   if(Number(req.headers.get('content-length')||0)>16000)bad(413,'Request too large.');
-  let obj:unknown;try{obj=await req.json();}catch{bad(400,'Invalid JSON.');}
+  const raw=await req.text();if(raw.length>16000)bad(413,'Request too large.');
+  let obj:unknown;try{obj=JSON.parse(raw);}catch{bad(400,'Invalid JSON.');}
   if(!obj||typeof obj!=='object'||Array.isArray(obj))bad(400,'Invalid payload.');
   return obj as Record<string,unknown>;
 };
@@ -309,9 +310,11 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     const host=urlEndpoint?.hostname.toLowerCase()||'';
     const allowed=host==='fcm.googleapis.com'||host==='updates.push.services.mozilla.com'||host.endsWith('.push.apple.com')||host==='web.push.apple.com'||host.endsWith('.notify.windows.com');
     if(!urlEndpoint||urlEndpoint.protocol!=='https:'||!allowed||urlEndpoint.username||urlEndpoint.password)bad(400,'Unsupported push service endpoint.');
+    const currentOwner=await db.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint=?').bind(endpoint).first<{user_id:string}>();
+    if(currentOwner && currentOwner.user_id!==user.id)bad(409,'This push subscription is already associated with another account. Unsubscribe from that account first.');
     const p256dh=required(sub?.keys?.p256dh,256),auth=required(sub?.keys?.auth,256),id=uuid();
     await db.prepare(`INSERT INTO push_subscriptions(id,user_id,endpoint,p256dh,auth_secret,created_at) VALUES(?,?,?,?,?,?)
-      ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh,auth_secret=excluded.auth_secret,user_id=excluded.user_id`).bind(id,user.id,endpoint,p256dh,auth,now()).run();
+      ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh,auth_secret=excluded.auth_secret WHERE user_id=excluded.user_id`).bind(id,user.id,endpoint,p256dh,auth,now()).run();
     return json({subscribed:true});
   }
   if(path==='/api/push/preference'&&req.method==='POST') {
