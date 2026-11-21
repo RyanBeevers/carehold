@@ -2,6 +2,7 @@ import {useEffect,useState,type FormEvent} from 'react';
 import {api,StaleSessionRequest} from './lib/api';
 import {samePublicKey,storedMessageIdentity,storeRecoveredMessageIdentity,type Identity,type PublicKey} from './lib/message-crypto';
 import {createMessageRecoveryIdentity,openMessageRecoveryIdentity,type MessageRecoveryEnvelope,type NewRecoveryIdentity} from './lib/message-recovery';
+import {RecoveryCodeSaveGuide,RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 
 type Remote={publicKey:PublicKey|null};
 type RecoveryStatus={configured:boolean,envelope:MessageRecoveryEnvelope|null};
@@ -112,15 +113,13 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    <p className="muted tiny">The 256-bit code is shown once. Carehold cannot restore old messages if you lose every trusted device and your recovery code.</p>
    <button type="button" className="button primary" disabled={busy} onClick={()=>void generate()}>{busy?'Preparing…':'Generate recovery code'}</button></>}
   {mode==='show-code'&&pending&&<><p>Save this recovery code somewhere secure and separate from this browser. It is not your password or passkey. Never share it with another household member.</p>
-   <code className="recovery-secret" aria-label="Your one-time recovery code">{pending.recoveryCode}</code>
-   <button type="button" className="button outline small" onClick={()=>void navigator.clipboard.writeText(pending.recoveryCode).then(()=>setNotice('Recovery code copied.')).catch(()=>setNotice('Clipboard unavailable. Copy the visible code manually.'))}>Copy code</button>
-   <label className="recovery-confirm"><input type="checkbox" checked={saved} onChange={e=>setSaved(e.target.checked)}/>I saved this code somewhere I can access if I lose this device.</label>
+   <RecoveryCodeSaveGuide code={pending.recoveryCode} saved={saved} onSavedChange={setSaved}/>
    <button type="button" className="button primary" disabled={!saved||busy} onClick={()=>void completeEnrollment()}>{busy?'Enrolling…':'Complete secure enrollment'}</button>
    <p className="muted tiny">Do not navigate away until enrollment succeeds. The recovery code is never sent to the server.</p></>}
   {mode==='restore'&&<form onSubmit={e=>void restore(e)}><p>This account has encrypted messages from another browser. Enter your saved recovery code to authorize this device and access its shared history.</p>
    <label>Recovery code<input name="recovery-code" type="password" autoComplete="off" spellCheck={false} value={code} onChange={e=>setCode(e.target.value)} placeholder="CH1-…" required/></label>
    <button className="button primary" disabled={busy||!code.trim()}>{busy?'Recovering…':'Restore my message key'}</button>
-   <p className="muted tiny">Account login alone cannot decrypt messages. Do not reset keys to bypass this screen.</p></form>}
+   <p className="muted tiny">Look for <strong>{RECOVERY_SEARCH_LABEL}</strong> in Apple Passwords, another trusted password manager or your locked notes. Account login alone cannot decrypt messages; do not reset keys to bypass this screen.</p></form>}
   {notice&&<p role="status">{notice}</p>}
   {error&&<p role="alert" className="messages-error">{error}</p>}
  </section>;
