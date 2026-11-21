@@ -224,7 +224,7 @@ export default function App(){
  }
  useIdleSecurity(Boolean(user&&hasPasskey&&!locked&&!loading),lockNow,()=>{
    const epoch=authEpochRef.current;
-   void authClient.getSession().then(result=>{
+   void authClient.getSession({query:{disableCookieCache:true}}).then(result=>{
      if(epoch===authEpochRef.current&&!result.data?.user)lockNow();
    }).catch(()=>{});
  });
