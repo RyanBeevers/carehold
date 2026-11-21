@@ -242,9 +242,9 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
       .bind(linked.id,user.id).all<{capability:Capability}>();
     const values=(grants.results||[]).map(g=>g.capability);
     return json({profile:{id:linked.id,displayName:linked.display_name,kind:linked.kind,
-      canViewSchedule:canAccess(role,values,'view_schedule'),
-      canRecordDose:canAccess(role,values,'record_dose'),
-      canViewHistory:canAccess(role,values,'view_history')}});
+      canViewSchedule:canUseCareProfile(role,await classification(db,hid,user.id),values,'view_schedule',linked.kind==='adult'),
+      canRecordDose:canUseCareProfile(role,await classification(db,hid,user.id),values,'record_dose',linked.kind==='adult'),
+      canViewHistory:canUseCareProfile(role,await classification(db,hid,user.id),values,'view_history',linked.kind==='adult')}});
   }
   if(path==='/api/profiles'&&req.method==='GET') {
     const hid=required(url.searchParams.get('householdId')),role=await member(db,hid,user.id);
@@ -450,11 +450,33 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   }
   if(path==='/api/members'&&req.method==='GET') {
     const hid=required(url.searchParams.get('householdId'));await owner(db,hid,user.id);
-    const result=await db.prepare(`SELECT hm.user_id,hm.role,u.name,u.email FROM household_members hm JOIN user u ON u.id=hm.user_id
+    const result=await db.prepare(`SELECT hm.user_id,hm.role,u.name,u.email,COALESCE(mc.classification,'unverified') classification FROM household_members hm JOIN user u ON u.id=hm.user_id LEFT JOIN household_member_classes mc ON mc.household_id=hm.household_id AND mc.user_id=hm.user_id
       WHERE hm.household_id=? ORDER BY hm.joined_at`).bind(hid).all();
     return json({members:result.results});
   }
-  const memberDelete=path.match(/^\/api\/members\/([0-9a-zA-Z_-]+)$/);
+  const memberClass=path.match(/^\/api\/members\/([0-9a-zA-Z_-]+)\/classification$/);
+   if(memberClass&&req.method==='PATCH'){
+    const b=await jsonBody(req),hid=required(b.householdId);
+    await owner(db,hid,user.id);
+    if(!validMemberClassification(b.classification)||b.classification==='unverified')
+     bad(400,'Choose Adult, Teen, or Child.');
+    if(memberClass[1]===user.id)bad(403,'Owners cannot reclassify themselves.');
+    const target=await db.prepare('SELECT role FROM household_members WHERE household_id=? AND user_id=?')
+     .bind(hid,memberClass[1]).first<{role:Role}>();
+    if(!target)bad(404,'Member not found.');
+    if(target.role==='owner')bad(403,'Owner classification is fixed as Adult.');
+    const previous=await classification(db,hid,memberClass[1]);
+    if(previous===b.classification)return json({classification:previous,unchanged:true});
+    const ts=now();
+    await db.batch([
+     db.prepare('UPDATE household_member_classes SET classification=?,assigned_by=?,updated_at=? WHERE household_id=? AND user_id=?')
+      .bind(b.classification,user.id,ts,hid,memberClass[1]),
+     db.prepare('INSERT INTO household_member_class_changes(id,household_id,user_id,previous_class,next_class,changed_by,changed_at) VALUES(?,?,?,?,?,?,?)')
+      .bind(uuid(),hid,memberClass[1],previous,b.classification,user.id,ts)
+    ]);
+    return json({classification:b.classification});
+   }
+   const memberDelete=path.match(/^\/api\/members\/([0-9a-zA-Z_-]+)$/);
   if(memberDelete&&req.method==='DELETE') {
     const hid=required(url.searchParams.get('householdId'));await owner(db,hid,user.id);
     if(memberDelete[1]===user.id)bad(400,'You cannot remove your own owner access.');
