@@ -1,7 +1,7 @@
 import {sendPushNotification} from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
 import type {CareEnv,SessionUser} from './types';
-import {exactParticipants,validSealedEnvelope} from './messages-policy';
+import {exactParticipants,matchesKeyRoster,validSealedEnvelope} from './messages-policy';
 
 /** Experimental encrypted, explicitly shared fictional Words spaces.
  * No plaintext journal data, no implicit owner/caregiver access, no read receipts.
@@ -159,9 +159,10 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    WHERE household_id=? AND archived_at IS NOT NULL AND linked_user_id IN (${placeholders})`)
    .bind(hid,...selected).first<{n:number}>();
   if(retired?.n)fail(409,'An archived profile is linked to this account. Restore it before starting a new shared space.');
-  const keys=await db.prepare(`SELECT COUNT(*) n FROM message_device_keys WHERE user_id IN (${placeholders})`)
-   .bind(...selected).first<{n:number}>();
-  if(keys?.n!==selected.length)fail(409,'Each participant must first open Words or Messages on their own device.');
+  const keys=await db.prepare(`SELECT user_id,public_jwk FROM message_device_keys WHERE user_id IN (${placeholders})`)
+   .bind(...selected).all<{user_id:string,public_jwk:string}>();
+  if(keys.results.length!==selected.length||!matchesKeyRoster(b.publicKeys,keys.results.map(k=>({id:k.user_id,publicKey:JSON.parse(k.public_jwk)}))))
+   fail(409,'A recipient key changed or is missing. Refresh people and re-encrypt.');
   const hash=await digest(sid+':'+user.id+':'+kind+':'+JSON.stringify(selected.map(uid=>[uid,copies[uid]])));
   // A successful request may lose its HTTP response. Retry with identical
   // ciphertext/IDs rather than silently creating a duplicate shared space.
@@ -195,6 +196,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    const frozen=await db.prepare("SELECT 1 FROM account_key_migrations WHERE state='staged' AND user_id IN ("+ids.map(()=>'?').join(',')+") LIMIT 1")
     .bind(...ids).first();
    if(frozen)fail(409,'A participant is upgrading encryption. Retry after migration.');
+   if(!matchesKeyRoster(b.publicKeys,people))
+    fail(409,'A participant key changed. Refresh this shared space before replying.');
    const copies=checkCopies(b.copies,ids);
    const hash=await digest(sid+':'+user.id+':'+kind+':'+JSON.stringify(ids.map(uid=>[uid,copies[uid]])));
    const prior=await db.prepare('SELECT space_id,author_id,kind,body_hash FROM shared_word_posts WHERE id=?')
