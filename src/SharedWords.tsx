@@ -224,9 +224,9 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
       </li>)}
      </ol>
      {reflection.ready&&reflection.text.trim()&&<div className="words-audience-confirm">
-      <span>An earlier private reflection draft exists on this device. You can move it into the single discussion editor without sharing it.</span>
+      <span>An earlier private reflection draft exists on this device. Copy it into the discussion editor without sharing it; the original stays saved as a fallback.</span>
       <button type="button" className="button outline small" disabled={!discussion.ready||Boolean(discussion.text.trim())||Boolean(busy)}
-       onClick={()=>{discussion.setText(reflection.text);void reflection.discard();}}>Move old draft</button>
+       onClick={()=>discussion.setText(reflection.text)}>Copy old draft</button>
      </div>}
      <label htmlFor="words-discussion-reply">Write a reply or private note</label>
      <textarea id="words-discussion-reply" rows={5} maxLength={2600} disabled={!discussion.ready||!!busy}
