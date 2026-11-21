@@ -289,3 +289,14 @@
  .words-private-ledger .words-entry-row{padding:18px 0}
  .nav-unread{margin-left:auto}
 }
+
+/* Local, passphrase-encrypted journal backup controls. */
+.words-backup-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:14px;padding:9px 0 18px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.words-backup-form{display:grid;gap:12px;max-width:680px;padding:22px 20px;margin:20px 0;border:1px solid var(--line);background:var(--panel)}
+.words-backup-form h3{font:550 24px/1.3 'Fraunces Variable',serif;margin:0}
+.words-backup-form p{margin:0}
+.words-backup-form label{display:grid;gap:7px;font-size:12px;font-weight:650}
+.words-backup-form input{max-width:100%;min-width:0}
+.words-backup-form input[type=file]{font-size:12px;white-space:normal}
+.words-backup-form .words-response-actions{margin-top:3px}
+@media(max-width:720px){.words-backup-form{padding:16px 14px}}
