@@ -1,9 +1,11 @@
 # carehold.
 
-**Care, held together.** An invite-only household medication ledger with a distinctive editorial interface. Private communication is deliberately gated pending a validated encryption design.
+**Care, held together.** An invite-only family and pet medication ledger with a journal-first Words prototype.
 
 ## Current development milestone
 
-Source foundation for React + TypeScript, D1-backed medication administration, Better Auth with passkeys, profile-scoped caregiver permissions, and opt-in web-push reminders. This repository is **not a deployed or clinically validated product**. See [AGENTS.md](./AGENTS.md), [docs/SETUP.md](./docs/SETUP.md), and [docs/SECURITY.md](./docs/SECURITY.md).
+The `feat/carehold-mvp-foundation` draft branch now implements medication schedules, an administration ledger, corrections, profile-scoped permissions, passkeys, optional medication reminders, and a redesigned Words hub with prompts, encrypted local journal entries, explicit multi-person sharing, discussion and recipient-private unread activity.
 
-Do not enter real health records until auth, migration, reminder, authorization, and backup tests pass in a private staging deployment.
+**Not deployed; not security-audited; not a clinical system.** The local journal and shared-content encryption are experimental, single-device, unreviewed and not approved for real confidential child, medical or therapeutic writing. Cloudflare staging and production targets are still placeholders. Medication logging should only replace existing household recordkeeping after tests, account access, backup and recovery are verified.
+
+For immediate hands-on testing and local D1 backup, see **[Household first-day checklist](./docs/HOUSEHOLD_FIRST_DAY.md)**. For engineering and privacy boundaries, see [AGENTS.md](./AGENTS.md), [docs/SETUP.md](./docs/SETUP.md), and [docs/SECURITY.md](./docs/SECURITY.md).
