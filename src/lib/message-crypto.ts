@@ -29,9 +29,14 @@ function unb64(value:string):Uint8Array<ArrayBuffer>{
 function getDb():Promise<IDBDatabase>{
  if(!('indexedDB' in globalThis)||!crypto.subtle)throw new Error('This browser cannot store encrypted message keys.');
  return new Promise((resolve,reject)=>{
-  const request=indexedDB.open(dbName,1);
-  request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('identities'))
-   request.result.createObjectStore('identities',{keyPath:'userId'});};
+  const request=indexedDB.open(dbName,2);
+  request.onupgradeneeded=()=>{
+   if(!request.result.objectStoreNames.contains('identities'))
+    request.result.createObjectStore('identities',{keyPath:'userId'});
+   // Never replace the old non-extractable private key during recovery.
+   if(!request.result.objectStoreNames.contains('recoveredIdentities'))
+    request.result.createObjectStore('recoveredIdentities',{keyPath:'userId'});
+  };
   request.onsuccess=()=>resolve(request.result);
   request.onerror=()=>reject(request.error??new Error('Cannot open device key store.'));
  });
@@ -44,11 +49,46 @@ async function readIdentity(db:IDBDatabase,userId:string):Promise<Row|undefined>
  const tx=db.transaction('identities','readonly');
  return requestValue(tx.objectStore('identities').get(userId)) as Promise<Row|undefined>;
 }
+async function readRecovered(db:IDBDatabase,userId:string):Promise<Row|undefined>{
+ const tx=db.transaction('recoveredIdentities','readonly');
+ return requestValue(tx.objectStore('recoveredIdentities').get(userId)) as Promise<Row|undefined>;
+}
+/** Read without generating a new key; critical when opening an account on a new device. */
+export async function storedMessageIdentity(userId:string):Promise<Identity|null>{
+ if(!userId||userId.length>200)throw new Error('Sign in before using encrypted messages.');
+ const db=await getDb();
+ try{
+  const row=(await readRecovered(db,userId))??(await readIdentity(db,userId));
+  return row?{privateKey:row.privateKey,publicKey:row.publicKey}:null;
+ }finally{db.close();}
+}
+/** Add an explicitly recovered key without deleting or overwriting a legacy key. */
+export async function storeRecoveredMessageIdentity(userId:string,identity:Identity):Promise<void>{
+ if(!userId||userId.length>200||identity.privateKey.extractable)
+  throw new Error('Refusing to store an extractable or unscoped private key.');
+ const db=await getDb();
+ try{
+  const existing=await readRecovered(db,userId);
+  if(existing){
+   if(!samePublicKey(existing.publicKey,identity.publicKey))
+    throw new Error('A different recovered identity is already enrolled on this browser.');
+   return;
+  }
+  try{
+   const tx=db.transaction('recoveredIdentities','readwrite');
+   await requestValue(tx.objectStore('recoveredIdentities').add({userId,...identity}));
+  }catch(e){
+   const concurrent=await readRecovered(db,userId);
+   if(concurrent&&samePublicKey(concurrent.publicKey,identity.publicKey))return;
+   throw e;
+  }
+ }finally{db.close();}
+}
 export async function deviceIdentity(userId:string):Promise<Identity>{
  if(!userId||userId.length>200)throw new Error('Sign in before enrolling a message device.');
  const db=await getDb();
  try{
-  const current=await readIdentity(db,userId);
+  const current=(await readRecovered(db,userId))??(await readIdentity(db,userId));
   if(current)return {privateKey:current.privateKey,publicKey:current.publicKey};
   const keys=await crypto.subtle.generateKey(algorithm,false,['deriveBits']) as CryptoKeyPair;
   const publicKey=clean(await crypto.subtle.exportKey('jwk',keys.publicKey));
