@@ -1,11 +1,11 @@
 # Carehold encrypted account recovery — staged implementation
 
 **Status (2026-11-21): experimental, UNREVIEWED and not ready for real family data.**
-The current branch adds only a first recovery-capable path for **freshly enrolled messaging accounts**, not full account/device/journal continuity. Keep PR #1 in draft; do not merge or deploy for sensitive records.
+The current branch adds a first recovery-capable path for **freshly enrolled message accounts and encrypted private journals**, not full legacy migration, per-device revocation, cross-device drafts or audited security. Keep PR #1 in draft; do not merge or deploy for sensitive records.
 
 ## What was implemented in this development pass
 
-- \`src/lib/message-recovery.ts\`: generates a fresh P-256 ECDH account identity on the client and a random 256-bit, one-time-display recovery code. An HKDF-SHA256-derived AES-256-GCM key wraps the PKCS#8 private key with authenticated user ID and public-key context. The server never receives the recovery code or private key.
+- \`src/lib/message-recovery.ts\`: generates a fresh P-256 ECDH account identity on the client and a random 256-bit, one-time-display recovery code. An HKDF-SHA256-derived AES-256-GCM key wraps a version-2 bundle containing the PKCS#8 messaging key and a separate random 256-bit AES-GCM journal key, with authenticated user ID and public-key context. The server never receives the recovery code or private key.
 - \`migrations/0011_message_account_recovery.sql\`: additive \`message_account_recovery\` table storing public JWK and client-encrypted recovery envelope. Existing \`message_device_keys\`, encrypted direct messages, shared Words posts and journals are not modified.
 - \`POST /api/messages/recovery\`: authenticated, first-enrollment-only registration of the wrapped recovery record and original public-key registry atomically, rejecting accounts with an existing key; \`GET\` fetches only the current account's ciphertext envelope.
 - \`src/lib/message-crypto.ts\`: a new IndexedDB object store for recovered private keys. It never overwrites the original legacy store. Recovered identities are imported as non-extractable WebCrypto keys.
@@ -44,11 +44,22 @@ Required migration, not yet implemented:
 7. Never assume the other participant's decryptable copy can be reassigned without explicit participant consent and permission checks.
 8. Missing old key and no independently available authorized ciphertext/source copy means historical ciphertext may remain permanently unreadable; state this explicitly.
 
-## Private journals are NOT recovered yet
+## Encrypted private journals for fresh recovery accounts
 
-\`private-journal.ts\` still stores a non-extractable AES-GCM key and ciphertext only in that browser's IndexedDB. The separate manual encrypted journal backup is still the only currently available portable backup. The new message recovery code does **not** restore journal shelf entries or drafts.
+Migration \`0012_private_journal_sync.sql\` adds \`private_journal_sync\` with \`(user_id,household_id,entry_id)\` ownership and optimistic entry revisions. Routes in \`worker/private-journal.ts\` are passkey-session gated, check membership, and **always** bind the journal owner to the authenticated user ID. The server receives only account/circle identifiers, entry IDs, encryption nonce/ciphertext, versions, timestamps and tombstones—not journal text, titles, prompts or plaintext.
 
-Before any real use: design a separate, client-side encrypted journal content key, encrypted D1 synchronization, secure wrapping/recovery, versioned edits, conflict detection, offline semantics, deletions and data-retention policy. The server, other household owners/caregivers, and therapists must not receive journal plaintext or decryption access merely because they can manage the household.
+\`src/lib/synced-private-journal.ts\` performs authenticated AES-GCM encryption/decryption client-side with the separate non-extractable journal key from the v2 account recovery bundle. Account recovery imports both the messaging and journal keys on a new browser; a freshly saved journal can therefore be decrypted independently of the original device, **provided the user retained the recovery code and the encrypted server copy remains available**.
+
+Words journal saving, editing, encrypted manual backup/restore, private discussion notes and deletion are wired to this path when a v2 recovery-backed identity is enrolled. Each update uses an exact expected revision; conflicts fail rather than overwriting silently. Deletion creates a server-side tombstone. Older device-only journal keys and ciphertext are **not** erased. Words offers an explicit, resumable import into encrypted sync on an original browser that can still decrypt its legacy local journal.
+
+**Limitations:** no proven offline-first multi-device conflict merge; changing contents while offline requires the author to retry after connectivity returns. Local unsent draft vaults do not sync or recover; retained local legacy journal copies remain device dependent. No server backup/restore verification, independently validated key hierarchy, independent account-key verification, retention/deletion review, or device revocation is complete. The old manual encrypted backup is still an optional additional safeguard. Do not use sensitive real data yet.
+
+## Authoritative medication permissions
+
+Migration \`0013_member_classification.sql\` records \`adult\`, \`teen\`, \`child\`, or \`unverified\` separately from \`owner\`, \`caregiver\`, or \`member\`. Owner accounts are initialized as adult and new invitees are unverified until classified by the household owner, with audited classification changes. Minors and unverified accounts are denied medication edits and administration recording by server-side authorization regardless of grants. Adults may self-manage their **own linked Adult profile** as Members without extra caregiver privilege. A minor cannot upgrade their own classification by editing Words audiences or replaying onboarding.
+
+Every relevant API and E2E flow needs regression validation. An owner in one circle who is marked minor in another is blocked from owner administration; avoid treating household roles as globally validated age or legal guardianship.
+
 
 ## Required verification before staging promotion
 
@@ -63,7 +74,7 @@ Mandatory browser flows:
 5. A second account and household remain isolated.
 6. Reload, lock/unlock, clearing browser storage, account switching, failed network POST and simultaneous enrollment are safe.
 7. Existing legacy users are never silently rotated; old message/journal records remain present after migration.
-8. A private journal entry **does not falsely appear to have synced**. This is an outstanding launch blocker, not a successful test.
+8. A **newly synced** private journal entry is readable after second-browser recovery; the original local-only journal is explicitly imported without losing old ciphertext. Unsent drafts remain local.
 9. Verify dark/light summary contrast on desktop/mobile; confirm no native browser prompts.
 10. Validate that login alone, without an independent recovery code, does not decrypt on a new device.
 
@@ -73,8 +84,8 @@ Mandatory browser flows:
 
 1. Implement legacy message/Words copy migration with versioned envelopes, no destructive rotation.
 2. Replace shared account-key-on-every-device with verified distinct device credentials and explicit revocation/key epochs.
-3. Implement private journal encrypted synchronization and independent recovery.
-4. Implement authoritative Adult/Teen/Child classifications and member/caregiver/owner permissions enforced by API tests.
+3. Validate encrypted journal sync, existing-entry import, offline conflicts, backups and recovery in real browsers; separately implement recoverable drafts if product requirements demand them.
+4. Execute API-level and browser permission escalation tests for the new Adult/Teen/Child classification implementation.
 5. Complete full E2E regression, staging backup/restore, external security review and documented rollback.
 6. Only then discuss release and real household data.
 
