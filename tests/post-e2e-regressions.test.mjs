@@ -83,6 +83,40 @@ test('editing on mobile refreshes idle timers while server session stays checked
  const hook=src('src/lib/useIdleSecurity.ts');
  assert.match(hook,/compositionupdate/);
  assert.match(hook,/['"]input['"]/);
- assert.match(app,/getSession\(\{query:\{disableCookieCache:true\}\}\)/);
+ assert.match(app,/fetch\('\/api\/auth\/get-session'/);
+ assert.match(app,/cache:'no-store'/);
  assert.match(src('shared/session-policy.ts'),/INACTIVITY_LOCK_MS=180_000/);
+});
+
+test('a later-outcome action belongs to administration history, not the main Today ledger',()=>{
+ const today=app.slice(app.indexOf("page==='today'&&"),app.indexOf("page==='people'&&"));
+ const people=app.slice(app.indexOf("page==='people'&&"),app.indexOf("page==='words'&&"));
+ assert.doesNotMatch(today,/Record a later outcome/);
+ assert.match(people,/Record a later outcome/);
+ assert.match(people,/onClick=\{\(\)=>beginCorrection\(e,'later'\)\}/);
+});
+
+test('temporary correction draft survives same-tab passkey lock only for the same account',()=>{
+ assert.match(app,/correctionAfterLock=useRef<LockedCorrectionDraft\|null>\(null\)/);
+ assert.match(app,/modal==='correct'&&pending\.event&&user\?\.id&&hid/);
+ assert.match(app,/if\(draft\.userId!==user\.id\)\{correctionAfterLock\.current=null;return;\}/);
+ assert.match(app,/if\(hid!==draft\.householdId\)return/);
+ assert.match(app,/setCorrectionReason\(draft\.reason\)/);
+ assert.match(app,/setDoseIdempotency\(draft\.idempotencyKey\)/);
+ assert.match(app,/async function logout\(\)\{\s*correctionAfterLock\.current=null/);
+ assert.match(app,/async function showPasswordSignin\(\)\{\s*await logoutInFlight\.current;\s*correctionAfterLock\.current=null/);
+ assert.doesNotMatch(app,/localStorage\.setItem\([^)]*correctionReason/);
+});
+
+test('shared-space membership list still loads when this browser cannot decrypt',()=>{
+ const list=shared.slice(shared.indexOf('export function SharedSpaces('),shared.indexOf('function SharedSpaceDetail('));
+ assert.match(list,/const r=await api<\{spaces:SpaceSummary\[\]\}>/);
+ assert.match(list,/if\(!identity\)return \{\.\.\.item,preview:null\}/);
+ assert.doesNotMatch(list,/async function refresh\(\)\{\s*if\(!identity\)return/);
+ assert.match(list,/keyError/);
+ assert.match(list,/Unable to load shared spaces/);
+ assert.match(list,/!loading&&!error&&spaces\.length===0/);
+ assert.match(shared,/!identity\?<p role="alert"/);
+ assert.match(hub,/keyError=\{keyError\}/);
+ assert.match(hub,/setOpenSpaceId\(ev\.sourceId\)/);
 });
