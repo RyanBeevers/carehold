@@ -36,7 +36,7 @@ Migration `0009_medication_catalog.sql` appends **six nullable columns** to `med
 | `catalog_identifier` | RxCUI of selected product strength/form, or RxTerms drug/route concept when no specific product was chosen |
 | `normalized_name` | The **exact source display name** the user selected; null for manual |
 | `brand_name` | Reserved for an independently verified explicit brand name; currently null |
-| `product_strength` | **Exact STRENGTHS_AND_FORMS label** (e.g. `10 mg Tab`); includes form text and is **NOT** the prescribed dose |
+| `product_strength` | **Source-provided STRENGTHS_AND_FORMS label**, trimming outer whitespace (e.g. `10 mg Tab`); includes form text and is **NOT** the prescribed dose |
 | `dosage_form` | Reserved for an explicit verified structured dosage form; currently null |
 
 The separate `medications.form` field remains editable and does not have to equal `product_strength`. Catalog selection does **not** fill in `medications.dose`, `instructions`, `cadence`, `medication_times`, `start_date`, `end_date`, clinician or notifications. No existing medication is modified by the migration. A user can always choose **Use custom medication name**, even if RxTerms returns matches, and previously saved records without catalog fields remain valid. Editing a medication preserves metadata when the selected name is unchanged; manually renaming it clears its catalog link.
