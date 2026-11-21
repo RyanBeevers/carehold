@@ -3,11 +3,11 @@ import {ArrowLeft,ArrowUpRight,BookOpen,Check,LockKeyhole,MessageCircle,RotateCw
 import {api,StaleSessionRequest} from './lib/api';
 import {sealWord,unsealWord,type WordPayload} from './lib/words-space-crypto';
 import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
-import {savePrivateJournal} from './lib/private-journal';
+import {savePrivateJournal,listPrivateJournal,type JournalEntry} from './lib/private-journal';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
 
 export type WordContact={id:string,name:string,publicKey:PublicKey|null};
-export type ShareSeed={kind:'prompt'|'journal',prompt:string|null,text:string};
+export type ShareSeed={kind:'prompt'|'journal',prompt:string|null,text:string,title?:string,sourceEntryId?:string};
 export type SpaceSummary={id:string,kind:'prompt'|'journal',createdBy:string,createdAt:string,creatorName:string,initialPostId:string,initialEnvelope:Envelope};
 type SpacePost={id:string,authorId:string,kind:WordPayload['kind'],createdAt:string,envelope:Envelope};
 type SpaceDetail={id:string,kind:'prompt'|'journal',createdBy:string,participants:WordContact[],posts:SpacePost[]};
@@ -32,7 +32,7 @@ export function ShareComposer({seed,userId,householdId,identity,people,onCreated
    if(!attempt||attempt.recipients!==fingerprint){
     const sid=crypto.randomUUID(),postId=crypto.randomUUID();
     const participants=[{id:userId,name:'You',publicKey:identity.publicKey},...chosen];
-    const payload:WordPayload={kind:seed.kind,text:seed.text,prompt:seed.prompt};
+    const payload:WordPayload={kind:seed.kind,text:seed.text,prompt:seed.prompt,...(seed.title?.trim()?{title:seed.title.trim()}:{})};
     const copies:Record<string,Envelope>={};
     for(const p of participants)copies[p.id]=await sealWord(payload,p.publicKey!,sid,postId,p.id);
     attempt={id:sid,postId,recipients:fingerprint,copies};
@@ -124,6 +124,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
  const reflection=useWordsDraftVault(userId,householdId+':reflection:'+spaceId);
  const discussion=useWordsDraftVault(userId,householdId+':discussion:'+spaceId);
  const [detail,setDetail]=useState<(Omit<SpaceDetail,'posts'>&{posts:VisiblePost[]})|null>(null);
+ const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]);
  const [error,setError]=useState(''),[busy,setBusy]=useState<'reflection'|'discussion'|'save'|null>(null),[status,setStatus]=useState('');
  const retry=useRef<{kind:'reflection'|'discussion',text:string,id:string,copies:Record<string,Envelope>}|null>(null);
  const lastInteraction=useRef(Date.now());
@@ -135,6 +136,8 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
    catch{return {...p,content:null};}
   }));
   setDetail({...r,posts});
+  try{setPrivateNotes((await listPrivateJournal(userId,householdId)).filter(e=>e.spaceId===spaceId));}
+  catch(e){setError(message(e));}
   // A missing or undecipherable entry must not silently clear this recipient's inbox.
   // This acknowledgement remains recipient-private and never reaches the sender.
   if(posts.every(p=>p.content!==null)){
@@ -156,8 +159,12 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
  },[spaceId,identity,userId,householdId]);
  const first=detail?.posts.find(p=>p.kind==='journal'||p.kind==='prompt');
  const prompt=first?.content?.kind==='prompt'?first.content.text:first?.content?.prompt;
- const responses=detail?.posts.filter(p=>p.kind==='reflection')||[];
- const discussionPosts=detail?.posts.filter(p=>p.kind==='discussion')||[];
+ const publicPosts=detail?.posts.filter(p=>p.kind==='reflection'||p.kind==='discussion')||[];
+ const board=[
+  ...publicPosts.map(p=>({id:p.id,at:Date.parse(p.createdAt),author:p.authorId,
+   text:p.content?.text??'Unable to decrypt this response.',private:false,kind:p.kind})),
+  ...privateNotes.map(p=>({id:p.id,at:p.createdAt,author:userId,text:p.text,private:true,kind:'note'}))
+ ].sort((a,b)=>a.at-b.at);
  const author=(id:string)=>detail?.participants.find(p=>p.id===id)?.name||'Participant';
  async function send(kind:'reflection'|'discussion'){
   const vault=kind==='reflection'?reflection:discussion,text=vault.text;
@@ -181,18 +188,21 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
   finally{setBusy(null);}
  }
- async function saveReflection(){
-  if(!reflection.ready||!reflection.text.trim()||busy)return;
+ async function savePrivateNote(){
+  if(!discussion.ready||!discussion.text.trim()||busy)return;
   setBusy('save');setError('');setStatus('');
   try{
-   await savePrivateJournal(userId,householdId,{id:crypto.randomUUID(),prompt:prompt||null,text:reflection.text});
-   const cleared=await reflection.discard();
-   setStatus(cleared?'Saved privately on this device. Nobody else can see it.':'Saved privately; discard the extra draft manually.');
+   const note=await savePrivateJournal(userId,householdId,{id:crypto.randomUUID(),
+    title:'Private discussion note',prompt:prompt||null,text:discussion.text,spaceId});
+   setPrivateNotes(old=>[...old,note]);
+   const cleared=await discussion.discard();
+   setStatus(cleared?'Private note added on this device only. No one else can see it.':
+    'Saved privately, but the extra device draft could not be cleared.');
    onPrivateSaved();
   }catch(e){setError(message(e));}
   finally{setBusy(null);}
  }
- return <section className="words-space-detail" aria-label="Shared prompt and discussion">
+  return <section className="words-space-detail" aria-label="Shared prompt and discussion">
   <button type="button" className="quiet small" onClick={onBack}><ArrowLeft size={15}/> All shared spaces</button>
   {error&&<p role="alert" className="messages-error">{error}</p>}
   {!detail?<p className="muted">Opening your shared space…</p>:<>
