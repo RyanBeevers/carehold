@@ -10,11 +10,13 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.mjs && python3 -m unittest discover -s tests -p test_*.py",
     "db:local": "wrangler d1 migrations apply carehold-local --local",
-    "db:remote": "wrangler d1 migrations apply carehold-staging --remote",
+    "db:remote": "npm run preflight:staging && wrangler d1 migrations apply carehold-staging --remote --env staging",
     "auth:check": "npx @better-auth/cli check schema",
-    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:staging": "npm run preflight:staging && wrangler deploy --env staging",
     "push:setup": "node scripts/configure-local-push.mjs",
-    "db:backup:local": "bash scripts/backup-local.sh"
+    "db:backup:local": "bash scripts/backup-local.sh",
+    "preflight:staging": "node scripts/check-staging-config.mjs",
+    "verify:pre-e2e": "npm test && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.0",
