@@ -11,7 +11,7 @@ test('remote staging migration and deployment both require target checks',()=>{
   assert.match(packageJson.scripts[script],/npm run preflight:staging &&/);
  assert.match(packageJson.scripts['preflight:staging'],/check-staging-config\.mjs/);
  assert.match(guard,/db\.database_id/);
- assert.match(guard,/origin\.startsWith\('https:\/\/'\)/);
+ assert.match(guard,/target\?\.protocol==='https:'/);
  assert.match(guard,/process\.exitCode=1/);
 });
 test('pre-E2E verification is a single reproducible command',()=>{
