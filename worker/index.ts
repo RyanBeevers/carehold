@@ -2,7 +2,7 @@ import { makeAuth } from './auth';
 import { localFrontendRedirect } from './local-frontend-redirect';
 import type { CareEnv, SessionUser, ProfileRow, MedicationRow } from './types';
 import { scheduledOn, localDate, localToInstant, occurrenceKey, validDate, validTime, timezoneValid, scheduleError, type Schedule } from '../shared/schedule';
-import { canAccess, validCapabilities, type Role, type Capability } from '../shared/policy';
+import { canAccess,canUseCareProfile,validMemberClassification,validCapabilities,type MemberClassification,type Role,type Capability } from '../shared/policy';
 import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
@@ -55,14 +55,22 @@ async function member(db:D1Database,householdId:string,userId:string):Promise<Ro
   const row=await db.prepare('SELECT role FROM household_members WHERE household_id=? AND user_id=?').bind(householdId,userId).first<{role:Role}>();
   if(!row)bad(403,'You do not have access to this household.');return row!.role;
 }
+async function classification(db:D1Database,hid:string,uid:string):Promise<MemberClassification>{
+ const row=await db.prepare('SELECT classification FROM household_member_classes WHERE household_id=? AND user_id=?')
+  .bind(hid,uid).first<{classification:MemberClassification}>();
+ return row?.classification??'unverified';
+}
 async function profileAccess(db:D1Database,profileId:string,userId:string,capability:Capability):Promise<ProfileRow> {
-  const p=await db.prepare('SELECT id,household_id,display_name,kind,archived_at FROM profiles WHERE id=?').bind(profileId).first<ProfileRow>();
+  const p=await db.prepare('SELECT id,household_id,display_name,kind,archived_at,linked_user_id FROM profiles WHERE id=?').bind(profileId).first<ProfileRow>();
   if(!p)bad(404,'Profile not found.');
   const role=await member(db,p!.household_id,userId);
   if((p as ProfileRow&{archived_at:string|null}).archived_at&&capability!=='view_history'&&capability!=='view_schedule')
    bad(409,'This profile is archived. Restore it before changing medications or recording doses.');
   const grants=await db.prepare('SELECT capability FROM profile_grants WHERE profile_id=? AND user_id=?').bind(profileId,userId).all<{capability:Capability}>();
-  if(!canAccess(role,(grants.results||[]).map(x=>x.capability),capability))bad(403,'This profile is not shared with you for that action.');
+  if(!canUseCareProfile(role,await classification(db,p!.household_id,userId),
+   (grants.results||[]).map(x=>x.capability),capability,
+   p!.kind==='adult'&&(p as ProfileRow&{linked_user_id?:string|null}).linked_user_id===userId))
+   bad(403,'This profile is not shared with you for that action or your account class is read-only.');
   return p!;
 }
 async function owner(db:D1Database,householdId:string,userId:string) {
