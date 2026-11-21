@@ -24,7 +24,7 @@ async function locator(uid:string,scope:string,key:CryptoKey){
  const hid=scopeFor(uid,scope,key);
  const digest=await crypto.subtle.digest('SHA-256',encoder.encode('carehold-draft-locator-v1:'+uid+':'+scope));
  const token=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
- return {url:'/private-drafts/'+token+'?householdId='+encodeURIComponent(hid),hid};
+ return {url:'/private-drafts/'+token+'?householdId='+encodeURIComponent(hid)+'&accountId='+encodeURIComponent(uid),hid};
 }
 function validate(value:unknown):value is DraftDocument{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
