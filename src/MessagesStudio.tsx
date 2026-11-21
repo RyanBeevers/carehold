@@ -51,8 +51,11 @@ export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHan
     }));
     if(live){
      setItems(values);
-     await api('/activity/seen','POST',{householdId,sourceKind:'direct',sourceId:active});
-     window.dispatchEvent(new Event('carehold:activity-changed'));
+     // Do not silently dismiss unread messages if this device cannot decrypt them.
+     if(values.every(item=>item.content!==null)){
+      await api('/activity/seen','POST',{householdId,sourceKind:'direct',sourceId:active});
+      window.dispatchEvent(new Event('carehold:activity-changed'));
+     }
     }
    }catch(e){if(live&&!(e instanceof StaleSessionRequest))setError(errorText(e));}
   }
