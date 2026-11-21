@@ -239,7 +239,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    <span>{item.title}{item.id==='activity'&&activity.length>0&&<b className="words-activity-count">{activity.length}</b>}</span>
    <small>{item.description}</small></button>)}</nav>
   {feedback&&<p className="words-status" role="status"><Check size={15}/>{feedback}</p>}
-  {keyError&&<p className="messages-error" role="alert">Sharing or notification setup: {keyError}. Private journaling remains available.</p>}
+  {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable on this browser.</strong> {keyError} Your private journal is still usable. If this is a second browser or another test profile signed into the same account, return to the original browser profile. Do not reset your account's key or clear the original browser data.</p>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} people={people}
     onCreated={sid=>{
     const current=seed;setSeed(null);setOpenSpaceId(sid);selectTab('shared');
@@ -355,7 +355,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     <button type="button" className="button outline small" disabled={(safeJournalPage+1)*10>=filteredJournal.length} onClick={()=>setJournalPage(safeJournalPage+1)}>Next</button>
    </div>}
   </section>:
-  tab==='shared'?<SharedSpaces userId={userId} householdId={householdId} identity={identity} openSpaceId={openSpaceId}
+  tab==='shared'?<SharedSpaces userId={userId} householdId={householdId} identity={identity} keyError={keyError} openSpaceId={openSpaceId}
    onCloseSpace={()=>setOpenSpaceId(null)} onPrivateSaved={()=>void reloadJournal().catch(e=>setJournalError(errorText(e)))}/>:
   <section className="words-activity" aria-label="New shared writing">
    <div className="words-hub-section-top"><div><span className="mono kicker">YOUR PRIVATE INBOX</span><h2>What's new.</h2><p className="muted">New invitations and discussion updates. No one else can see if or when you open them.</p></div>
