@@ -55,9 +55,11 @@ async function member(db:D1Database,householdId:string,userId:string):Promise<Ro
   if(!row)bad(403,'You do not have access to this household.');return row!.role;
 }
 async function profileAccess(db:D1Database,profileId:string,userId:string,capability:Capability):Promise<ProfileRow> {
-  const p=await db.prepare('SELECT id,household_id,display_name,kind FROM profiles WHERE id=? AND archived_at IS NULL').bind(profileId).first<ProfileRow>();
+  const p=await db.prepare('SELECT id,household_id,display_name,kind,archived_at FROM profiles WHERE id=?').bind(profileId).first<ProfileRow>();
   if(!p)bad(404,'Profile not found.');
   const role=await member(db,p!.household_id,userId);
+  if((p as ProfileRow&{archived_at:string|null}).archived_at&&capability!=='view_history'&&capability!=='view_schedule')
+   bad(409,'This profile is archived. Restore it before changing medications or recording doses.');
   const grants=await db.prepare('SELECT capability FROM profile_grants WHERE profile_id=? AND user_id=?').bind(profileId,userId).all<{capability:Capability}>();
   if(!canAccess(role,(grants.results||[]).map(x=>x.capability),capability))bad(403,'This profile is not shared with you for that action.');
   return p!;
@@ -232,13 +234,14 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   }
   if(path==='/api/profiles'&&req.method==='GET') {
     const hid=required(url.searchParams.get('householdId')),role=await member(db,hid,user.id);
-    const results=await db.prepare(`SELECT p.id,p.display_name,p.kind,p.household_id,
+    const includeArchived=role==='owner'&&url.searchParams.get('includeArchived')==='1';
+    const results=await db.prepare(`SELECT p.id,p.display_name,p.kind,p.household_id,p.archived_at,
       CASE WHEN ?='owner' THEN p.linked_user_id ELSE NULL END AS linked_user_id,
       CASE WHEN p.linked_user_id=? THEN 1 ELSE 0 END AS is_self
       FROM profiles p
-      WHERE p.household_id=? AND p.archived_at IS NULL AND (?='owner' OR EXISTS
+      WHERE p.household_id=? AND (?=1 OR p.archived_at IS NULL) AND (?='owner' OR EXISTS
         (SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule'))
-      ORDER BY p.created_at`).bind(role,user.id,hid,role,user.id).all();
+      ORDER BY p.archived_at IS NOT NULL,p.created_at`).bind(role,user.id,hid,includeArchived?1:0,role,user.id).all();
     return json({profiles:results.results});
   }
   if(path==='/api/profiles'&&req.method==='POST') {
@@ -247,6 +250,19 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     if(!['adult','child','pet'].includes(String(kind)))bad(400,'Select adult, child or pet.');
     const id=uuid();await db.prepare('INSERT INTO profiles(id,household_id,display_name,kind,created_at) VALUES(?,?,?,?,?)').bind(id,hid,name,kind,now()).run();
     return json({id,display_name:name,kind,household_id:hid},201);
+  }
+  const profileArchive=path.match(/^\/api\/profiles\/([0-9a-f-]+)\/(archive|restore)$/);
+  if(profileArchive&&req.method==='POST'){
+    const profile=await db.prepare('SELECT id,household_id,archived_at FROM profiles WHERE id=?')
+      .bind(profileArchive[1]).first<{id:string,household_id:string,archived_at:string|null}>();
+    if(!profile)bad(404,'Profile not found.');
+    await owner(db,profile!.household_id,user.id);
+    const archive=profileArchive[2]==='archive';
+    if(Boolean(profile!.archived_at)===archive)return json({archived:archive,unchanged:true});
+    const when=archive?now():null;
+    await db.prepare('UPDATE profiles SET archived_at=? WHERE id=? AND archived_at IS ?')
+      .bind(when,profile!.id,profile!.archived_at).run();
+    return json({archived:archive});
   }
   // Profile identity does not grant schedule, history or future message access.
   const profileLink=path.match(/^\/api\/profiles\/([0-9a-f-]+)\/linked-account$/);
