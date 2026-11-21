@@ -64,6 +64,11 @@ async function profileAccess(db:D1Database,profileId:string,userId:string,capabi
   const p=await db.prepare('SELECT id,household_id,display_name,kind,archived_at,linked_user_id FROM profiles WHERE id=?').bind(profileId).first<ProfileRow>();
   if(!p)bad(404,'Profile not found.');
   const role=await member(db,p!.household_id,userId);
+  if(capability==='manage_medication'||capability==='record_dose'){
+   const minorElsewhere=await db.prepare("SELECT 1 FROM household_member_classes WHERE user_id=? AND classification IN ('child','teen') LIMIT 1")
+    .bind(userId).first();
+   if(minorElsewhere)bad(403,'Minor accounts cannot edit or record medications in any care circle.');
+  }
   if((p as ProfileRow&{archived_at:string|null}).archived_at&&capability!=='view_history'&&capability!=='view_schedule')
    bad(409,'This profile is archived. Restore it before changing medications or recording doses.');
   const grants=await db.prepare('SELECT capability FROM profile_grants WHERE profile_id=? AND user_id=?').bind(profileId,userId).all<{capability:Capability}>();
