@@ -202,3 +202,8 @@ Record the actual test outcome separately for each browser/account (pass, fail,
 not run). Publishing source code and unit-test fixtures is not evidence that
 browser integration or the crypto recovery policy has passed. Include the
 failing console message and route, but redact all tokens and private writing.
+
+## Journal-first Words test branch (not deployed)
+The draft feature branch includes local-only migrations `0007_shared_words_activity.sql` and `0008_word_push_preferences.sql`. Run `npm run db:local` on an existing local dev database; remote migrations require a separate explicit deployment decision. Run `npm test && npm run typecheck && npm run build` and inspect errors before staging. Start Worker with `npm run dev:worker` and UI with `npm run dev`, using `http://localhost:5173` (not a different host, to preserve the passkey origin).
+
+All shared-space participants must visit Words or Messages once on their own device to register an experimental public key. Sign in using fictional test accounts, share a prompt or fictional journal snapshot to 1–10 selected members, verify reflection and discussion posting, recipient-only unread counters, and optional generic push. Words push has an independent default-off opt-in under Words → Activity and requires an existing push subscription from Settings. No remote migration, merging or deployment was performed by these code changes. See `docs/PRIVATE_WORDS_PHASE.md` for privacy gates and the full manual acceptance checklist.

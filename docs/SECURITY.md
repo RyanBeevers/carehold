@@ -92,3 +92,9 @@ is independent and does not become a message key store. Server/message error
 logs must remain content-free. Revocation closes the existing thread and
 prevents silent old-history restoration if a removed member is invited back;
 previously received plaintext cannot be remotely retracted from devices.
+
+## Journal-first shared writing pilot (2026-11-21)
+- New Words routes are protected by Better Auth + required passkey and explicit `shared_word_participants` membership **plus** current `household_members` membership. A household owner or linked caregiver not selected to a space receives 404, not a journal list. No private shelf entries are sent to the Worker.
+- Each shared post has per-participant ciphertext copies; the server can access only metadata and public keys. The initial prompt, journal body, reflection and discussion reply are encrypted before requests. The device-local journal shelf uses nonexportable AES-GCM keys stored alongside ciphertext in IndexedDB. Neither key design has independent review or secure device recovery.
+- Recipient-private `private_word_activity` tracks unread and acknowledgements without exposing read/view/typing/response activity to senders. Words push has a separate default-off preference and generic copy. Authentication and authorization remain required for all activity routes.
+- Limitations: TOFU key substitution and browser compromise, device loss, incomplete deletion/retention, shared snapshots not retractable from already-authorized recipients, child/guardian/legal questions, and group rekey on membership changes. Only fictional pilot testing is authorized; do not deploy these features with real confidential information.

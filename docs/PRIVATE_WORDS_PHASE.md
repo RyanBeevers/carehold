@@ -1,4 +1,7 @@
-# Carehold — next release design gate: private words and selective sharing
+# Carehold — private Words and sharing pilot
+
+**Current branch status (2026-11-21):** The journal-first Words interface and encrypted multi-recipient shared-space prototype are now implemented on the draft feature branch. **Fictional test data only.** This is not a reviewed E2EE product, not approved for real medical/therapeutic/minor confidential writing and not deployed. Older entries below describe previous iterations; see the latest journal-first section at the end for the current working scope.
+
 
 **Status:** **experimental, opt-in encrypted device-local draft autosave prototype** (Words → Try writing). No journal/message API, server-stored content, recipient encryption or send capability is enabled. The pilot remains unauthorized to hold real sensitive personal writing.
 
@@ -141,3 +144,34 @@ intentionally**. Navigation and applying text never send automatically. The hand
 cleared when leaving Messages, switching circles, signing out or locking. The original
 Words note is not deleted by handoff; if its local autosave was off, leaving Words
 still discards its original draft as before. Test exclusively with fictional text.
+
+## Journal-first Words, shared spaces and activity (feature branch, 2026-11-21)
+
+### Product experience
+- **Explore prompts:** Browse 100+ audience-scoped prompts using relationship/category filters, keyword search and a non-repeating shuffle. Each prompt offers **Write from this** and **Share prompt** directly from the library. Prompts do not require using Messages.
+- **Write:** Prompt-aware private writing in the existing opt-in encrypted local draft vault. **Save privately** persists a separate encrypted journal shelf entry on the current device; **Share this entry** opens an explicit participant selection, creating a separate encrypted immutable snapshot. There is no automatic sending or sharing of drafts.
+- **My journal:** Locally encrypted, per-account/per-circle saved entries with explicit edit, snapshot share and two-step deletion. Entries are not automatically synchronized to another browser/device, recoverable after site-data clearing, or safe for real sensitive content.
+- **Shared spaces:** Either a prompt-only invitation or a full entry plus optional prompt. Choose 1–10 explicitly named other members who have registered a device key; all recipients share one discussion. Each participant can write a private reflection, save it in their own device journal, or deliberately share it with everyone. Discussion replies are deliberate group posts. The initial prompt/entry remains prominent above the conversation.
+- **Activity:** A recipient-only unread inbox for shared spaces, and unread badges for both Words and existing direct Messages. Active screens refresh periodically while attended, without requiring a page reload. Opening a shared space or direct message privately clears that recipient's unread items; the sender cannot query view/read/typing/draft/ack status.
+- **Device push:** Generic optional notification on new activity, using an existing device subscription **and a separate, default-off Words notification preference**. It never includes a sender name, prompt, journal text, recipient list or medical detail. The existing medication reminder preference alone does not activate Words push.
+
+### Data and cryptography
+- `0007_shared_words_activity.sql` introduces `shared_word_spaces`, `shared_word_participants`, `shared_word_posts`, `shared_word_copies`, and `private_word_activity`. The Worker checks signed-in/passkey status before these routes, current care-circle membership, and explicit space participation on every read/write. Posts are encrypted into one client-generated envelope per currently authorized participant. D1 retains only ciphertext envelopes and metadata, not plaintext prompt, journal, reflection or discussion strings.
+- `0008_word_push_preferences.sql` independently governs Words push opt-in. Activity `seen_at` is recipient-private; no API exposes this to senders. Membership revocation removes shared-space participant access and the former member's pending activity.
+- `src/lib/private-journal.ts` stores individual journal entries as AES-GCM ciphertext with a nonextractable same-origin IndexedDB key and authenticated account/circle/entry binding. Editing uses revision conflict protection. Deleting an entry deletes its local ciphertext record, **not any previously shared encrypted snapshot**.
+- `src/lib/words-space-crypto.ts` wraps the existing per-recipient ECDH/HKDF/AES-GCM pilot for a structured `prompt | journal | reflection | discussion` payload. No sensitive plaintext is sent through the new HTTP routes. The original one-to-one Messages feature remains separate.
+
+### Hard limitations / required release gates
+This is **not independently verified E2EE**. Public-key identity uses trust on first use without out-of-band recipient verification; the same-origin browser may invoke nonexportable keys, and there is no robust device backup/recovery, key transparency, cross-device journal sync, participant-change encryption/rotation, security audit, guardian/minor privacy consent or deletion/retention review. Prompts and journal answers may be highly sensitive. Do not store real family, patient, child, or therapeutic content until those issues have been reviewed and resolved.
+
+### Local test checklist (fictional accounts and text only)
+1. On `feat/carehold-mvp-foundation`, run `npm run db:local`, `npm test`, `npm run typecheck`, and `npm run build` before UI testing. Do **not** apply these migrations remotely without authorization.
+2. Start Worker and Vite in separate terminals, open `http://localhost:5173`. Sign in as the household owner and one or two invited test accounts in separate browser profiles/incognito sessions. Have **each account open Words once** to register a device key.
+3. Explore prompts: filter, search, shuffle, write from a prompt. Confirm writing is not lost when switching between Words tabs. Enable device draft autosave; reload and verify restore.
+4. Save a fictional entry privately; reopen/edit it, refresh, and verify the local shelf. Confirm a different account/device has no access; test private journal delete confirmation. Verify the Worker received no plaintext for local saves.
+5. Share a prompt-only invitation with two explicitly selected participants. Each recipient sees the original prompt, and can optionally write a reflection privately, save it locally, share it, or post a discussion reply.
+6. Share a completed fictional entry. Confirm the original prompt plus entry remain visible above the discussion on all selected accounts; never infer receipt from read/typing activity.
+7. Verify the Words badge updates for recipients without refreshing and disappears when they open the shared space. Verify direct-message unread badges similarly while Messages remains a separate feature.
+8. Verify a household owner **not selected** as a participant cannot request the shared-space URL or ciphertext. Remove a member: the account cannot access the previous shared space after rejoining. Test negative access using different signed-in accounts, not just hidden UI.
+9. Opt into Words push only on a device with an existing subscription; verify generic content on the lock screen. Keep Words push OFF if only medication reminder notifications were previously enabled. Check service-worker receipt vs actual OS display separately.
+10. Confirm dark/light and mobile widths, three-minute idle lock, one-minute background lock, cross-account and cross-care-circle isolation, and no plaintext in IndexedDB rows, D1, network logs, notifications or analytics. Do not publish or deploy from these local tests alone.
