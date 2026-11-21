@@ -5,7 +5,7 @@ import {
 } from './words-vault';
 
 export type DraftSaveStatus='loading'|'off'|'ready'|'editing'|'saving'|'saved'|'restored'|'conflict'|'error';
-const INITIAL:DraftDocument={text:'',prompt:null};
+const INITIAL:DraftDocument={text:'',prompt:null,title:''};
 
 /**
  * Debounced, serialized writes to an explicitly enabled device-local vault.
@@ -15,6 +15,7 @@ const INITIAL:DraftDocument={text:'',prompt:null};
 export function useWordsDraftVault(userId:string,householdId:string){
  const [text,setTextState]=useState('');
  const [prompt,setPromptState]=useState<string|null>(null);
+ const [title,setTitleState]=useState('');
  const [ready,setReady]=useState(false);
  const [enabled,setEnabled]=useState(false);
  const [status,setStatus]=useState<DraftSaveStatus>('loading');
@@ -31,12 +32,20 @@ export function useWordsDraftVault(userId:string,householdId:string){
   const gen=++generation.current;
   setReady(false);isReady.current=false;
   setStatus('loading');setError('');setEnabled(false);isEnabled.current=false;
-  void inspectDeviceVault(userId,householdId).then(result=>{
+  void (async()=>{
+   let result=await inspectDeviceVault(userId,householdId);
+   if(!result.enabled){
+    // Encrypt local drafts automatically on first use.
+    await enableDeviceVault(userId,householdId);
+    result=await inspectDeviceVault(userId,householdId);
+   }
+   return result;
+  })().then(result=>{
    if(!alive.current||gen!==generation.current)return;
    isEnabled.current=result.enabled;setEnabled(result.enabled);
    const restored=result.document??{...INITIAL};
    current.current=restored;
-   setTextState(restored.text);setPromptState(restored.prompt);
+   setTextState(restored.text);setPromptState(restored.prompt);setTitleState(restored.title??'');
    revision.current=result.revision;
    dirty.current=false;conflicted.current=false;lastQueued.current=-1;editNo.current=0;
    setSavedAt(result.savedAt);
@@ -55,12 +64,13 @@ export function useWordsDraftVault(userId:string,householdId:string){
  function editField(next:DraftDocument){
   if(!isReady.current||discarding.current)return;
   current.current=next;
-  setTextState(next.text);setPromptState(next.prompt);
+  setTextState(next.text);setPromptState(next.prompt);setTitleState(next.title??'');
   dirty.current=true;editNo.current+=1;
   if(!conflicted.current)setStatus(isEnabled.current?'editing':'off');
  }
  const setText=useCallback((value:string)=>editField({...current.current,text:value}),[]);
  const setPrompt=useCallback((value:string|null)=>editField({...current.current,prompt:value}),[]);
+ const setTitle=useCallback((value:string)=>editField({...current.current,title:value}),[]);
 
  const flush=useCallback((force=false):Promise<void>=>{
   if(discarding.current||!isEnabled.current||!isReady.current||!dirty.current||conflicted.current&&!force)return queue.current;
@@ -96,7 +106,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
   if(!ready||!enabled||status==='conflict'||!dirty.current)return;
   const timer=window.setTimeout(()=>{void flush();},1000);
   return()=>window.clearTimeout(timer);
- },[text,prompt,ready,enabled,status==='conflict',flush]);
+ },[text,prompt,title,ready,enabled,status==='conflict',flush]);
 
  useEffect(()=>{
   if(!ready||!enabled)return;
@@ -127,7 +137,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
      return;
     }
     current.current=found.document;
-    setTextState(found.document.text);setPromptState(found.document.prompt);
+    setTextState(found.document.text);setPromptState(found.document.prompt);setTitleState(found.document.title??'');
     setSavedAt(found.savedAt);setStatus('restored');
    }else{
     setStatus(dirty.current?'editing':'ready');
@@ -148,7 +158,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
    if(!alive.current)return;
    if(!found.enabled)throw new Error('No device vault was found.');
    const next=found.document??{...INITIAL};
-   current.current=next;setTextState(next.text);setPromptState(next.prompt);
+   current.current=next;setTextState(next.text);setPromptState(next.prompt);setTitleState(next.title??'');
    revision.current=found.revision;
    dirty.current=false;conflicted.current=false;editNo.current++;lastQueued.current=-1;
    setSavedAt(found.savedAt);setError('');setStatus(found.document?'restored':'ready');
@@ -175,7 +185,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
    await queue.current.catch(()=>{});
    if(isEnabled.current)await discardDeviceDraft(userId,householdId);
    if(!alive.current)return false;
-   current.current={...INITIAL};setTextState('');setPromptState(null);
+   current.current={...INITIAL};setTextState('');setPromptState(null);setTitleState('');
    dirty.current=false;conflicted.current=false;editNo.current++;lastQueued.current=-1;
    revision.current=0;setSavedAt(null);setError('');
    setStatus(isEnabled.current?'ready':'off');
@@ -191,6 +201,6 @@ export function useWordsDraftVault(userId:string,householdId:string){
   }
  },[userId,householdId]);
 
- return {text,prompt,setText,setPrompt,ready,enabled,status,savedAt,error,
+ return {text,prompt,title,setText,setPrompt,setTitle,ready,enabled,status,savedAt,error,
   enable,flush,discard,reloadStored,overwriteStored};
 }
