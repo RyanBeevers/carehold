@@ -38,6 +38,7 @@ function parseCipher(value:Record<string,unknown>){
 async function route(req:Request,env:CareEnv,user:SessionUser){
  const url=new URL(req.url),path=url.pathname,db=env.DB;
  const hid=text(url.searchParams.get('householdId'));
+ if(url.searchParams.get('accountId')!==user.id)fail(403,'Account changed. Reopen encrypted journals after signing in.');
  await assertMember(db,hid,user.id);
  if(path==='/api/private-journal'&&req.method==='GET'){
   const raw=url.searchParams.get('offset')||'0';
