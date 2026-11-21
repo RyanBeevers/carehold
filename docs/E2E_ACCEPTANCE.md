@@ -168,3 +168,15 @@ Use **fictional accounts and writing only**. The older shared account key and it
 - [ ] **Regression:** Check direct/Words activity privacy, Household Member Adult/Teen/Child profile permissions, passkey setup, Today light/dark mode and all medication history/correction flows.
 
 **Important residual risk:** Restoring the same P-256 account key to several browsers is not a cryptographically independent per-device hierarchy. Revoking a session or removing a passkey does not revoke a private key already copied to another device. This remains a release-blocking design decision before real family/confidential use.
+
+## Recovery-code custody and iPhone Passwords UX (NOT YET TESTED)
+
+- [ ] Start fresh enrollment on iPhone Safari and the installed Carehold PWA. Confirm the recovery code is visible, the default storage instructions are for Apple Passwords, and the searchable label is **Carehold — Encryption Recovery Key**.
+- [ ] Tap **Copy recovery code**, open **Passwords**, create a *separate* password entry with the code and a Carehold recovery label, then return. Ensure a copy operation alone does **not** mark enrollment complete.
+- [ ] Confirm a user can switch to **another password manager**, **locked note**, or **offline copy** without losing the displayed secret. Do not open a native browser alert or show a fake “Saved to Passwords” notification.
+- [ ] Without selecting the save confirmation, the enrollment and legacy-migration completion buttons remain disabled. Once saved is explicitly confirmed, enrollment can proceed.
+- [ ] Sign in on another browser and search the chosen password app for **Carehold**. Enter the saved code and verify that encrypted journal/message recovery works. A wrong or missing code must not cause a silent reset.
+- [ ] Start a staged legacy migration; verify it reuses the exact same save guide and shows the same searchable label on Resume. No password, passkey, or prior encryption key is overwritten.
+- [ ] Check copy failures gracefully (clipboard permission denied or unavailable), light/dark contrast, small iPhone screens, VoiceOver labels, and recovery code display after rotating or switching apps.
+- [ ] Confirm the recovery secret is never copied into logs, API request bodies, browser storage, notification payloads, or unencrypted exports. The only saved server artifact is the encrypted recovery envelope.
+
