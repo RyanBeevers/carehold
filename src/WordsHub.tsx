@@ -21,7 +21,10 @@ const TABS:{id:Tab,title:string,description:string}[]=[
 
 export function WordsHub({userId,householdId,audience}:{userId:string,householdId:string,audience:Audience}){
  const draft=useWordsDraftVault(userId,householdId);
- const [tab,setTab]=useState<Tab>('explore'),[topic,setTopic]=useState('All topics'),[relationship,setRelationship]=useState<Relationship|'all'>('all'),[search,setSearch]=useState('');
+ const [tab,setTab]=useState<Tab>(()=>{
+  const section=new URLSearchParams(window.location.search).get('section');
+  return TABS.some(item=>item.id===section)?section as Tab:'explore';
+ }),[topic,setTopic]=useState('All topics'),[relationship,setRelationship]=useState<Relationship|'all'>('all'),[search,setSearch]=useState('');
  const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
  const [identity,setIdentity]=useState<Identity|null>(null),[people,setPeople]=useState<WordContact[]>([]),[keyError,setKeyError]=useState('');
  const [entries,setEntries]=useState<JournalEntry[]>([]),[editing,setEditing]=useState<{id:string,revision:number}|null>(null);
@@ -30,6 +33,24 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
  const [feedback,setFeedback]=useState('');
  const lastInput=useRef(Date.now());
+ function selectTab(next:Tab){
+  if(tab!==next){
+   const url=new URL(window.location.href);
+   if(next==='explore')url.searchParams.delete('section');else url.searchParams.set('section',next);
+   window.history.pushState(null,'',url.pathname+url.search);
+  }
+  setTab(next);
+ }
+ useEffect(()=>{
+  const goBack=()=>{
+   const section=new URLSearchParams(window.location.search).get('section');
+   setTab(TABS.some(item=>item.id===section)?section as Tab:'explore');
+   setSeed(null);
+  };
+  window.addEventListener('popstate',goBack);
+  return()=>window.removeEventListener('popstate',goBack);
+ },[]);
+
  const options=promptsForAudience(audience);
  const topics=[...new Set(options.filter(p=>relationship==='all'||p.relationship===relationship).map(p=>p.topic))].sort();
  const filtered=options.filter(p=>(topic==='All topics'||p.topic===topic)&&(relationship==='all'||p.relationship===relationship)&&
@@ -73,7 +94,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  },[userId,householdId]);
  function takePrompt(p:Prompt){
   draft.setPrompt(p.text);setFeedback('Prompt selected. Your existing writing is preserved.');
-  setTab('write');
+  selectTab('write');
  }
  function shuffle(){
   const next=rotatePrompt(filtered,seen,suggested?.id||null);
@@ -82,7 +103,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  function startSharing(next:ShareSeed){setSeed(next);setFeedback('');}
  function startJournal(entry:JournalEntry){
   draft.setText(entry.text);draft.setPrompt(entry.prompt);
-  setEditing({id:entry.id,revision:entry.revision});setPendingLoad(null);setTab('write');setFeedback('Entry loaded for editing.');
+  setEditing({id:entry.id,revision:entry.revision});setPendingLoad(null);selectTab('write');setFeedback('Entry loaded for editing.');
  }
  function loadJournal(entry:JournalEntry){
   if(draft.text.trim()&&(draft.text!==entry.text||draft.prompt!==entry.prompt)){setPendingLoad(entry);return;}
@@ -94,7 +115,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   try{
    await savePrivateJournal(userId,householdId,{id:editing?.id||crypto.randomUUID(),prompt:draft.prompt,text:draft.text},editing?.revision??0);
    await reloadJournal();const cleared=await draft.discard();
-   setEditing(null);setTab('journal');setFeedback(cleared?'Saved privately to this device. No one else can see it.':'Entry saved, but a draft copy remains. Discard it manually.');
+   setEditing(null);selectTab('journal');setFeedback(cleared?'Saved privately to this device. No one else can see it.':'Entry saved, but a draft copy remains. Discard it manually.');
   }catch(e){setJournalError(errorText(e));}
   finally{setJournalBusy(false);}
  }
@@ -117,13 +138,13 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  return <div className="words-hub">
   <div className="words-hub-warning" role="note"><LockKeyhole size={18}/><div><strong>Fictional writing only — security review pending.</strong>
    <p>Private journals and unsent drafts are encrypted locally on this browser. Shared spaces use experimental per-recipient encryption; device recovery and minor-specific privacy review are not ready. Do not enter confidential family, health or therapeutic information.</p></div></div>
-  <nav className="words-hub-tabs" aria-label="Words sections">{TABS.map(item=><button type="button" key={item.id} className={tab===item.id&&!seed?'selected':''} aria-current={tab===item.id&&!seed?'page':undefined} onClick={()=>{setSeed(null);setTab(item.id);setFeedback('');}}>
+  <nav className="words-hub-tabs" aria-label="Words sections">{TABS.map(item=><button type="button" key={item.id} className={tab===item.id&&!seed?'selected':''} aria-current={tab===item.id&&!seed?'page':undefined} onClick={()=>{setSeed(null);selectTab(item.id);setFeedback('');}}>
    <span>{item.title}{item.id==='activity'&&activity.length>0&&<b className="words-activity-count">{activity.length}</b>}</span>
    <small>{item.description}</small></button>)}</nav>
   {feedback&&<p className="words-status" role="status"><Check size={15}/>{feedback}</p>}
   {keyError&&<p className="messages-error" role="alert">Sharing or notification setup: {keyError}. Private journaling remains available.</p>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} people={people}
-    onCreated={sid=>{setSeed(null);setOpenSpaceId(sid);setTab('shared');setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));}}
+    onCreated={sid=>{setSeed(null);setOpenSpaceId(sid);selectTab('shared');setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));}}
     onCancel={()=>setSeed(null)}/>:
   tab==='explore'?<section className="words-explore" aria-label="Prompt library">
    <div className="words-hub-section-top"><div><span className="mono kicker">A GENTLE PLACE TO BEGIN</span><h2>Find the right words.</h2><p className="muted">Browse 100+ thoughtful prompts. Share one as an invitation, or use it as inspiration for your own entry.</p></div></div>
@@ -166,7 +187,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   </section>:
   tab==='journal'?<section className="words-journal-shelf" aria-label="My private journal">
    <div className="words-hub-section-top"><div><span className="mono kicker">ONLY ON THIS DEVICE</span><h2>My journal.</h2><p className="muted">Each saved entry stays private until you deliberately share a snapshot. Clearing site data can permanently erase local entries.</p></div>
-    <button type="button" className="button dark small" onClick={()=>{setEditing(null);setTab('write');}}><PenLine size={15}/> Write something</button></div>
+    <button type="button" className="button dark small" onClick={()=>{setEditing(null);selectTab('write');}}><PenLine size={15}/> Write something</button></div>
    {loadingJournal&&<p className="muted">Opening your local journal…</p>}
    {journalError&&<p className="messages-error" role="alert">{journalError}</p>}
    {!loadingJournal&&entries.length===0&&<p className="words-empty">No saved entries yet. The Write section is a quiet place to start.</p>}
@@ -193,7 +214,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    <div className="words-hub-section-top"><div><span className="mono kicker">YOUR PRIVATE INBOX</span><h2>What's new.</h2><p className="muted">New invitations and discussion updates. No one else can see if or when you open them.</p></div>
     <button type="button" className="quiet small" onClick={()=>void reloadActivity().catch(e=>setPushError(errorText(e)))}><RotateCw size={16}/> Refresh</button></div>
    {!activity.length&&<p className="words-empty">You're caught up. There is no pressure to respond to anything you receive.</p>}
-   <div className="words-activity-ledger">{activity.map(ev=><button type="button" className="words-shared-row" key={ev.id} onClick={()=>{setOpenSpaceId(ev.sourceId);setTab('shared');}}>
+   <div className="words-activity-ledger">{activity.map(ev=><button type="button" className="words-shared-row" key={ev.id} onClick={()=>{setOpenSpaceId(ev.sourceId);selectTab('shared');}}>
     <span className="mono kicker">{new Date(ev.createdAt).toLocaleString()}</span>
     <strong>{ev.eventKind==='shared'?'Someone shared a prompt or journal entry':'A shared space has a new response'}</strong>
     <span className="muted tiny">Open the shared space at your own pace.</span>
