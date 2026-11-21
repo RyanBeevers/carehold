@@ -38,7 +38,7 @@ test('switching to iPhone Passwords cannot silently discard an unregistered reco
  assert.match(store,/storedPendingRecoveryEnvelope/);
  assert.match(store,/storePendingRecoveryEnvelope/);
  assert.match(store,/clearPendingRecoveryEnvelope/);
- assert.match(store,/scope:.*createdAt:Date\.now\(\),envelope/);
+ assert.match(store,/scope,createdAt:Date\.now\(\),envelope/);
  assert.doesNotMatch(store,/pendingRecoveries.*recoveryCode/);
  assert.match(fresh,/mode==='resume-setup'/);
  assert.match(fresh,/storedPendingRecoveryEnvelope\(userId,'fresh'\)/);
