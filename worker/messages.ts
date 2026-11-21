@@ -139,7 +139,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   if(req.method==='GET'){
    const rows=await db.prepare(`SELECT m.id,m.sender_id,m.created_at,COALESCE(mc.envelope_json,c.envelope_json) envelope_json FROM encrypted_messages m
     JOIN encrypted_message_copies c ON c.message_id=m.id AND c.recipient_id=?
-    LEFT JOIN account_migrated_copies mc ON mc.source_kind='direct' AND mc.source_id=m.id AND mc.user_id=c.recipient_id
+    LEFT JOIN account_migrated_copies mc ON mc.source_kind='direct' AND mc.source_id=m.id AND mc.user_id=c.recipient_id AND EXISTS(SELECT 1 FROM account_key_migrations mig WHERE mig.user_id=c.recipient_id AND mig.state='complete')
     WHERE m.thread_id=? ORDER BY m.created_at DESC,m.id DESC LIMIT 100`)
     .bind(user.id,id).all<{id:string,sender_id:string,created_at:string,envelope_json:string}>();
    return respond({messages:(rows.results||[]).reverse().map(r=>({id:r.id,senderId:r.sender_id,createdAt:r.created_at,envelope:JSON.parse(r.envelope_json)}))});
