@@ -85,7 +85,12 @@ function parseSchedule(b:Record<string,unknown>):{schedule:Schedule,times:string
   return {schedule,times:times.sort()};
 }
 function catalogFields(b:Record<string,unknown>,name:string,old?:MedicationRow):MedicationCatalogMetadata{
- try{return parseMedicationCatalog(b,name,old);}
+ const previous=old?{
+  name:old.name,catalogSource:old.catalog_source,catalogIdentifier:old.catalog_identifier,
+  normalizedName:old.normalized_name,brandName:old.brand_name,
+  productStrength:old.product_strength,dosageForm:old.dosage_form
+ }:undefined;
+ try{return parseMedicationCatalog(b,name,previous);}
  catch(e){if(e instanceof CatalogError)bad(e.status,e.message);throw e;}
 }
 function medSchedule(m:MedicationRow):Schedule {return {cadence:m.cadence,weekdays:JSON.parse(m.weekdays_json),intervalDays:m.interval_days??undefined,anchorDate:m.anchor_date??undefined,startDate:m.start_date,endDate:m.end_date};}
