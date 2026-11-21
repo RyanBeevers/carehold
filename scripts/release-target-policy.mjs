@@ -4,7 +4,7 @@
  * Does not contact Cloudflare, fetch credentials, or perform a deployment.
  */
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const placeholder=/replace|placeholder|localhost|127\.0\.0\.1|\.invalid|\.example|^0\.0\.0\.0$/i;
+const placeholder=/replace|placeholder|localhost|127\.0\.0\.1|\.(?:invalid|example)(?:$|[:/])|^0\.0\.0\.0$/i;
 const configuredId=value=>typeof value==='string'&&uuid.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
 
 export function checkProductionTarget(config){
