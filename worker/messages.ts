@@ -4,7 +4,8 @@ import {exactParticipants,matchesKeyRoster,mayStartDirectMessage,pairKey,validPu
 import {validStoredRecoveryEnvelope} from './message-recovery-policy';
 /** Fictional text only: TOFU public key registry, not reviewed E2EE.
  * Fresh-account recovery wraps a stable account key; legacy keys stay intact.
- * Full device revocation, journal sync and key migration are not supported.
+ * Staged key migration and ciphertext-only journal sync are experimental.
+ * Independent per-device cryptographic revocation is not supported.
  * API never receives plaintext or recovery codes. No read receipts. */
 const headers={'Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
 const respond=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers});
