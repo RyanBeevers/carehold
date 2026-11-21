@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
 import {api} from './lib/api';
+import {LegacyMessageMigration} from './LegacyMessageMigration';
 import {samePublicKey,storedMessageIdentity,type PublicKey} from './lib/message-crypto';
 
 type Status='checking'|'configured'|'restore'|'legacy'|'setup'|'mismatch'|'error';
@@ -39,5 +40,5 @@ export function RecoveryReadiness({userId}:{userId:string}){
   mismatch:'The key on this browser does not match the enrolled key. Do not clear browser storage or overwrite keys.',
   error:'Recovery status unavailable: '+error
  };
- return <div className="setting-section"><div><h2>Encrypted data recovery</h2><p role="status">{info[status]}</p><p className="fine-print">Passkey sign-in alone does not restore decryption keys. Do not use private family information until legacy migration, device revocation and security review are finished.</p></div><a className="button outline" href="/words">Open Words recovery</a></div>;
+ return <><div className="setting-section"><div><h2>Encrypted data recovery</h2><p role="status">{info[status]}</p><p className="fine-print">Passkey sign-in alone does not restore decryption keys. Do not use private family information until legacy migration, device revocation and security review are finished.</p></div><a className="button outline" href="/words">Open Words recovery</a></div>{status==='legacy'&&<LegacyMessageMigration userId={userId}/>}</>;
 }
