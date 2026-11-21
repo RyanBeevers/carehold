@@ -7,6 +7,7 @@ import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
 import {handleMessages} from './messages';
+import {handlePrivateJournal} from './private-journal';
 import {handleWordSpaces} from './words-spaces';
 import {CatalogError,normalizeMedicationSearch,searchCatalog,enforceCatalogRateLimit,parseMedicationCatalog,type MedicationCatalogMetadata} from './medication-catalog';
 
@@ -170,6 +171,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   }
   await requirePasskey(db,user.id);
    if(path.startsWith('/api/messages/'))return handleMessages(req,env,user,ctx);
+   if(path==='/api/private-journal'||path.startsWith('/api/private-journal/'))return handlePrivateJournal(req,env,user);
    if(path==='/api/words/people'||path==='/api/words/push-preference'||path==='/api/words/spaces'||path.startsWith('/api/words/spaces/')||path==='/api/activity'||path==='/api/activity/seen')return handleWordSpaces(req,env,user,ctx);
   if(path==='/api/me/audience'&&req.method==='POST') {
     const b=await jsonBody(req);
