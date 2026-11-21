@@ -84,8 +84,9 @@ function openVault():Promise<IDBDatabase>{
 }
 async function readRow<T>(db:IDBDatabase,storeName:'keys'|'drafts',scope:string):Promise<T|undefined>{
  const tx=db.transaction(storeName,'readonly');
+ const finished=txFinished(tx); // Subscribe before the transaction can complete.
  const row=await request(tx.objectStore(storeName).get(scope)) as T|undefined;
- await txFinished(tx);
+ await finished;
  return row;
 }
 export async function enableDeviceVault(userId:string,householdId:string):Promise<void>{
