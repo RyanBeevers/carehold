@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {useIdleSecurity} from './lib/useIdleSecurity';
 import {ArrowUpRight,Bell,BellOff,BookOpen,CalendarDays,Check,ChevronLeft,ChevronRight,Copy,HeartHandshake,KeyRound,Menu,Minus,Plus,Settings2,ShieldCheck,Sun,Moon,Monitor,LockKeyhole,Users,Wind,X} from 'lucide-react';
-import {api,invalidatePendingApiResponses,StaleSessionRequest,type Household,type Person,type Medication,type Entry,type DoseEvent} from './lib/api';
+import {api,invalidatePendingApiResponses,StaleSessionRequest,type Household,type Person,type LinkedSelfProfile,type Medication,type Entry,type DoseEvent} from './lib/api';
 import {authClient} from './lib/auth-client';
 import {promptsForAudience} from './lib/prompts';
 import type {Audience} from '../shared/audience';
@@ -59,6 +59,7 @@ export default function App(){
  const [loading,setLoading]=useState(true);
  const [households,setHouseholds]=useState<Household[]>([]),[hid,setHid]=useState('');
  const [profiles,setProfiles]=useState<Person[]>([]),[entries,setEntries]=useState<Entry[]>([]);
+ const [myProfile,setMyProfile]=useState<LinkedSelfProfile|null>(null);
  const [members,setMembers]=useState<Member[]>([]),[memberToRemove,setMemberToRemove]=useState<Member|null>(null);
  const [page,setPage]=useState<Page>('today'),[selected,setSelected]=useState(''),[meds,setMeds]=useState<Medication[]>([]),[history,setHistory]=useState<DoseEvent[]>([]);
  const [date,setDate]=useState(''),[error,setError]=useState('');
@@ -121,7 +122,7 @@ export default function App(){
  const clearSensitive=useCallback(()=>{
    invalidatePendingApiResponses();
    setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);
-   setHouseholds([]);setHid('');setProfiles([]);setEntries([]);setMeds([]);setHistory([]);setMembers([]);
+   setHouseholds([]);setHid('');setProfiles([]);setMyProfile(null);setEntries([]);setMeds([]);setHistory([]);setMembers([]);
    setSelected('');setModal(null);setPending({});setInviteCreated('');setPassword('');setEmail('');
    setMedForm(blankMed());setDoseNote('');setCorrectionReason('');setPersonName('');
    setPushEnabled(false);setPushConfig(null);setPushFeedback(null);setPushSubscriptionCount(0);
@@ -196,6 +197,18 @@ export default function App(){
   await api(`/members/${encodeURIComponent(memberToRemove.user_id)}?householdId=${encodeURIComponent(hid)}`,'DELETE');
   setModal(null);setMemberToRemove(null);await refreshMembers();notice('Caregiver access was revoked.');
  }catch(e){fail(e);}finally{setSaving(false);}}
+ const refreshMyProfile=useCallback(async()=>{
+   if(!hid||!user?.id||!hasPasskey)return;
+   try{
+     const result=await api<{profile:LinkedSelfProfile|null}>(`/me/linked-profile?householdId=${encodeURIComponent(hid)}`);
+     setMyProfile(result.profile);
+   }catch(e){
+     if(e instanceof StaleSessionRequest)return;
+     setMyProfile(null);
+     fail(e);
+   }
+ },[hid,user?.id,hasPasskey]);
+ useEffect(()=>{setMyProfile(null);void refreshMyProfile();},[refreshMyProfile]);
  const refreshProfiles=useCallback(async()=>{
    if(!hid)return;
    try{const r=await api<{profiles:Person[]}>(`/profiles?householdId=${encodeURIComponent(hid)}`);setProfiles(r.profiles);setSelected(old=>r.profiles.some(x=>x.id===old)?old:(r.profiles[0]?.id||''));}catch(e){fail(e);}
@@ -253,7 +266,7 @@ export default function App(){
    setSaving(true);
    try{
      await api(`/profiles/${pending.profile.id}/linked-account`,'PUT',{userId:linkUserId||null});
-     setModal(null);await refreshProfiles();
+     setModal(null);await Promise.all([refreshProfiles(),refreshMyProfile()]);
      notice(linkUserId?'Account linked to profile. No medication permissions were changed.':'Account unlinked. Medication history remains unchanged.');
    }catch(e){fail(e);}finally{setSaving(false);}
  }
@@ -386,7 +399,10 @@ export default function App(){
   <div className="summary-strip"><div><span className="mono kicker">ON THE LEDGER</span><strong>{entries.length.toString().padStart(2,'0')}</strong><span>scheduled moments</span></div><div><span className="mono kicker">RECORDED</span><strong>{entries.filter(x=>x.event).length.toString().padStart(2,'0')}</strong><span>with a status</span></div><div className="summary-phrase">A record is a record.<br/><em>Not a reminder to guess.</em></div></div>
   <div className="ledger-heading"><span>TIME / PERSON</span><span>MEDICATION &amp; RECORD</span></div><div className="ledger">{entries.length===0?<div className="empty-state"><span className="empty-star">✳</span><h2>Nothing on this day’s ledger.</h2><p>{profiles.length?'You can review another day, or add a scheduled medication under People.':'Start by adding a person to your care circle.'}</p><button className="button outline" onClick={()=>setPage('people')}>Go to people <ArrowUpRight size={16}/></button></div>:entries.map(e=>{const overdue=!e.event&&e.dueAt&&Date.parse(e.dueAt)<Date.now();return <div className="ledger-row" key={e.key}><div className="ledger-when"><time>{e.time}</time><div className="ledger-person"><IconLabel kind={e.kind}/><span>{e.person}</span></div></div><div className="ledger-detail"><div className="ledger-title"><h3>{e.medicationName}</h3><span className={`status-pill ${e.event?.event_type|| (overdue?'overdue':'pending')}`}>{e.event?statusNames[e.event.event_type]:overdue?'Overdue • unrecorded':'Not recorded yet'}</span></div><p>{e.dose}{e.instructions?` · ${e.instructions}`:''}</p><div className="ledger-action">{e.event?<span className="ledger-recorded"><Check size={16}/> Recorded {stamp(new Date(e.event.recorded_at))}</span>:<button className="button dark" onClick={()=>beginDose(e)}>Record this dose <ArrowUpRight size={16}/></button>}</div></div></div>})}</div><div className="footnote"><Wind size={18}/><span>Overdue only means that no one has recorded an outcome. It never means a dose was automatically marked missed.</span></div>
  </>}
- {page==='people'&&<><PageTitle eyebrow="THOSE WE HOLD CLOSE" title="Your people & pets" subtitle="A home for each person’s medication schedule, past records, and trusted caregivers."/><div className="section-heading"><span>PROFILES / {profiles.length.toString().padStart(2,'0')}</span>{owner&&<button className="button outline" onClick={()=>{setPersonName('');setPersonKind('adult');setModal('profile');}}><Plus size={16}/> Add a person or pet</button>}</div>
+ {page==='people'&&<><PageTitle eyebrow="THOSE WE HOLD CLOSE" title="Your people & pets" subtitle="A home for each person’s medication schedule, past records, and trusted caregivers."/>{myProfile&&<section className="my-profile-summary" aria-label="My linked care profile">
+   <div><span className="mono kicker">MY CARE PROFILE</span><h2>{myProfile.displayName}</h2><p>{myProfile.canViewSchedule?'This account has been granted medication schedule access.':'This account is linked to your profile, but schedule details have not been shared with you.'} Your identity link does not grant private journal or conversation access.</p></div>
+   {myProfile.canViewSchedule&&<button className="button outline" type="button" onClick={()=>{setSelected(myProfile.id);}}><ArrowUpRight size={16}/> View my medication plan</button>}
+ </section>}<div className="section-heading"><span>PROFILES / {profiles.length.toString().padStart(2,'0')}</span>{owner&&<button className="button outline" onClick={()=>{setPersonName('');setPersonKind('adult');setModal('profile');}}><Plus size={16}/> Add a person or pet</button>}</div>
   {profiles.length===0?<div className="empty-state"><span className="empty-star">✺</span><h2>Who are we looking after?</h2><p>Add an adult, child, or pet to start the medication ledger.</p>{owner&&<button className="button primary" onClick={()=>setModal('profile')}>Add the first profile</button>}</div>:<div className="person-layout"><div className="person-list" aria-label="Choose a profile">{profiles.map(p=><button key={p.id} className={p.id===selected?'person-list-item selected':'person-list-item'} onClick={()=>setSelected(p.id)}><IconLabel kind={p.kind}/><span>{p.display_name}<small>{p.kind}</small></span><ArrowUpRight size={18}/></button>)}</div><section className="person-detail">{person&&<><div className="detail-intro"><span className="form-index">PROFILE / {person.kind.toUpperCase()}</span><h2>{person.display_name}<span>.</span></h2><div className="detail-actions"><button className="button dark" onClick={()=>newMed(person.id)}><Plus size={17}/> Add medication</button>{owner&&person.kind!=='pet'&&<button className="button outline" onClick={()=>beginLink(person)}>{person.linked_user_id?'Change linked account':'Link an account'}</button>}</div></div>{person.kind!=='pet'&&(person.linked_user_id||person.is_self===1)&&<p className="linked-summary"><Check size={15}/>{person.is_self===1?'This profile is linked to your account.':owner?`Linked to ${members.find(x=>x.user_id===person.linked_user_id)?.name||'a circle member'}.`:'Linked account'}</p>}<h3 className="subsection-title">Medication plan <span>{meds.length.toString().padStart(2,'0')}</span></h3>{meds.length===0?<p className="muted">No medications added yet.</p>:meds.map(m=><div className="med-row" key={m.id}><div><span className="mono muted tiny">{m.cadence.replace('_',' ').toUpperCase()}</span><h4>{m.name}</h4><p>{m.dose} {m.form?` · ${m.form}`:''}</p><p className="muted tiny">{m.cadence==='prn'?'As-needed medication':m.times.join(' / ')}</p></div><div className="med-row-actions"><button className="quiet small" onClick={()=>newMed(person.id,m)}>Edit</button>{m.cadence==='prn'&&<button className="button outline small" onClick={()=>beginDose(undefined,m)}>Record PRN</button>}</div></div>)}<h3 className="subsection-title history-title">Administration history <span>{history.length.toString().padStart(2,'0')}</span></h3><p className="muted tiny">Corrections append to this ledger; the original entries remain.</p>{history.length===0?<p className="muted">No administration history yet.</p>:history.map(e=><div className="history-row" key={e.id}><div><b>{e.med_name_snapshot||'Medication'}</b><span className="history-status">{statusNames[e.event_type]}</span><small>{e.actor_name||'Caregiver'} · {stamp(new Date(e.occurred_at))}{e.supersedes_event_id?' · corrected':''}</small></div><button className="quiet small" onClick={()=>beginCorrection(e)}>Correct</button></div>)}</>}</section></div>}
  </>}
  {page==='words'&&<><PageTitle eyebrow="WORDS THAT OPEN DOORS" title={audience==='parent'?'Questions worth asking':audience==='teen'?'Make room for your voice':'Start with a little word'} subtitle={audience==='parent'?'Conversation starters you can offer without expecting a response.':audience==='teen'?'Words for when you need to be heard, or need space.':'A few simple ways to say what you need.'}/><div className="words-explainer"><span className="words-glyph">“</span><div><strong>Prompts, not pressure. For {AUDIENCE_LABELS[audience].toLowerCase()}.</strong><p>These are ideas to copy or use in your own way. Journaling and messages aren't enabled yet. Nobody can see whether you looked at or copied a prompt.</p></div></div><div className="prompt-list">{promptsForAudience(audience).map((p,i)=><article className="prompt-item" key={p.id}><div className="prompt-left"><span>{(i+1).toString().padStart(2,'0')} / {p.topic.toUpperCase()}</span><span className="muted tiny">{p.audience==='all'?'FOR ANYONE':p.audience==='parent'?'FOR PARENTS':p.audience==='teen'?'FOR TEENS':'FOR KIDS'}</span></div><blockquote>{p.text}</blockquote><div className="copy-action"><button className="button outline small" onClick={()=>void copy(p.text,p.id)}>{copyFeedback?.key===p.id&&copyFeedback.success?<Check size={15}/>:<Copy size={15}/>} {copyFeedback?.key===p.id&&copyFeedback.success?'Copied':'Copy'}</button><span className={`copy-feedback ${copyFeedback?.key===p.id&&!copyFeedback.success?'is-error':''}`} role="status" aria-live="polite">{copyFeedback?.key===p.id?copyFeedback.message:''}</span></div></article>)}</div></>}

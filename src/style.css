@@ -81,3 +81,10 @@
 .push-diagnostics .kicker{margin-bottom:6px;color:var(--muted)}
 .push-diagnostics p{font-size:12px;line-height:1.5;margin:0}
 .push-diagnostics .notification-feedback{margin-top:8px}
+
+/* A linked identity can be acknowledged without exposing ungranted care data. */
+.my-profile-summary{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:23px 28px;margin:0 0 28px;border-block:1px solid var(--line);background:var(--panel)}
+.my-profile-summary h2{font:550 29px 'Fraunces Variable',Georgia,serif;margin:8px 0 7px;color:var(--ink)}
+.my-profile-summary p{max-width:580px;margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+.my-profile-summary .button{flex-shrink:0}
+@media(max-width:720px){.my-profile-summary{flex-direction:column;align-items:stretch;padding:20px 18px}.my-profile-summary .button{align-self:flex-start}}
