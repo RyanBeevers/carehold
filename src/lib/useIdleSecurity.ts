@@ -40,14 +40,18 @@ export function useIdleSecurity(enabled:boolean,onLock:()=>void,onHeartbeat:()=>
        heartbeatRef.current();
      }
    };
-   for(const name of ['pointerdown','keydown','touchstart','wheel'])window.addEventListener(name,noteActivity,{passive:true});
+   // Input and composition events cover mobile keyboards, dictation, autofill and
+   // accessibility typing that may not emit keydown. Never treat the mere
+   // passage of time or a background tab as authenticated activity.
+   const activityEvents=['pointerdown','keydown','touchstart','wheel','input','change','compositionupdate'];
+   for(const name of activityEvents)window.addEventListener(name,noteActivity,{passive:true});
    document.addEventListener('visibilitychange',onVisibility);
    window.addEventListener('pageshow',onVisibility);
    window.addEventListener('focus',onVisibility);
    const interval=window.setInterval(heartbeat,10_000);
    return()=>{
      window.clearInterval(interval);
-     for(const name of ['pointerdown','keydown','touchstart','wheel'])window.removeEventListener(name,noteActivity);
+     for(const name of activityEvents)window.removeEventListener(name,noteActivity);
      document.removeEventListener('visibilitychange',onVisibility);
      window.removeEventListener('pageshow',onVisibility);
      window.removeEventListener('focus',onVisibility);
