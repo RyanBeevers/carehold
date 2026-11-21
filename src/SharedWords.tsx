@@ -135,9 +135,12 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
    catch{return {...p,content:null};}
   }));
   setDetail({...r,posts});
-  // A private per-recipient acknowledgement. No sender can query this status.
-  await api('/activity/seen','POST',{householdId,sourceKind:'words',sourceId:spaceId});
-  window.dispatchEvent(new Event('carehold:activity-changed'));
+  // A missing or undecipherable entry must not silently clear this recipient's inbox.
+  // This acknowledgement remains recipient-private and never reaches the sender.
+  if(posts.every(p=>p.content!==null)){
+   await api('/activity/seen','POST',{householdId,sourceKind:'words',sourceId:spaceId});
+   window.dispatchEvent(new Event('carehold:activity-changed'));
+  }
  }
  useEffect(()=>{
   let live=true;
