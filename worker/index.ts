@@ -5,6 +5,7 @@ import { scheduledOn, localDate, localToInstant, occurrenceKey, validDate, valid
 import { canAccess, validCapabilities, type Role, type Capability } from '../shared/policy';
 import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
+import {pushConfigured} from './push-config';
 
 const dataHeaders = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'"};
 class ApiError extends Error { constructor(public code:number,message:string){super(message);} }
@@ -186,10 +187,13 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
   }
   if(path==='/api/profiles'&&req.method==='GET') {
     const hid=required(url.searchParams.get('householdId')),role=await member(db,hid,user.id);
-    const results=await db.prepare(`SELECT p.id,p.display_name,p.kind,p.household_id FROM profiles p
+    const results=await db.prepare(`SELECT p.id,p.display_name,p.kind,p.household_id,
+      CASE WHEN ?='owner' THEN p.linked_user_id ELSE NULL END AS linked_user_id,
+      CASE WHEN p.linked_user_id=? THEN 1 ELSE 0 END AS is_self
+      FROM profiles p
       WHERE p.household_id=? AND p.archived_at IS NULL AND (?='owner' OR EXISTS
         (SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule'))
-      ORDER BY p.created_at`).bind(hid,role,user.id).all();
+      ORDER BY p.created_at`).bind(role,user.id,hid,role,user.id).all();
     return json({profiles:results.results});
   }
   if(path==='/api/profiles'&&req.method==='POST') {
@@ -198,6 +202,37 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     if(!['adult','child','pet'].includes(String(kind)))bad(400,'Select adult, child or pet.');
     const id=uuid();await db.prepare('INSERT INTO profiles(id,household_id,display_name,kind,created_at) VALUES(?,?,?,?,?)').bind(id,hid,name,kind,now()).run();
     return json({id,display_name:name,kind,household_id:hid},201);
+  }
+  // Profile identity does not grant schedule, history or future message access.
+  const profileLink=path.match(/^\/api\/profiles\/([0-9a-f-]+)\/linked-account$/);
+  if(profileLink&&req.method==='PUT') {
+    const p=await db.prepare(`SELECT id,household_id,kind,linked_user_id FROM profiles
+      WHERE id=? AND archived_at IS NULL`).bind(profileLink[1])
+      .first<{id:string,household_id:string,kind:'adult'|'child'|'pet',linked_user_id:string|null}>();
+    if(!p)bad(404,'Profile not found.');
+    await owner(db,p!.household_id,user.id);
+    if(p!.kind==='pet')bad(400,'Pets cannot be linked to human accounts.');
+    const b=await jsonBody(req),nextId=b.userId===null?null:required(b.userId);
+    if(nextId) {
+      const found=await db.prepare('SELECT 1 FROM household_members WHERE household_id=? AND user_id=?')
+        .bind(p!.household_id,nextId).first();
+      if(!found)bad(400,'Select an existing member of this care circle.');
+    }
+    if(p!.linked_user_id===nextId)return json({linkedUserId:nextId,unchanged:true});
+    if(p!.linked_user_id&&nextId)bad(409,'Unlink the existing account first.');
+    const ts=now();
+    try {
+      await db.batch([
+        db.prepare(`INSERT INTO profile_link_changes(id,household_id,profile_id,previous_user_id,next_user_id,changed_by,changed_at)
+          VALUES(?,?,?,?,?,?,?)`).bind(uuid(),p!.household_id,p!.id,p!.linked_user_id,nextId,user.id,ts),
+        db.prepare('UPDATE profiles SET linked_user_id=? WHERE id=? AND household_id=? AND archived_at IS NULL')
+          .bind(nextId,p!.id,p!.household_id)
+      ]);
+    } catch(err) {
+      if(String(err).includes('UNIQUE constraint'))bad(409,'That account is already linked to another profile in this circle.');
+      throw err;
+    }
+    return json({linkedUserId:nextId,linked:true});
   }
   if(path==='/api/medications'&&req.method==='GET') {
     const pid=required(url.searchParams.get('profileId'));await profileAccess(db,pid,user.id,'view_schedule');
@@ -360,7 +395,47 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     if(!invitation)bad(404,'Invitation expired or already accepted.');
     return json(await claimInvitation(db,invitation as InvitationRow,user.id));
   }
-  if(path==='/api/push/config'&&req.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null});
+  if(path==='/api/push/config'&&req.method==='GET') {
+    const configured=pushConfigured(env);
+    return json({configured,publicKey:configured?env.VAPID_PUBLIC_KEY:null});
+  }
+  if(path==='/api/push/status'&&req.method==='GET') {
+    const hid=required(url.searchParams.get('householdId'));
+    await member(db,hid,user.id);
+    const [pref,subs]=await Promise.all([
+      db.prepare('SELECT enabled FROM push_preferences WHERE user_id=? AND household_id=?').bind(user.id,hid).first<{enabled:number}>(),
+      db.prepare('SELECT COUNT(*) AS count FROM push_subscriptions WHERE user_id=?').bind(user.id).first<{count:number}>()
+    ]);
+    return json({configured:pushConfigured(env),enabled:pref?.enabled===1,subscriptionCount:subs?.count??0});
+  }
+  if(path==='/api/push/test'&&req.method==='POST') {
+    const b=await jsonBody(req),hid=required(b.householdId);
+    await member(db,hid,user.id);
+    if(!pushConfigured(env))bad(503,'Push is not configured. Add VAPID keys to local secrets and restart Wrangler.');
+    const pref=await db.prepare('SELECT enabled FROM push_preferences WHERE user_id=? AND household_id=?').bind(user.id,hid).first<{enabled:number}>();
+    if(pref?.enabled!==1)bad(409,'Enable reminders for this household before testing.');
+    const subs=await db.prepare('SELECT id,endpoint,p256dh,auth_secret FROM push_subscriptions WHERE user_id=? LIMIT 10').bind(user.id)
+      .all<{id:string,endpoint:string,p256dh:string,auth_secret:string}>();
+    if(!subs.results.length)bad(409,'No push-enabled device is registered.');
+    // Per-user atomic cooldown prevents notification spam.
+    const ts=now(),cutoff=new Date(Date.now()-60_000).toISOString();
+    const claimed=await db.prepare(`INSERT INTO push_test_rate_limits(user_id,last_sent_at) VALUES(?,?)
+      ON CONFLICT(user_id) DO UPDATE SET last_sent_at=excluded.last_sent_at
+      WHERE push_test_rate_limits.last_sent_at<? RETURNING last_sent_at`).bind(user.id,ts,cutoff).first();
+    if(!claimed)bad(429,'Please wait one minute before testing again.');
+    let sent=0,failed=0;
+    for(const sub of subs.results){
+      try{
+        const accepted=await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
+          {title:'A moment for care',body:'Your Carehold notification test arrived.',url:'/',tag:'carehold-test'},
+          {publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!,subject:env.VAPID_SUBJECT!});
+        if(accepted)sent++;
+        else{failed++;await db.prepare('DELETE FROM push_subscriptions WHERE id=? AND user_id=?').bind(sub.id,user.id).run();}
+      }catch{failed++;}
+    }
+    if(!sent)bad(502,'The push service did not accept the test. Check your device subscription and VAPID keys.');
+    return json({accepted:sent,failed});
+  }
   if(path==='/api/push/subscribe'&&req.method==='POST') {
     const b=await jsonBody(req),sub=b.subscription as any;
     const endpoint=trim(sub?.endpoint,2048),urlEndpoint=(()=>{try{return new URL(endpoint);}catch{return null;}})();
@@ -388,7 +463,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
 }
 
 async function reminders(env:CareEnv) {
-  if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY||!env.VAPID_SUBJECT)return;
+  if(!pushConfigured(env))return;
   const db=env.DB,time=Date.now();
   const result=await db.prepare(`SELECT m.*,p.household_id,h.timezone FROM medications m JOIN profiles p ON p.id=m.profile_id JOIN households h ON h.id=p.household_id
     WHERE m.archived_at IS NULL AND p.archived_at IS NULL AND m.cadence!='prn' LIMIT 500`).all<MedicationRow&{household_id:string,timezone:string}>();

@@ -48,6 +48,17 @@ class DatabaseIntegrity(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT invitation_id FROM pending_household_invites WHERE user_id='u2'").fetchone()[0],'i1')
         self.assertIsNone(self.db.execute("SELECT 1 FROM household_members WHERE user_id='u2'").fetchone())
 
+    def test_linked_user_must_be_unique_per_household(self):
+        self.db.execute("INSERT INTO household_members VALUES('h1','u2','member','now')")
+        self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,linked_user_id,created_at) VALUES('p2','h1','Person 2','adult','u2','now')")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("UPDATE profiles SET linked_user_id='u2' WHERE id='p1'")
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM profile_grants").fetchone()[0],0)
+    def test_profile_link_history_and_push_cooldown(self):
+        self.db.execute("INSERT INTO profile_link_changes(id,household_id,profile_id,changed_by,changed_at) VALUES('l1','h1','p1','u1','now')")
+        self.db.execute("INSERT INTO push_test_rate_limits(user_id,last_sent_at) VALUES('u1','now')")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("INSERT INTO push_test_rate_limits(user_id,last_sent_at) VALUES('u1','later')")
     def test_duplicate_member_and_push_delivery_rejected(self):
         with self.assertRaises(sqlite3.IntegrityError):self.db.execute("INSERT INTO household_members VALUES('h1','u1','caregiver','now')")
         self.db.execute("INSERT INTO push_deliveries(id,user_id,occurrence_key,state) VALUES('x','u1','occ','failed')")
