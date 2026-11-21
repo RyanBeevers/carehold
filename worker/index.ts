@@ -185,6 +185,23 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     ]);
     return json({id,name,timezone:zone},201);
   }
+  // Identity association is distinct from authorization. The member can
+  // learn only which profile is linked to their own account, not its care data.
+  if(path==='/api/me/linked-profile'&&req.method==='GET'){
+    const hid=required(url.searchParams.get('householdId'));
+    const role=await member(db,hid,user.id);
+    const linked=await db.prepare(`SELECT id,display_name,kind FROM profiles
+      WHERE household_id=? AND linked_user_id=? AND archived_at IS NULL LIMIT 1`).bind(hid,user.id)
+      .first<{id:string,display_name:string,kind:'adult'|'child'}>();
+    if(!linked)return json({profile:null});
+    const grants=await db.prepare('SELECT capability FROM profile_grants WHERE profile_id=? AND user_id=?')
+      .bind(linked.id,user.id).all<{capability:Capability}>();
+    const values=(grants.results||[]).map(g=>g.capability);
+    return json({profile:{id:linked.id,displayName:linked.display_name,kind:linked.kind,
+      canViewSchedule:canAccess(role,values,'view_schedule'),
+      canRecordDose:canAccess(role,values,'record_dose'),
+      canViewHistory:canAccess(role,values,'view_history')}});
+  }
   if(path==='/api/profiles'&&req.method==='GET') {
     const hid=required(url.searchParams.get('householdId')),role=await member(db,hid,user.id);
     const results=await db.prepare(`SELECT p.id,p.display_name,p.kind,p.household_id,
