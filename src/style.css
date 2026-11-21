@@ -350,3 +350,15 @@
 }
 .words-discussion-ledger .words-private-note .kicker{color:var(--ink);font-weight:750}
 .words-discussion-ledger .words-private-note p{white-space:pre-wrap;overflow-wrap:anywhere}
+
+
+/* Recovery is intentionally an explicit, opt-in encryption gate, not a toast. */
+.recovery-gate{border:1px solid var(--line);border-left:3px solid var(--coral);background:var(--white);padding:24px;margin:20px 0 28px;display:grid;gap:13px;max-width:760px}
+.recovery-gate h3{font:550 25px 'Fraunces Variable',serif;margin:0}
+.recovery-gate p{font-size:13px;line-height:1.65;margin:0}
+.recovery-gate form{display:grid;gap:14px}
+.recovery-gate .button{justify-self:start}
+.recovery-secret{display:block;max-width:100%;white-space:normal;overflow-wrap:anywhere;font:600 15px/1.7 'IBM Plex Mono',monospace;letter-spacing:.03em;color:var(--ink);background:var(--paper);border:1px dashed var(--line);padding:16px}
+.recovery-confirm{display:flex;align-items:flex-start;gap:12px;font-size:13px;font-weight:500;max-width:560px;line-height:1.5}
+.recovery-confirm input{width:18px;height:18px;flex:0 0 auto;margin:1px 0 0;accent-color:var(--green)}
+@media(max-width:720px){.recovery-gate{padding:18px}.recovery-secret{font-size:12px}}
