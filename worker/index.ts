@@ -305,7 +305,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     const queries=[db.prepare(`INSERT INTO medications(id,profile_id,name,form,dose,instructions,cadence,weekdays_json,interval_days,anchor_date,start_date,end_date,clinician,refill_note,created_at,updated_at,catalog_source,catalog_identifier,normalized_name,brand_name,product_strength,dosage_form)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,pid,name,trim(b.form),dose,trim(b.instructions,2000),schedule.cadence,JSON.stringify(schedule.weekdays||[]),schedule.intervalDays??null,schedule.anchorDate??null,schedule.startDate,schedule.endDate??null,trim(b.clinician),trim(b.refillNote),ts,ts,catalog.catalogSource,catalog.catalogIdentifier,catalog.normalizedName,catalog.brandName,catalog.productStrength,catalog.dosageForm),
       ...times.map(t=>db.prepare('INSERT INTO medication_times(medication_id,hhmm) VALUES(?,?)').bind(id,t)),
-      db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)').bind(uuid(),id,user.id,ts,null,JSON.stringify({...b,times}))];
+      db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)').bind(uuid(),id,user.id,ts,null,JSON.stringify({...b,...catalog,times}))];
     await db.batch(queries);return json({id},201);
   }
   const medMatch=path.match(/^\/api\/medications\/([0-9a-f-]+)$/);
@@ -317,7 +317,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
       db.prepare(`UPDATE medications SET name=?,form=?,dose=?,instructions=?,cadence=?,weekdays_json=?,interval_days=?,anchor_date=?,start_date=?,end_date=?,clinician=?,refill_note=?,updated_at=?,catalog_source=?,catalog_identifier=?,normalized_name=?,brand_name=?,product_strength=?,dosage_form=? WHERE id=?`).bind(name,trim(b.form),dose,trim(b.instructions,2000),schedule.cadence,JSON.stringify(schedule.weekdays||[]),schedule.intervalDays??null,schedule.anchorDate??null,schedule.startDate,schedule.endDate??null,trim(b.clinician),trim(b.refillNote),ts,catalog.catalogSource,catalog.catalogIdentifier,catalog.normalizedName,catalog.brandName,catalog.productStrength,catalog.dosageForm,old.id),
       db.prepare('DELETE FROM medication_times WHERE medication_id=?').bind(old.id),
       ...times.map(t=>db.prepare('INSERT INTO medication_times(medication_id,hhmm) VALUES(?,?)').bind(old.id,t)),
-      db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)').bind(uuid(),old.id,user.id,ts,JSON.stringify({...old,times:before.results.map((x:any)=>x.hhmm)}),JSON.stringify({...b,times}))
+      db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)').bind(uuid(),old.id,user.id,ts,JSON.stringify({...old,times:before.results.map((x:any)=>x.hhmm)}),JSON.stringify({...b,...catalog,times}))
     ]);
     return json({updated:true});
   }
