@@ -350,9 +350,9 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     </div>
    </article>)}</div>
    {filteredJournal.length>10&&<div className="words-response-actions">
-    <button type="button" className="button outline small" disabled={safeJournalPage===0} onClick={()=>setJournalPage(p=>Math.max(0,p-1))}>Previous</button>
+    <button type="button" className="button outline small" disabled={safeJournalPage===0} onClick={()=>setJournalPage(Math.max(0,safeJournalPage-1))}>Previous</button>
     <span className="muted tiny">Page {safeJournalPage+1} of {Math.ceil(filteredJournal.length/10)}</span>
-    <button type="button" className="button outline small" disabled={(safeJournalPage+1)*10>=filteredJournal.length} onClick={()=>setJournalPage(p=>p+1)}>Next</button>
+    <button type="button" className="button outline small" disabled={(safeJournalPage+1)*10>=filteredJournal.length} onClick={()=>setJournalPage(safeJournalPage+1)}>Next</button>
    </div>}
   </section>:
   tab==='shared'?<SharedSpaces userId={userId} householdId={householdId} identity={identity} openSpaceId={openSpaceId}
