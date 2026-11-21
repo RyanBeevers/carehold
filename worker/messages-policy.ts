@@ -20,3 +20,19 @@ export function validSealedEnvelope(value:unknown):value is SealedEnvelope{
  typeof v.ct==='string'&&v.ct.length>=22&&v.ct.length<=8500&&/^[A-Za-z0-9_-]+$/.test(v.ct);
 }
 export const pairKey=(a:string,b:string)=>[a,b].sort().join(':');
+
+/** A stale sender must never encrypt for an obsolete recipient public key. */
+export function matchesKeyRoster(
+ supplied:unknown,participants:readonly {id:string,publicKey:unknown}[]
+):boolean{
+ if(!supplied||typeof supplied!=='object'||Array.isArray(supplied))return false;
+ const roster=supplied as Record<string,unknown>;
+ if(!exactParticipants(Object.keys(roster),participants.map(p=>p.id)))return false;
+ return participants.every(p=>{
+  const given=roster[p.id] as Record<string,unknown>|undefined;
+  const actual=p.publicKey as Record<string,unknown>|null;
+  return validPublicJwk(given)&&validPublicJwk(actual)&&
+   given!.kty===actual!.kty&&given!.crv===actual!.crv&&
+   given!.x===actual!.x&&given!.y===actual!.y;
+ });
+}
