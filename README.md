@@ -8,4 +8,4 @@ The `feat/carehold-mvp-foundation` draft branch now implements medication schedu
 
 **Not deployed; not security-audited; not a clinical system.** The local journal and shared-content encryption are experimental, single-device, unreviewed and not approved for real confidential child, medical or therapeutic writing. Cloudflare staging and production targets are still placeholders. Medication logging should only replace existing household recordkeeping after tests, account access, backup and recovery are verified.
 
-For immediate hands-on testing and local D1 backup, see **[Household first-day checklist](./docs/HOUSEHOLD_FIRST_DAY.md)**. For engineering and privacy boundaries, see [AGENTS.md](./AGENTS.md), [docs/SETUP.md](./docs/SETUP.md), and [docs/SECURITY.md](./docs/SECURITY.md).
+For setup and local D1 backup, see **[Household first-day checklist](./docs/HOUSEHOLD_FIRST_DAY.md)**. Run **[the consolidated E2E acceptance gate](./docs/E2E_ACCEPTANCE.md)** once at feature freeze, after all code changes are included. For engineering and privacy boundaries, see [AGENTS.md](./AGENTS.md), [docs/SETUP.md](./docs/SETUP.md), and [docs/SECURITY.md](./docs/SECURITY.md).

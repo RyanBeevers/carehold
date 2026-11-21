@@ -36,7 +36,7 @@ Run `npm run dev:worker` and `npm run dev` in separate terminals. Use **http://l
 ### Private journal and prompt-first shared spaces
 
 1. Go to **Words → Explore prompts**. Choose a question using the relationship/category filters or shuffle. Use **Write from this** to keep the prompt attached, or **Share prompt** to invite selected members without writing first.
-2. In **Write**, enable encrypted local draft autosave if you might be interrupted. **Save privately** to add a separate encrypted entry to **My journal**; writing is never shared automatically.
+2. In **Write**, enable encrypted local draft autosave if you might be interrupted. **Save privately** to add a separate encrypted entry to **My journal**; writing is never shared automatically. In **My journal**, export a separate *passphrase-encrypted* backup and verify that you can restore it using the same account and care circle, without overwriting current entries. Store the file and its unique passphrase separately; this backup does not contain shared-space keys, unsent drafts, or medication records.
 3. For a fictional/test entry, **Share this entry** or **Share snapshot**, confirm the exact recipients (1–10), then press the final share button. Each recipient must first open Words or Messages on their own browser origin to enroll a key.
 4. Recipients open **Words → Activity** or **Shared spaces** to see the prompt, original entry, their optional private response, and the discussion. **Save privately** is not the same as **Share response with everyone**.
 5. New items appear as recipient-only unread counts in navigation and refresh while the app is attended. Words device notifications are separately opt-in and generic; they need VAPID configuration, an installed browser push subscription, and OS permission.
@@ -60,4 +60,4 @@ Run `npm run dev:worker` and `npm run dev` in separate terminals. Use **http://l
 - [ ] Browser/site-data reset has not been used as a supposed recovery method; separate backups are understood
 - [ ] No remote/staging/production migration has been run without inspecting the actual database targets
 
-**Stop and report failures before switching from fictional test cases to household data.**
+**Stop and report failures before switching from fictional test cases to household data.** See [E2E_ACCEPTANCE.md](./E2E_ACCEPTANCE.md) for the consolidated final E2E test instead of repeating partial manual testing after each code change.
