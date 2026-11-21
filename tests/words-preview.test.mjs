@@ -16,9 +16,10 @@ test('recipient preview includes only explicitly selected eligible users',()=>{
 });
 test('recipient preview never offers sending or plaintext browser storage',()=>{
  const source=readFileSync(new URL('../src/WordsDraftStudio.tsx',import.meta.url),'utf8');
- assert.match(source,/Actual message sending/);
+ assert.match(source,/Continue in Messages/);
  assert.match(source,/Enable encrypted device autosave/);
- assert.match(source,/Sending not enabled/);
+ assert.match(source,/onPrepareMessage/);
+ assert.doesNotMatch(source,/api\(\s*['"]\/messages\/threads/);
  assert.doesNotMatch(source,/(?:localStorage|sessionStorage|indexedDB|WebSocket|sendMessage\(|saveDraft\()/);
  assert.equal(WORDS_DRAFT_MAX_LENGTH,3000);
 });

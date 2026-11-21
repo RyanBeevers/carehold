@@ -127,3 +127,17 @@ threads, push and clinician access remain disabled.
 
 Never market or deploy messaging for sensitive content without security,
 device-recovery and minors/consent approval. Never invent read receipts.
+
+
+## Words → Messages handoff (local navigation, unsent, 2026-11-21)
+The old Words sharing controls remain a **recipient preview only**. The formerly inert
+"Sending not enabled" label is replaced with an explicit **Continue in Messages** action.
+This transfers only the user's chosen draft text (or standalone prompt) through ephemeral
+React application state, not via the URL, query parameters, browser storage or API. The
+recipient preview selections never transfer, because only one-to-one messaging is enabled.
+On Messages the user chooses a conversation, confirms whether to apply the Words note to
+that conversation draft (replacing any preexisting one), and finally presses **Send
+intentionally**. Navigation and applying text never send automatically. The handoff is
+cleared when leaving Messages, switching circles, signing out or locking. The original
+Words note is not deleted by handoff; if its local autosave was off, leaving Words
+still discards its original draft as before. Test exclusively with fictional text.

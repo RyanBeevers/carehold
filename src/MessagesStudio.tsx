@@ -8,8 +8,9 @@ type Contact={id:string,name:string,publicKey:PublicKey|null};
 type Thread={id:string,createdAt:string,participants:Contact[]};
 type Wire={id:string,senderId:string,createdAt:string,envelope:Envelope};
 type Visible=Wire&{content:Content|null};
+export type MessageHandoff={id:number,text:string,kind:Content['kind']};
 const errorText=(e:unknown)=>e instanceof Error?e.message:'Please try again.';
-export function MessagesStudio({userId,householdId,audience}:{userId:string,householdId:string,audience:Audience}){
+export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHandled}:{userId:string,householdId:string,audience:Audience,handoff:MessageHandoff|null,onHandoffHandled:(id:number)=>void}){
  const [key,setKey]=useState<Identity|null>(null),[contacts,setContacts]=useState<Contact[]>([]),[threads,setThreads]=useState<Thread[]>([]);
  const [active,setActive]=useState(''),[items,setItems]=useState<Visible[]>([]),[busy,setBusy]=useState(true),[error,setError]=useState('');
  const [refresh,setRefresh]=useState(0);
@@ -68,6 +69,7 @@ export function MessagesStudio({userId,householdId,audience}:{userId:string,hous
   <div className="messages-warning"><strong>Fictional messages only — security review pending.</strong><p>Messages are encrypted in the browser, but recipient keys are not independently verified. Only one device per account is currently supported; recovery and secure device changes are not implemented. Do not use confidential family, medical, or therapeutic content.</p></div>
   {error&&<p role="alert" className="messages-error">{error}</p>}
   {busy&&!key&&<p role="status">Preparing this device for fictional messaging…</p>}
+  {handoff&&<p role="status" className="muted">You have an unsent note from Words. Choose one person, then review the draft before explicitly sending it.</p>}
   {key&&<div className="messages-layout">
    <aside className="messages-directory"><div className="messages-subhead"><h2>Conversations</h2><button className="quiet small" type="button" onClick={()=>void directory().catch(e=>setError(errorText(e)))}>Refresh</button></div>
     {threads.length===0&&<p className="muted">No conversations yet.</p>}
@@ -79,13 +81,13 @@ export function MessagesStudio({userId,householdId,audience}:{userId:string,hous
    <div className="messages-thread">
     {chosen?<><div className="messages-thread-header"><div><span className="mono kicker">ONLY EXPLICIT PARTICIPANTS</span><h2>{chosen.participants.find(p=>p.id!==userId)?.name||'Conversation'}</h2></div><button className="button outline small" type="button" onClick={()=>setRefresh(n=>n+1)}>Refresh replies</button></div>
      <ol className="messages-history">{items.length===0&&<li className="muted">Nothing shared yet.</li>}{items.map(m=><li key={m.id} className={m.senderId===userId?'messages-entry mine':'messages-entry'}><small>{m.senderId===userId?'You':'Them'} · {new Date(m.createdAt).toLocaleString()}</small><p>{m.content?.text??'Unable to decrypt on this device.'}</p>{m.content?.kind==='prompt'&&<small>Guided prompt</small>}</li>)}</ol>
-     <Composer key={chosen.id} thread={chosen} userId={userId} householdId={householdId} audience={audience} onSent={()=>setRefresh(n=>n+1)}/>
+     <Composer key={chosen.id} thread={chosen} userId={userId} householdId={householdId} audience={audience} handoff={handoff} onHandoffHandled={onHandoffHandled} onSent={()=>setRefresh(n=>n+1)}/>
     </>:<div className="messages-intro"><h2>A little space to talk.</h2><p>Choose someone, then write an original message or share a gentle prompt. They can answer when they choose. No read receipts.</p></div>}
    </div>
   </div>}
  </section>;
 }
-function Composer({thread,userId,householdId,audience,onSent}:{thread:Thread,userId:string,householdId:string,audience:Audience,onSent:()=>void}){
+function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,onSent}:{thread:Thread,userId:string,householdId:string,audience:Audience,handoff:MessageHandoff|null,onHandoffHandled:(id:number)=>void,onSent:()=>void}){
  const draft=useWordsDraftVault(userId,householdId+':direct:'+thread.id);
  const [kind,setKind]=useState<Content['kind']>('message'),[topic,setTopic]=useState('All topics'),[relationship,setRelationship]=useState<Relationship|'all'>('all');
  const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
@@ -119,6 +121,7 @@ function Composer({thread,userId,householdId,audience,onSent}:{thread:Thread,use
   finally{setSending(false);}
  }
  return <div className="messages-composer">
+  {handoff&&<div className="messages-prompts" role="note"><p><strong>Unsent note from Words.</strong> It will not be sent or shown to this person until you explicitly press Send. Applying it replaces any existing draft for this conversation.</p><div className="messages-actions"><button type="button" className="button dark small" disabled={!draft.ready||sending} onClick={()=>{draft.setText(handoff.text);setKind(handoff.kind);setSuggested(null);retry.current=null;onHandoffHandled(handoff.id);}}>{draft.text?'Replace this conversation draft':'Use note in this conversation'}</button><button type="button" className="button outline small" onClick={()=>onHandoffHandled(handoff.id)}>Dismiss note</button></div></div>}
   <div className="messages-subhead"><h3>Your words</h3><button className="quiet small" type="button" onClick={()=>setLibrary(v=>!v)}>{library?'Close prompts':'Guided prompts'}</button></div>
   {library&&<div className="messages-prompts"><label>Relationship<select value={relationship} onChange={e=>{setRelationship(e.target.value as Relationship|'all');setTopic('All topics');setSeen([]);setSuggested(null);}}><option value="all">All relationships</option>{relationshipOptions(audience).map(r=><option value={r} key={r}>{RELATIONSHIP_LABELS[r]}</option>)}</select></label><label>Category<select value={topic} onChange={e=>{setTopic(e.target.value);setSeen([]);setSuggested(null);}}><option>All topics</option>{topics.map(t=><option key={t}>{t}</option>)}</select></label>
    <button type="button" className="button outline small" onClick={rotate} disabled={!available.length}>Another prompt</button>

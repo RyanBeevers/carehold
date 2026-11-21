@@ -15,9 +15,10 @@ type RecipientResult={recipients:RecipientOption[]};
  * Unmount destroys plaintext React state, not an opted-in encrypted local copy.
  */
 export function WordsDraftStudio({
- audience,householdId,userId,selectedPrompt,
+ audience,householdId,userId,selectedPrompt,onPrepareMessage,
 }:{
- audience:Audience,householdId:string,userId:string,selectedPrompt:WordsPromptSelection|null
+ audience:Audience,householdId:string,userId:string,selectedPrompt:WordsPromptSelection|null,
+ onPrepareMessage:(message:{text:string,kind:'message'|'prompt'})=>void
 }){
  const vault=useWordsDraftVault(userId,householdId);
  const {text:draft,prompt,setText:setDraft,setPrompt,ready:vaultReady,enabled:vaultEnabled,status:vaultStatus,error:vaultError}=vault;
@@ -96,9 +97,9 @@ export function WordsDraftStudio({
  return <section className="words-studio" aria-labelledby="words-studio-heading">
    <div className="words-studio-heading">
      <div>
-       <span className="mono kicker">A SPACE FOR YOUR WORDS / LOCAL PREVIEW</span>
+       <span className="mono kicker">YOUR WORDS / PRIVATE DRAFT</span>
        <h2 id="words-studio-heading">{heading}<span className="title-point">.</span></h2>
-       <p>Try a private note and explore what choosing who to share it with could feel like.</p>
+       <p>Write privately, or deliberately continue into Messages to send a copy to one person.</p>
      </div>
      <button type="button" className="button outline small" onClick={()=>setExpanded(open=>!open)} aria-expanded={expanded} aria-controls="words-studio-editor">
        {expanded?'Close editor':'Try writing'} <ArrowUpRight size={16}/>
@@ -146,10 +147,10 @@ export function WordsDraftStudio({
      </div>}
      <div className="words-studio-status"><Eye size={17} aria-hidden="true"/><div><strong>{label}</strong><span>{mode==='private'?'The private-by-default option stays selected.':'A recipient would only see content you explicitly chose to send, after secure sharing is implemented.'}</span></div></div>
      <div className="words-studio-footer">
-       <p>{vaultEnabled?'Autosave is for testing on this device only. Actual message sending, cross-device recovery and confidential journals are still disabled.':'Sending remains disabled. To survive refresh or a banking-style lock, enable the experimental encrypted device autosave.'}</p>
+       <p>{vaultEnabled?'Your Words draft stays on this device. Continuing into Messages does not automatically send it; choose a recipient and press Send there.':'Without local autosave, the original Words draft is lost when you navigate away. Continuing into Messages temporarily carries a copy in memory, but does not send it.'} Previewed recipients are not carried over.</p>
        <div className="words-studio-actions">
          {clearConfirm?<div className="words-studio-confirm" role="group" aria-label="Confirm draft discard"><span>Discard this draft?</span><button type="button" className="button outline small" onClick={()=>setClearConfirm(false)}>Keep</button><button type="button" className="button dark small" disabled={vaultBusy} onClick={()=>void discardDraft()}>Discard</button></div>:<button type="button" className="button outline small" onClick={()=>canClear?setClearConfirm(true):discardDraft()}><RotateCcw size={15}/> Clear draft</button>}
-         <span className="words-studio-disabled-send" aria-disabled="true">Sending not enabled</span>
+         <button type="button" className="button dark small" disabled={!vaultReady||vaultBusy||(!draft.trim()&&!prompt)} onClick={()=>onPrepareMessage({text:draft.trim()?draft:prompt!,kind:draft.trim()?'message':'prompt'})}><ArrowUpRight size={15}/> Continue in Messages</button>
        </div>
      </div>
    </div>}
