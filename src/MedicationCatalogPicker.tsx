@@ -6,7 +6,7 @@ import type {CatalogOption,CatalogResult,MedicationCatalogMetadata} from '../wor
 type Props={
  profileId:string, value:string, catalog:MedicationCatalogMetadata, isPet:boolean, disabled?:boolean,
  onNameChange:(name:string)=>void, onSelect:(result:CatalogResult)=>void,
- onProduct:(option:CatalogOption|null)=>void, onManual:()=>void
+ onProduct:(option:CatalogOption|null,conceptRxCui:string|null)=>void, onManual:()=>void
 };
 const explain='Directory matches are for identification only—not medical or veterinary dosage advice.';
 export function MedicationCatalogPicker({profileId,value,catalog,isPet,disabled=false,onNameChange,onSelect,onProduct,onManual}:Props){
@@ -68,7 +68,7 @@ export function MedicationCatalogPicker({profileId,value,catalog,isPet,disabled=
  }
  const listVisible=opened&&focused&&!manual&&!matched&&term.length>=2;
  const options=selected?.strengths||[];
- const productIndex=options.findIndex(x=>x.label===catalog.productStrength&&x.rxCui===catalog.catalogIdentifier);
+ const productIndex=options.findIndex(x=>x.label===catalog.productStrength);
  const strengthLabel=catalog.productStrength;
  return <div className="med-catalog" aria-label="Medication name lookup">
   <label htmlFor={listId+'-input'}>Medication name</label>
@@ -110,7 +110,7 @@ export function MedicationCatalogPicker({profileId,value,catalog,isPet,disabled=
   {matched&&(options.length>0||strengthLabel)&&<div className="med-catalog-strength">
    <label htmlFor={listId+'-strength'}>Product strength and form (optional)</label>
    {options.length>0?<select id={listId+'-strength'} value={productIndex>=0?String(productIndex):''} disabled={disabled}
-    onChange={e=>onProduct(e.target.value===''?null:options[Number(e.target.value)])}>
+    onChange={e=>onProduct(e.target.value===''?null:options[Number(e.target.value)],selected?.conceptRxCui??null)}>
     <option value="">Choose a listed product strength/form</option>
     {options.map((item,i)=><option key={i} value={String(i)}>{item.label}</option>)}
    </select>:<div className="med-catalog-existing">
