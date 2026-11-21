@@ -75,6 +75,8 @@ async function profileAccess(db:D1Database,profileId:string,userId:string,capabi
 }
 async function owner(db:D1Database,householdId:string,userId:string) {
   if(await member(db,householdId,userId)!=='owner')bad(403,'Only a household owner can do this.');
+  const minor=await db.prepare("SELECT 1 FROM household_member_classes WHERE user_id=? AND classification IN ('child','teen') LIMIT 1").bind(userId).first();
+  if(minor)bad(403,'Minor accounts cannot administer a household.');
 }
 async function medication(db:D1Database,id:string):Promise<MedicationRow> {
   const med=await db.prepare('SELECT * FROM medications WHERE id=? AND archived_at IS NULL').bind(id).first<MedicationRow>();
@@ -472,12 +474,17 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     const previous=await classification(db,hid,memberClass[1]);
     if(previous===b.classification)return json({classification:previous,unchanged:true});
     const ts=now();
-    await db.batch([
+    const writes=[
      db.prepare('UPDATE household_member_classes SET classification=?,assigned_by=?,updated_at=? WHERE household_id=? AND user_id=?')
       .bind(b.classification,user.id,ts,hid,memberClass[1]),
      db.prepare('INSERT INTO household_member_class_changes(id,household_id,user_id,previous_class,next_class,changed_by,changed_at) VALUES(?,?,?,?,?,?,?)')
       .bind(uuid(),hid,memberClass[1],previous,b.classification,user.id,ts)
-    ]);
+    ];
+    if(b.classification==='teen'||b.classification==='child'){
+     writes.push(db.prepare('INSERT INTO account_audiences(user_id,audience,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET audience=excluded.audience,updated_at=excluded.updated_at')
+      .bind(memberClass[1],b.classification,ts));
+    }
+    await db.batch(writes);
     return json({classification:b.classification});
    }
    const memberDelete=path.match(/^\/api\/members\/([0-9a-zA-Z_-]+)$/);
