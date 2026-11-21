@@ -79,7 +79,7 @@ export function notifyPrivateRecipients(env:CareEnv,ctx:ExecutionContext,hid:str
  ctx.waitUntil((async()=>{
   for(const uid of ids){
    try{
-    const pref=await env.DB.prepare(`SELECT enabled FROM push_preferences WHERE user_id=? AND household_id=?
+    const pref=await env.DB.prepare(`SELECT enabled FROM private_word_push_preferences WHERE user_id=? AND household_id=?
      AND EXISTS(SELECT 1 FROM household_members WHERE user_id=? AND household_id=?)`)
      .bind(uid,hid,uid,hid).first<{enabled:number}>();
     if(pref?.enabled!==1)continue;
@@ -97,6 +97,21 @@ export function notifyPrivateRecipients(env:CareEnv,ctx:ExecutionContext,hid:str
 }
 async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionContext):Promise<Response>{
  const db=env.DB,path=new URL(req.url).pathname,url=new URL(req.url);
+ if(path==='/api/words/push-preference'){
+  const b=req.method==='POST'?await body(req):null;
+  const hid=householdId(b?.householdId??url.searchParams.get('householdId'));
+  await member(db,hid,user.id);
+  if(req.method==='GET'){
+   const r=await db.prepare('SELECT enabled FROM private_word_push_preferences WHERE user_id=? AND household_id=?').bind(user.id,hid).first<{enabled:number}>();
+   return respond({enabled:r?.enabled===1});
+  }
+  if(req.method==='POST'){
+   if(typeof b?.enabled!=='boolean')fail(400,'Choose whether to enable notifications.');
+   await db.prepare(`INSERT INTO private_word_push_preferences(user_id,household_id,enabled) VALUES(?,?,?)
+    ON CONFLICT(user_id,household_id) DO UPDATE SET enabled=excluded.enabled`).bind(user.id,hid,b.enabled?1:0).run();
+   return respond({enabled:b.enabled});
+  }
+ }
  if(path==='/api/words/people'&&req.method==='GET'){
   const hid=householdId(url.searchParams.get('householdId'));await member(db,hid,user.id);
   const result=await db.prepare(`SELECT u.id,u.name,k.public_jwk FROM household_members hm
