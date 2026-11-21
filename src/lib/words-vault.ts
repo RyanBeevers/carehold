@@ -13,7 +13,7 @@ export const WORDS_RETENTION_MS=90*24*60*60*1000;
 const MAX_DRAFT_LENGTH=3000;
 const MAX_PROMPT_LENGTH=600;
 
-export type DraftDocument={text:string,prompt:string|null};
+export type DraftDocument={text:string,prompt:string|null,title?:string};
 export type VaultStatus={enabled:boolean,document:DraftDocument|null,revision:number,savedAt:number|null};
 export type CipherEnvelope={version:1,iv:number[],ciphertext:ArrayBuffer};
 type VaultKeyRow={scope:string,key:CryptoKey};
@@ -33,7 +33,8 @@ function validDocument(value:unknown):value is DraftDocument{
  if(!value||typeof value!=='object')return false;
  const x=value as Partial<DraftDocument>;
  return typeof x.text==='string'&&x.text.length<=MAX_DRAFT_LENGTH
-  &&(x.prompt===null||(typeof x.prompt==='string'&&x.prompt.length<=MAX_PROMPT_LENGTH));
+  &&(x.prompt===null||(typeof x.prompt==='string'&&x.prompt.length<=MAX_PROMPT_LENGTH))
+   &&(x.title===undefined||(typeof x.title==='string'&&x.title.length<=120));
 }
 export async function createDeviceKey():Promise<CryptoKey>{
  return crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']) as Promise<CryptoKey>;
