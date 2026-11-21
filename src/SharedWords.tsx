@@ -113,7 +113,7 @@ export function SharedSpaces({userId,householdId,identity,openSpaceId,onCloseSpa
   {!loading&&!spaces.length&&<p className="words-empty">No shared prompts or journal entries yet. Discover a prompt or write a journal entry to start one.</p>}
   <div className="words-shared-ledger">{spaces.map(s=><button type="button" key={s.id} className="words-shared-row" onClick={()=>setActive(s.id)}>
    <span className="mono kicker">{s.kind==='prompt'?'PROMPT INVITATION':'SHARED JOURNAL'} · {new Date(s.createdAt).toLocaleDateString()}</span>
-   <strong>{s.preview?.prompt||(s.kind==='prompt'?s.preview?.text:null)||'Shared journal entry'}</strong>
+   <strong>{s.preview?.title||s.preview?.prompt||(s.kind==='prompt'?s.preview?.text:null)||'Shared journal entry'}</strong>
    <span className="muted tiny">{s.creatorName} · Open the entry and its discussion</span>
    <ArrowUpRight size={18}/></button>)}</div>
  </section>;
@@ -225,7 +225,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
      </ol>
      {reflection.ready&&reflection.text.trim()&&<div className="words-audience-confirm">
       <span>An earlier private reflection draft exists on this device. You can move it into the single discussion editor without sharing it.</span>
-      <button type="button" className="button outline small" disabled={Boolean(discussion.text.trim())||Boolean(busy)}
+      <button type="button" className="button outline small" disabled={!discussion.ready||Boolean(discussion.text.trim())||Boolean(busy)}
        onClick={()=>{discussion.setText(reflection.text);void reflection.discard();}}>Move old draft</button>
      </div>}
      <label htmlFor="words-discussion-reply">Write a reply or private note</label>
