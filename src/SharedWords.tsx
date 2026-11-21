@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {ArrowLeft,ArrowUpRight,BookOpen,Check,LockKeyhole,MessageCircle,RotateCw,Send,Users} from 'lucide-react';
+import {ArrowLeft,ArrowUpRight,BookOpen,Check,MessageCircle,RotateCw,Send,Users} from 'lucide-react';
 import {api,StaleSessionRequest} from './lib/api';
 import {sealWord,unsealWord,type WordPayload} from './lib/words-space-crypto';
 import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
@@ -208,40 +208,39 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,onBack,onPrivate
   {!detail?<p className="muted">Opening your shared space…</p>:<>
    <header className="words-space-intro">
     <span className="mono kicker">{detail.kind==='prompt'?'SHARED PROMPT':'SHARED JOURNAL'}</span>
-    {prompt&&<h2>{prompt}</h2>}
+    {first?.content?.title&&<p className="mono kicker">{first.content.title}</p>}
+     {prompt&&<h2>{prompt}</h2>}
     {detail.kind==='journal'&&<div className="words-journal-quote"><span className="mono kicker">{author(first?.authorId||'')} WROTE</span><p>{first?.content?.text||'Unable to decrypt this entry on this device.'}</p></div>}
     <p className="muted tiny">Shared with {detail.participants.map(p=>p.id===userId?'you':p.name).join(', ')}. Everyone here sees posted replies, but not private drafts or whether anyone has viewed this page.</p>
    </header>
-   <section className="words-response-editor" aria-label="Your journal response">
-    <div className="words-hub-section-top"><div><span className="mono kicker">REFLECT FOR YOURSELF</span><h3>Your journal response</h3></div><LockKeyhole size={19}/></div>
-    <p className="muted tiny">Writing here is private until you press Share response. You can also save it only in your device journal or leave it as a draft.</p>
-    <textarea rows={5} maxLength={2600} aria-label="Private journal response" disabled={!reflection.ready||!!busy}
-     value={reflection.text} onChange={e=>{reflection.setText(e.target.value);retry.current=null;}} placeholder="Start with what this brings up for you…"/>
-    <div className="words-response-actions">
-     {!reflection.enabled&&reflection.ready&&<button type="button" className="button outline small" disabled={!!busy} onClick={()=>void reflection.enable()}>Enable encrypted draft autosave</button>}
-     <button type="button" className="button outline small" disabled={!reflection.ready||!reflection.text.trim()||!!busy} onClick={()=>void saveReflection()}>Save privately</button>
-     <button type="button" className="button dark small" disabled={!reflection.ready||!reflection.text.trim()||!!busy||reflection.status==='conflict'} onClick={()=>void send('reflection')}>
-      <Send size={15}/> {busy==='reflection'?'Sharing…':'Share response with everyone'}</button>
-    </div>
-    {reflection.error&&<p className="messages-error" role="alert">{reflection.error}</p>}
-   </section>
-   {responses.length>0&&<section className="words-shared-responses"><h3>Shared reflections</h3>
-    {responses.map(r=><div key={r.id} className="words-entry-row"><span className="mono kicker">{author(r.authorId)} · {new Date(r.createdAt).toLocaleString()}</span><p>{r.content?.text||'Unable to decrypt this response.'}</p></div>)}
-   </section>}
-   <section className="words-space-discussion"><div className="words-hub-section-top"><div><span className="mono kicker">TALK ABOUT IT</span><h3>Discussion</h3></div><MessageCircle size={19}/></div>
-    {discussionPosts.length===0&&<p className="muted">No replies yet. Anyone in this space can participate whenever they choose.</p>}
-    <ol className="words-discussion-ledger">{discussionPosts.map(r=><li key={r.id}><span className="mono kicker">{author(r.authorId)} · {new Date(r.createdAt).toLocaleString()}</span><p>{r.content?.text||'Unable to decrypt this reply.'}</p></li>)}</ol>
-    <label htmlFor="words-discussion-reply">Write a reply that everyone in this space can see</label>
-    <textarea id="words-discussion-reply" rows={3} maxLength={2600} disabled={!discussion.ready||!!busy}
-     value={discussion.text} onChange={e=>{discussion.setText(e.target.value);retry.current=null;}} placeholder="Add to the conversation…"/>
-    <div className="words-response-actions">
-     {!discussion.enabled&&discussion.ready&&<button type="button" className="button outline small" disabled={!!busy} onClick={()=>void discussion.enable()}>Enable encrypted draft autosave</button>}
-     <button type="button" className="button dark small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'} onClick={()=>void send('discussion')}>
-      <Send size={15}/> {busy==='discussion'?'Posting…':'Post reply'}</button>
-    </div>
-    {discussion.error&&<p className="messages-error" role="alert">{discussion.error}</p>}
-   </section>
-   {status&&<p className="words-status" role="status"><Check size={15}/>{status}</p>}
+   <section className="words-space-discussion">
+     <div className="words-hub-section-top"><div><span className="mono kicker">TALK ABOUT IT</span><h3>Discussion</h3></div><MessageCircle size={19}/></div>
+     <p className="muted tiny">One place to talk together or keep a private note. Private notes stay encrypted on this device and are visible only to you; shared replies are visible to all selected participants.</p>
+     {board.length===0&&<p className="muted">No notes or replies yet. Add something whenever you are ready.</p>}
+     <ol className="words-discussion-ledger">
+      {board.map(note=><li key={note.id} className={note.private?'words-private-note':''}>
+       <span className="mono kicker">{note.private?'PRIVATE NOTE · ONLY YOU':note.kind==='reflection'?'SHARED REFLECTION':'SHARED REPLY'} · {author(note.author)} · {new Date(note.at).toLocaleString()}</span>
+       <p>{note.text}</p>
+      </li>)}
+     </ol>
+     {reflection.ready&&reflection.text.trim()&&<div className="words-audience-confirm">
+      <span>An earlier private reflection draft exists on this device. You can move it into the single discussion editor without sharing it.</span>
+      <button type="button" className="button outline small" disabled={Boolean(discussion.text.trim())||Boolean(busy)}
+       onClick={()=>{discussion.setText(reflection.text);void reflection.discard();}}>Move old draft</button>
+     </div>}
+     <label htmlFor="words-discussion-reply">Write a reply or private note</label>
+     <textarea id="words-discussion-reply" rows={5} maxLength={2600} disabled={!discussion.ready||!!busy}
+      value={discussion.text} onChange={e=>{discussion.setText(e.target.value);retry.current=null;}}
+      placeholder="Write here first. Decide whether to keep it private or share it below…"/>
+     <div className="words-response-actions">
+      <button type="button" className="button outline small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'}
+       onClick={()=>void savePrivateNote()}>{busy==='save'?'Saving…':'Post private note · only me'}</button>
+      <button type="button" className="button dark small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'} onClick={()=>void send('discussion')}>
+       <Send size={15}/> {busy==='discussion'?'Posting…':'Post reply · everyone'}</button>
+     </div>
+     {discussion.error&&<p className="messages-error" role="alert">{discussion.error}</p>}
+    </section>
+    {status&&<p className="words-status" role="status"><Check size={15}/>{status}</p>}
    <p className="muted tiny">No typing, read, draft or viewing indicators are shared with the author. Fictional test writing only.</p>
   </>}
  </section>;
