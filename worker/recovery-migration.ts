@@ -1,6 +1,7 @@
 import type {CareEnv,SessionUser} from './types';
 import {validStoredRecoveryEnvelope} from './message-recovery-policy';
-import {validSealedEnvelope} from './messages-policy';
+import {validPublicJwk,validSealedEnvelope} from './messages-policy';
+import {seal,type PublicKey} from '../src/lib/message-crypto';
 
 const headers={'Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'};
 const send=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
@@ -15,6 +16,14 @@ async function body(req:Request):Promise<Record<string,unknown>>{
  let o:unknown;try{o=JSON.parse(raw);}catch{fail(400,'Invalid JSON.');}
  if(!o||typeof o!=='object'||Array.isArray(o))fail(400,'Invalid request.');
  return o as Record<string,unknown>;
+}
+async function hash(value:string){
+ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
+ return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function randomProof(){
+ const secret=crypto.getRandomValues(new Uint8Array(32));
+ return btoa(String.fromCharCode(...secret)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 async function readStage(db:D1Database,userId:string):Promise<Stage|null>{
  return await db.prepare('SELECT original_jwk,next_jwk,recovery_envelope_json,state FROM account_key_migrations WHERE user_id=?')
@@ -62,6 +71,23 @@ async function sourceAllowed(db:D1Database,kind:Kind,id:string,uid:string){
 }
 async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>{
  const db=env.DB,url=new URL(req.url),path=url.pathname,stage=await readStage(db,user.id);
+ if(path==='/api/messages/recovery/migration/challenge'&&req.method==='POST'){
+  if(stage)fail(409,'Migration is already staged or complete.');
+  const registered=await db.prepare('SELECT public_jwk FROM message_device_keys WHERE user_id=?')
+   .bind(user.id).first<{public_jwk:string}>();
+  if(!registered)fail(409,'No legacy encryption key is registered.');
+  const publicKey:unknown=JSON.parse(registered.public_jwk);
+  if(!validPublicJwk(publicKey))fail(409,'Legacy encryption key is invalid.');
+  const existing=await db.prepare('SELECT 1 FROM message_account_recovery WHERE user_id=?')
+   .bind(user.id).first();
+  if(existing)fail(409,'Account recovery is already configured.');
+  const secret=randomProof(),expires=Date.now()+5*60000;
+  const envelope=await seal({kind:'message',text:secret},publicKey as PublicKey,
+   'carehold-legacy-proof-v1',user.id,user.id);
+  await db.prepare('INSERT INTO account_key_migration_challenges(user_id,proof_digest,expires_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET proof_digest=excluded.proof_digest,expires_at=excluded.expires_at')
+   .bind(user.id,await hash(secret),expires).run();
+  return send({envelope,expiresAt:expires});
+ }
  if(path==='/api/messages/recovery/migration'&&req.method==='GET')
   return send({state:stage?.state??'none',envelope:stage?JSON.parse(stage.recovery_envelope_json):null,
    publicKey:stage?JSON.parse(stage.next_jwk):null});
@@ -80,9 +106,18 @@ async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>
    fail(409,'Another migration exists. Resume with its original recovery code.');
   }
   if(next===current.public_jwk)fail(409,'Replacement key must differ from legacy key.');
+  if(typeof b.proof!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(b.proof))
+   fail(403,'Prove access to the original browser key before migration.');
+  const challenge=await db.prepare('SELECT 1 FROM account_key_migration_challenges WHERE user_id=? AND proof_digest=? AND expires_at>?')
+   .bind(user.id,await hash(b.proof),Date.now()).first();
+  if(!challenge)fail(403,'Legacy key challenge is incorrect or expired. Request another challenge.');
+
   try{
-   await db.prepare("INSERT INTO account_key_migrations(user_id,original_jwk,next_jwk,recovery_envelope_json,state,created_at) VALUES(?,?,?,?,'staged',?)")
-    .bind(user.id,current.public_jwk,next,encoded,new Date().toISOString()).run();
+   await db.batch([
+    db.prepare("INSERT INTO account_key_migrations(user_id,original_jwk,next_jwk,recovery_envelope_json,state,created_at) VALUES(?,?,?,?,'staged',?)")
+     .bind(user.id,current.public_jwk,next,encoded,new Date().toISOString()),
+    db.prepare('DELETE FROM account_key_migration_challenges WHERE user_id=?').bind(user.id)
+   ]);
   }catch{fail(409,'Another migration started. Reload without resetting keys.');}
   return send({state:'staged'},201);
  }
