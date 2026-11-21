@@ -2,7 +2,8 @@ import {useEffect,useRef,useState,type FormEvent} from 'react';
 import type {Audience} from '../shared/audience';
 import {api,StaleSessionRequest} from './lib/api';
 import {promptsForAudience,relationshipOptions,RELATIONSHIP_LABELS,rotatePrompt,type Prompt,type Relationship} from './lib/prompts';
-import {deviceIdentity,samePublicKey,seal,unseal,type Identity,type PublicKey,type Envelope,type Content} from './lib/message-crypto';
+import {seal,unseal,type Identity,type PublicKey,type Envelope,type Content} from './lib/message-crypto';
+import {MessageRecoveryGate} from './MessageRecoveryGate';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
 type Contact={id:string,name:string,publicKey:PublicKey|null};
 type Thread={id:string,createdAt:string,participants:Contact[]};
@@ -23,22 +24,22 @@ export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHan
   setContacts(c.contacts);setThreads(t.conversations);
  }
  useEffect(()=>{
-  let live=true;setKey(null);setContacts([]);setThreads([]);setActive('');setBusy(true);setError('');
+  setKey(null);setContacts([]);setThreads([]);setActive('');setError('');setBusy(false);
+ },[userId,householdId]);
+ useEffect(()=>{
+  if(!key)return;
+  let live=true;
   void (async()=>{
    try{
-    const identity=await deviceIdentity(userId);
-    const remote=await api<{publicKey:PublicKey|null}>('/messages/keys/me');
-    if(remote.publicKey&&!samePublicKey(identity.publicKey,remote.publicKey))
-     throw new Error('A different device owns this account’s message key. Recovery is not implemented. Do not erase the original device’s browser data.');
-    await api('/messages/keys/me','POST',{publicKey:identity.publicKey});
-    if(!live)return;
-    setKey(identity);
-    await directory();
+    const [c,t]=await Promise.all([
+     api<{contacts:Contact[]}>(`/messages/contacts?householdId=${encodeURIComponent(householdId)}`),
+     api<{conversations:Thread[]}>(`/messages/conversations?householdId=${encodeURIComponent(householdId)}`)
+    ]);
+    if(live){setContacts(c.contacts);setThreads(t.conversations);}
    }catch(e){if(live&&!(e instanceof StaleSessionRequest))setError(errorText(e));}
-   finally{if(live)setBusy(false);}
   })();
   return()=>{live=false;};
- },[userId,householdId]);
+ },[key,householdId]);
  useEffect(()=>{
   if(!active||!key){setItems([]);return;}
   let live=true;
@@ -73,7 +74,8 @@ export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHan
   finally{setBusy(false);}
  }
  return <section aria-label="Messages" className="messages-studio">
-  <div className="messages-warning"><strong>Fictional messages only — security review pending.</strong><p>Messages are encrypted in the browser, but recipient keys are not independently verified. Only one device per account is currently supported; recovery and secure device changes are not implemented. Do not use confidential family, medical, or therapeutic content.</p></div>
+  <div className="messages-warning"><strong>Fictional messages only — security review pending.</strong><p>Messages are encrypted in the browser, but recipient keys are not independently verified. New-account message recovery is experimental; legacy migration, verified device revocation and journal sync are still outstanding. Do not use confidential family, medical, or therapeutic content.</p></div>
+  {!key&&<MessageRecoveryGate userId={userId} onReady={setKey} onError={setError}/>}
   {error&&<p role="alert" className="messages-error">{error}</p>}
   {busy&&!key&&<p role="status">Preparing this device for fictional messaging…</p>}
   {handoff&&<p role="status" className="muted">You have an unsent note from Words. Choose one person, then review the draft before explicitly sending it.</p>}
