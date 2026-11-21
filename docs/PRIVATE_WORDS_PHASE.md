@@ -86,3 +86,44 @@ On Words, the first draft is still in-memory until the user explicitly selects *
 6. Select sharing-preview recipients, refresh, and verify restored draft stays **Just me** with no selected recipients.
 7. Discard; verify no draft returns after refresh and the key remains available for a new encrypted draft. Check storage-permission denial and cleared site data.
 8. Confirm no journal plaintext is sent through APIs, query strings, push messages, logs or browser network requests. Check IndexedDB `carehold-words-local-v1`: draft records contain ciphertext/nonce/revision only, not typed text.
+
+## Direct Messages fictional pilot (branch feat/carehold-mvp-foundation; 2026-11-21)
+A new `/messages` page, `worker/messages.ts`, `src/lib/message-crypto.ts` and
+`migrations/0006_encrypted_direct_messages.sql` form a **fictional-text-only,
+unreviewed developer pilot**, not a released confidential communications system.
+The parent/child/teen Words editor remains a separate private local-draft feature.
+Its recipient preview does not send anything.
+
+The message client generates a nonexportable P-256 ECDH private key per signed-in
+account on the browser origin and stores it in IndexedDB. It sends only the
+canonical public JWK to the server, which pins the first enrolled public key.
+For each message the client uses an ephemeral ECDH key and HKDF-SHA-256 to
+derive separate AES-GCM-256 keys for each explicit participant; associated data
+binds conversation, message ID and recipient ID. D1 stores only ciphertext
+envelopes, minimal metadata and public keys. The sender receives an encrypted
+copy for their own history. No message-body text is sent to the Worker, logs,
+notification payloads or analytics by application code. No message push, read
+receipts, typing events, prompt opens, drafts or acknowledgement telemetry.
+
+**Hard limitations:** Server-provided recipient keys use trust-on-first-use,
+without identity verification/key transparency or authenticated key changes.
+The same origin can invoke IndexedDB private keys if compromised, and recovery,
+device enrollment/transfer, key rotation and deletion/retention semantics are
+not implemented or independently reviewed. A second device cannot silently
+replace the first device's key. Browser storage clear can permanently remove
+decryption capability. This is NOT independently verified E2EE. Do not enroll
+real minor/medical/therapeutic content. Independent security/privacy review and
+consent/legal decisions remain hard release blockers.
+
+Conversations are strictly one-to-one. Only explicit thread participants with
+current household membership may read them. For new threads, owners may choose
+another household member, and members/caregivers may choose an owner; age label,
+profile identity association and medication grants never authorize access.
+On membership revocation, archive the old pair key and remove that member's
+thread participation in the same D1 batch, so reinvitation cannot restore prior
+thread access or silently reopen its message history. Other participant's old
+thread is closed as well; server backups/history may retain ciphertext. Group
+threads, push and clinician access remain disabled.
+
+Never market or deploy messaging for sensitive content without security,
+device-recovery and minors/consent approval. Never invent read receipts.

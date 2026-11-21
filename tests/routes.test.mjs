@@ -37,6 +37,7 @@ test('Cloudflare serves direct page reloads as SPA, API still routes to Worker',
 
 test('fresh installed PWA launch at root restores only a recognized page label',()=>{
  assert.equal(restorePage('/',()=> 'words'),'words');
+ assert.equal(restorePage('/',()=> 'messages'),'messages');
  assert.equal(restorePage('/',()=> 'settings'),'settings');
  assert.equal(restorePage('/people',()=> 'words'),'people');
  assert.equal(restorePage('/words/',()=> 'today'),'words');

@@ -68,3 +68,27 @@ The PWA may store the last visited **public page label only** in `localStorage` 
 The new opt-in encrypted autosave encrypts content before device-local IndexedDB writes using AES-GCM 256, unique random 96-bit nonces and account/circle-bound additional authenticated data; the same-origin database stores a nonexportable CryptoKey and ciphertext. This is **not cryptographic account isolation, not independent key unlock, and not E2EE**. Same-origin scripts or a sufficiently compromised browser can invoke stored keys. Do not rely on this feature for private medical, therapeutic, child or high-risk writings. Device loss and site-data clear destroy recoverability.
 
 The app deliberately persists no recipient selection. Version checks and explicit conflict choices mitigate simultaneous tabs. Actual secure journaling and selective sharing require independent cryptographic architecture review, external security testing, consent policies and key recovery before release.
+
+## Experimental direct messages — NOT reviewed confidential messaging
+The `/messages` developer pilot uses browser-side P-256 ECDH, HKDF-SHA-256
+and AES-GCM-256 with ephemeral sender keys and separate ciphertext copies for
+the two explicit participants. The API stores ciphertext only. Thread reads
+require both a valid passkey-authenticated session and explicit thread membership
+plus active household membership. Household owners/caregivers cannot query a
+child's unrelated thread or unsent draft. No read receipts, open/typing status,
+draft events or sensitive push are transmitted.
+
+The server is the *unverified* source of recipient public keys (TOFU), so
+active server compromise/key substitution, malicious same-origin code or XSS
+are not covered by the encryption design. The private key is nonextractable but
+available for WebCrypto operations to any script running on that origin.
+There is only one message device per user and no secure account recovery,
+device transfer, verified key rotation, export/deletion workflow, independently
+reviewed protocol, retention policy or minors' consent/legal release gate.
+Clearing site data can make messages permanently unreadable.
+
+Only fictional test copy may be used. The existing encrypted local draft vault
+is independent and does not become a message key store. Server/message error
+logs must remain content-free. Revocation closes the existing thread and
+prevents silent old-history restoration if a removed member is invited back;
+previously received plaintext cannot be remotely retracted from devices.

@@ -393,7 +393,9 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
          (id,household_id,profile_id,previous_user_id,next_user_id,changed_by,changed_at)
          VALUES(?,?,?,?,?,?,?)`).bind(uuid(),hid,profile.id,memberDelete[1],null,user.id,ts)),
       db.prepare('UPDATE profiles SET linked_user_id=NULL WHERE household_id=? AND linked_user_id=?').bind(hid,memberDelete[1]),
-      db.prepare('DELETE FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1])
+      db.prepare("UPDATE direct_threads SET pair_key='revoked:'||id WHERE household_id=? AND id IN (SELECT thread_id FROM direct_thread_members WHERE user_id=?)").bind(hid,memberDelete[1]),
+       db.prepare('DELETE FROM direct_thread_members WHERE user_id=? AND thread_id IN (SELECT id FROM direct_threads WHERE household_id=?)').bind(memberDelete[1],hid),
+       db.prepare('DELETE FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1])
     ]);
     return json({revoked:true,unlinkedProfiles:linked.results.length});
   }

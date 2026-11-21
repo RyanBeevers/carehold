@@ -154,3 +154,45 @@ This browser preference is not per-account, but it contains no household ID, pat
 In Words, click **Enable encrypted device autosave** once per account and care circle, then type a fictional draft. A nonexportable AES-GCM key and encrypted draft are kept in IndexedDB `carehold-words-local-v1`, and writing is automatically saved locally after a short delay. Reload or unlock Carehold to restore it on the same browser/device. This is **opt-in and experimental, NOT a finished confidential journal**. The device-held key can be used by scripts running on this origin. Clearing browser data loses the draft; no cross-device sync, key recovery, real message sending, or E2EE is implemented.
 
 Review `docs/PRIVATE_WORDS_PHASE.md` for threat limitations and the manual regression checklist. The new feature requires **no D1 migration**, no additional npm dependencies and no remote deployment. Test with fabricated writing only.
+
+## Experimental direct messages — local test procedure (fictional copy only)
+This functionality is source-only pending manual verification and security
+review. It **does not** authorize staging/production or real sensitive content.
+
+1. On the same feature branch, run `git pull`, `npm install`,
+   `npm run db:local`, `npm test`, `npm run typecheck`,
+   `npm run build`. Migration 0006 adds only new messaging tables.
+2. Run `npm run dev:worker` and `npm run dev` in separate terminals.
+   Keep `http://localhost:5173` as the sign-in origin for passkeys.
+3. Create two **throwaway accounts** in the same household via the existing
+   invitation flow. Sign in to each in separate browser profiles/incognito
+   windows and go to **Messages** once on each browser. This creates its
+   individual nonexportable message key and registers the public JWK.
+4. On the owner's Messages screen, select the invited account and start a
+   conversation. Choose Guided prompts; try category and relationship filters,
+   Another prompt, Use and edit, then **Send intentionally**. Do not enter
+   real family or health details.
+5. On the recipient's browser, open the same conversation, refresh replies,
+   and verify the test message decrypts. Write a fictional reply and send.
+   Check that the owner receives the reply, but sees no read/typing/draft
+   status or acknowledgment. Verify the sender can see their own copy.
+6. Begin a fictional reply, enable experimental encrypted device autosave,
+   wait for saved state, then refresh or lock and reauthenticate. The draft
+   should recover on the same device without becoming visible to the sender.
+   Test Discard, two-tab conflict choices and different account isolation.
+7. Negative tests: a third unrelated authenticated account must receive a
+   denial on the thread API; a member must not access a sibling's thread;
+   a caregiver medication grant alone must confer no message access; member
+   revocation must close the old thread, and reinvitation must not restore it.
+   The privacy checks require server/API verification, not UI inspection alone.
+8. Inspect D1 in the local database: `encrypted_message_copies.envelope_json`
+   should contain only version, ephemeral public key, IV, salt and ciphertext;
+   `encrypted_messages` has only IDs/hash/timestamp. Inspect Network and
+   Worker logs: no message plaintext, draft text or sensitive push payloads.
+9. Do **not** clear the only enrolled test device's site data expecting messages
+   to remain decryptable. Recovery and key rotation are not implemented.
+
+Known blockers: no authenticated key verification, no multi-device/recovery,
+no independently audited E2EE, no completed end-to-end authorization testing,
+no minors/consent legal approval, no group threads or message push. Keep PR
+draft and keep staging/prod unmodified until explicitly approved.
