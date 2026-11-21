@@ -30,7 +30,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  const [entries,setEntries]=useState<JournalEntry[]>([]),[editing,setEditing]=useState<{id:string,revision:number}|null>(null);
  const [loadingJournal,setLoadingJournal]=useState(true),[journalError,setJournalError]=useState(''),[journalBusy,setJournalBusy]=useState(false),[pendingLoad,setPendingLoad]=useState<JournalEntry|null>(null),[confirmDelete,setConfirmDelete]=useState<string|null>(null);
  const [seed,setSeed]=useState<ShareSeed|null>(null),[openSpaceId,setOpenSpaceId]=useState<string|null>(null);
- const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
+ const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushPublicKey,setPushPublicKey]=useState<string|null>(null),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
  const [feedback,setFeedback]=useState('');
  const lastInput=useRef(Date.now());
  function selectTab(next:Tab){
@@ -82,7 +82,9 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   void api<{enabled:boolean}>(`/words/push-preference?householdId=${encodeURIComponent(householdId)}`)
    .then(r=>{if(live)setPushEnabled(r.enabled);}).catch(()=>{});
   void api<{configured:boolean,subscriptionCount:number}>(`/push/status?householdId=${encodeURIComponent(householdId)}`)
-   .then(r=>{if(live)setPushReady(r.configured&&r.subscriptionCount>0);}).catch(()=>{});
+   .then(r=>{if(live)setPushReady(r.subscriptionCount>0);}).catch(()=>{});
+  void api<{configured:boolean,publicKey:string|null}>('/push/config')
+   .then(r=>{if(live)setPushPublicKey(r.configured?r.publicKey:null);}).catch(()=>{});
   void reloadActivity().catch(()=>{});
   const onInput=()=>{lastInput.current=Date.now();};
   const onActivity=()=>{if(live)void reloadActivity().catch(()=>{});};
@@ -126,6 +128,41 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    await reloadJournal();setConfirmDelete(null);setFeedback('The local journal entry was deleted.');
    if(editing?.id===entryId)setEditing(null);
   }catch(e){setJournalError(errorText(e));}finally{setJournalBusy(false);}
+ }
+ async function registerWordNotifications(){
+  if(!pushPublicKey){setPushError('Device notifications are not configured for this Carehold server. In-app activity still works.');return;}
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){
+   setPushError('Push is unavailable in this browser. On iPhone, open Carehold from the installed Home Screen app.');
+   return;
+  }
+  if(Notification.permission==='denied'){
+   setPushError('Notifications are blocked in the browser or operating-system settings.');
+   return;
+  }
+  // Request permission directly from this button click to preserve user activation.
+  const permissionPromise=Notification.permission==='granted'?Promise.resolve('granted'):Notification.requestPermission();
+  setPushBusy(true);setPushError('');
+  try{
+   const permission=await permissionPromise;
+   if(permission!=='granted')throw new Error('Notification permission was not granted.');
+   const worker=await navigator.serviceWorker.register('/sw.js');
+   await navigator.serviceWorker.ready;
+   const encoded=pushPublicKey.replace(/-/g,'+').replace(/_/g,'/');
+   const raw=atob(encoded.padEnd(Math.ceil(encoded.length/4)*4,'='));
+   const key=new Uint8Array([...raw].map(c=>c.charCodeAt(0)));
+   let subscription=await worker.pushManager.getSubscription();
+   if(subscription?.options.applicationServerKey){
+    const old=new Uint8Array(subscription.options.applicationServerKey);
+    if(old.length!==key.length||old.some((v,i)=>v!==key[i])){
+     await subscription.unsubscribe();subscription=null;
+    }
+   }
+   if(!subscription)subscription=await worker.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key.buffer as ArrayBuffer});
+   await api('/push/subscribe','POST',{subscription:subscription.toJSON()});
+   const pref=await api<{enabled:boolean}>('/words/push-preference','POST',{householdId,enabled:true});
+   setPushReady(true);setPushEnabled(pref.enabled);
+  }catch(e){setPushError(errorText(e));}
+  finally{setPushBusy(false);}
  }
  async function setNotificationPreference(next:boolean){
   setPushBusy(true);setPushError('');
@@ -221,7 +258,8 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     <ArrowUpRight size={17}/></button>)}</div>
    <div className="words-push-setting"><div><h3>Quiet device notifications</h3><p className="muted tiny">Optional notifications say only "Something new is waiting in Carehold." They never include names, prompts or writing. Read status is not shared.</p></div>
     {pushReady?<label className="words-push-choice"><input type="checkbox" checked={pushEnabled} disabled={pushBusy} onChange={e=>void setNotificationPreference(e.target.checked)}/> Notify this account about new shared writing</label>:
-     <p className="muted tiny">To receive device notifications, first configure a device subscription in <a href="/settings">Settings</a>. In-app activity works without push.</p>}
+     pushPublicKey?<button type="button" className="button outline small" disabled={pushBusy} onClick={()=>void registerWordNotifications()}>{pushBusy?'Enabling…':'Enable Words notifications on this device'}</button>:
+     <p className="muted tiny">Device push keys are not configured here. In-app activity remains available without device notifications.</p>}
     {pushError&&<p className="messages-error" role="alert">{pushError}</p>}
    </div>
   </section>}
