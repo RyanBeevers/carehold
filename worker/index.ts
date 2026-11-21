@@ -13,8 +13,8 @@ const required=(v:unknown,max=120)=>{const t=trim(v,max);if(!t)bad(400,'Please f
 const uuid=()=>crypto.randomUUID();
 const now=()=>new Date().toISOString();
 const stamp=(v:unknown)=>{
-  if(typeof v!=='string'||Number.isNaN(Date.parse(v)))bad(400,'Enter a valid date and time.');
-  const time=Date.parse(v);
+  const time=typeof v==='string'?Date.parse(v):NaN;
+  if(Number.isNaN(time))bad(400,'Enter a valid date and time.');
   if(time>Date.now()+5*60000||time<Date.now()-366*86400000)bad(400,'Administration time must be within the past year and not in the future.');
   return new Date(time).toISOString();
 };
@@ -248,7 +248,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     const hid=required(url.searchParams.get('householdId'));await owner(db,hid,user.id);
     if(memberDelete[1]===user.id)bad(400,'You cannot remove your own owner access.');
     const other=await db.prepare('SELECT role FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1]).first<{role:Role}>();
-    if(!other)bad(404,'Member not found.');
+    if(!other)throw new ApiError(404,'Member not found.');
     if(other.role==='owner')bad(403,'Cannot revoke another owner from this route.');
     await db.prepare('DELETE FROM household_members WHERE household_id=? AND user_id=?').bind(hid,memberDelete[1]).run();
     return json({revoked:true});
@@ -261,7 +261,8 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
   const inviteDelete=path.match(/^\/api\/invitations\/([0-9a-f-]+)$/);
   if(inviteDelete&&req.method==='DELETE') {
     const invite=await db.prepare('SELECT household_id FROM invitations WHERE id=?').bind(inviteDelete[1]).first<{household_id:string}>();
-    if(!invite)bad(404,'Invitation not found.');await owner(db,invite.household_id,user.id);
+    if(!invite)throw new ApiError(404,'Invitation not found.');
+    await owner(db,invite.household_id,user.id);
     await db.prepare('UPDATE invitations SET revoked_at=? WHERE id=? AND claimed_at IS NULL').bind(now(),inviteDelete[1]).run();
     return json({revoked:true});
   }
@@ -270,7 +271,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     await owner(db,hid,user.id);
     if(role!=='member'&&role!=='caregiver')bad(400,'Invalid member role.');
     const grants=b.grants;
-    if(!Array.isArray(grants)||grants.length>40)bad(400,'Invalid profile grants.');
+    if(!Array.isArray(grants)||grants.length>40)throw new ApiError(400,'Invalid profile grants.');
     const accepted:{profileId:string,capabilities:Capability[]}[]=[];
     for(const g of grants) {
       if(!g||typeof g!=='object')bad(400,'Invalid grant.');
@@ -327,7 +328,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     const found=await db.prepare('SELECT enabled FROM push_preferences WHERE user_id=? AND household_id=?').bind(user.id,hid).first<{enabled:number}>();
     return json({enabled:found?.enabled===1});
   }
-  bad(404,'Endpoint not found.');
+  return bad(404,'Endpoint not found.');
 }
 
 async function reminders(env:CareEnv) {
