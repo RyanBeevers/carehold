@@ -338,6 +338,36 @@ export default function App(){
   await api(pending.medication?`/medications/${pending.medication.id}`:'/medications',pending.medication?'PATCH':'POST',body);
   setModal(null);await Promise.all([refreshPerson(),refreshToday()]);notice(pending.medication?'Medication updated. Past administration records were preserved.':'Medication added.');
  }catch(e){fail(e);}finally{setSaving(false);}}
+ async function archiveMedication(e:FormEvent){
+  e.preventDefault();if(!pending.medication)return;
+  setSaving(true);try{
+   await api(`/medications/${pending.medication.id}/archive`,'POST',{});
+   setModal(null);await Promise.all([refreshPerson(),refreshToday()]);
+   notice('Medication archived. Future scheduled occurrences are hidden; administration history remains.');
+  }catch(e){fail(e);}finally{setSaving(false);}
+ }
+ async function restoreMedication(m:Medication){
+  setSaving(true);try{
+   await api(`/medications/${m.id}/restore`,'POST',{});
+   await Promise.all([refreshPerson(),refreshToday()]);
+   notice('Medication restored to its previous plan. Review the schedule before relying on it.');
+  }catch(e){fail(e);}finally{setSaving(false);}
+ }
+ async function archiveProfile(e:FormEvent){
+  e.preventDefault();if(!pending.profile)return;
+  setSaving(true);try{
+   await api(`/profiles/${pending.profile.id}/archive`,'POST',{});
+   setModal(null);await Promise.all([refreshProfiles(),refreshToday()]);
+   notice('Profile archived. Dose history and old conversations are retained; the linked account remains a member.');
+  }catch(e){fail(e);}finally{setSaving(false);}
+ }
+ async function restoreProfile(p:Person){
+  setSaving(true);try{
+   await api(`/profiles/${p.id}/restore`,'POST',{});
+   await Promise.all([refreshProfiles(),refreshToday()]);
+   notice('Profile restored. Review medications and household grants before using it.');
+  }catch(e){fail(e);}finally{setSaving(false);}
+ }
  function beginDose(entry?:Entry,medication?:Medication){setPending({entry,medication});setDoseStatus(null);setDoseNote('');setDoseActualAt(datetimeField(new Date()));setDoseIdempotency(crypto.randomUUID());setModal('dose');}
  async function saveDose(e:FormEvent){e.preventDefault();if(!doseStatus){showToast('error','Choose what actually happened before recording a dose.');return;}setSaving(true);try{
    const entry=pending.entry,med=pending.medication;
