@@ -256,7 +256,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
      {discussion.status==='conflict'&&<div className="words-audience-confirm">
       <span>{discussion.remoteConflict?'Another device has a different encrypted draft. Neither copy was overwritten.':'Another tab edited this local draft.'}</span>
       <button type="button" className="button outline small" onClick={()=>void (discussion.remoteConflict?discussion.loadRemote():discussion.reloadStored())}>{discussion.remoteConflict?'Use other device copy':'Load local saved copy'}</button>
-      <button type="button" className="button outline small" onClick={()=>void discussion.overwriteStored()}>Keep this device’s draft</button>
+      <button type="button" className="button outline small" disabled={discussion.remoteConflict&&!(discussion.text.trim()||discussion.title.trim()||discussion.prompt)} onClick={()=>void discussion.overwriteStored()}>Keep this device’s draft</button>
      </div>}
      {discussion.status==='error'&&discussion.syncEnabled&&<button type="button" className="button outline small" onClick={()=>void discussion.retrySync()}>Retry encrypted draft sync</button>}
      <p className="muted tiny">{discussion.syncEnabled?(discussion.synced?'Draft encrypted and synchronized privately.':'Draft kept locally; sync may still be pending.'):'Encrypted draft stored on this device until recovery is configured.'}</p>
