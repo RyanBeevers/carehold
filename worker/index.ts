@@ -1,4 +1,5 @@
 import { makeAuth } from './auth';
+import { localFrontendRedirect } from './local-frontend-redirect';
 import type { CareEnv, SessionUser, ProfileRow, MedicationRow } from './types';
 import { scheduledOn, localDate, localToInstant, occurrenceKey, validDate, validTime, timezoneValid, scheduleError, type Schedule } from '../shared/schedule';
 import { canAccess, validCapabilities, type Role, type Capability } from '../shared/policy';
@@ -82,6 +83,8 @@ function medSchedule(m:MedicationRow):Schedule {return {cadence:m.cadence,weekda
 async function handle(req:Request,env:CareEnv):Promise<Response> {
   const url=new URL(req.url), path=url.pathname,db=env.DB;
   checkRequest(req,env);
+  const localRedirect=localFrontendRedirect(req,env.APP_ORIGIN);
+  if(localRedirect)return localRedirect;
   if(path==='/api/health'&&req.method==='GET')return json({ok:true,product:'carehold'});
   if(path.startsWith('/api/auth/')) {
     if(path==='/api/auth/sign-up/email'&&req.method==='POST') {
