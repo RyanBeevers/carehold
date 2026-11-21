@@ -473,7 +473,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
 }
 
 async function reminders(env:CareEnv) {
-  if(!pushConfigured(env))return;
+  if(!pushConfigured(env)||!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY||!env.VAPID_SUBJECT)return;
   const db=env.DB,time=Date.now();
   const result=await db.prepare(`SELECT m.*,p.household_id,h.timezone FROM medications m JOIN profiles p ON p.id=m.profile_id JOIN households h ON h.id=p.household_id
     WHERE m.archived_at IS NULL AND p.archived_at IS NULL AND m.cadence!='prn' LIMIT 500`).all<MedicationRow&{household_id:string,timezone:string}>();
