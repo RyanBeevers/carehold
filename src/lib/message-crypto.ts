@@ -55,6 +55,15 @@ async function readRecovered(db:IDBDatabase,userId:string):Promise<Row|undefined
  const tx=db.transaction('recoveredIdentities','readonly');
  return requestValue(tx.objectStore('recoveredIdentities').get(userId)) as Promise<Row|undefined>;
 }
+/** Read legacy identity even after a v2 key is installed, for safe verification. */
+export async function storedLegacyMessageIdentity(userId:string):Promise<Identity|null>{
+ if(!userId||userId.length>200)throw new Error('Sign in before accessing encrypted data.');
+ const db=await getDb();
+ try{
+  const row=await readIdentity(db,userId);
+  return row?{privateKey:row.privateKey,publicKey:row.publicKey}:null;
+ }finally{db.close();}
+}
 /** Read without generating a new key; critical when opening an account on a new device. */
 export async function storedMessageIdentity(userId:string):Promise<Identity|null>{
  if(!userId||userId.length>200)throw new Error('Sign in before using encrypted messages.');
