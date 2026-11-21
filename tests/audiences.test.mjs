@@ -7,7 +7,7 @@ test('pilot audiences exclude clinical privileges',()=>{
  for(const value of ['doctor','caregiver','owner','member',null,undefined,4])assert.equal(validAudience(value),false);
 });
 test('prompts never cross audience boundaries',()=>{
- for(const audience of ['parent','child','teen'] as const){
+ for(const audience of ['parent','child','teen']){
   const selected=promptsForAudience(audience);
   assert.ok(selected.some(p=>p.audience===audience));
   assert.ok(selected.every(p=>p.audience===audience||p.audience==='all'));
