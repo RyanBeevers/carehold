@@ -6,7 +6,7 @@
  * migration, and journal recovery are NOT supported yet.
  */
 export type PublicKey={kty:'EC',crv:'P-256',x:string,y:string};
-export type Identity={privateKey:CryptoKey,publicKey:PublicKey};
+export type Identity={privateKey:CryptoKey,publicKey:PublicKey,journalKey?:CryptoKey};
 export type Content={kind:'prompt'|'message',text:string};
 export type Envelope={v:1,epk:PublicKey,iv:string,salt:string,ct:string};
 const enc=new TextEncoder(),dec=new TextDecoder();
@@ -46,7 +46,7 @@ function getDb():Promise<IDBDatabase>{
 function requestValue<T>(request:IDBRequest<T>):Promise<T>{
  return new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
 }
-type Row={userId:string,privateKey:CryptoKey,publicKey:PublicKey};
+type Row={userId:string,privateKey:CryptoKey,publicKey:PublicKey,journalKey?:CryptoKey};
 async function readIdentity(db:IDBDatabase,userId:string):Promise<Row|undefined>{
  const tx=db.transaction('identities','readonly');
  return requestValue(tx.objectStore('identities').get(userId)) as Promise<Row|undefined>;
@@ -61,7 +61,7 @@ export async function storedMessageIdentity(userId:string):Promise<Identity|null
  const db=await getDb();
  try{
   const row=(await readRecovered(db,userId))??(await readIdentity(db,userId));
-  return row?{privateKey:row.privateKey,publicKey:row.publicKey}:null;
+  return row?{privateKey:row.privateKey,publicKey:row.publicKey,journalKey:row.journalKey}:null;
  }finally{db.close();}
 }
 /** Add an explicitly recovered key without deleting or overwriting a legacy key. */
@@ -72,8 +72,8 @@ export async function storeRecoveredMessageIdentity(userId:string,identity:Ident
  try{
   const existing=await readRecovered(db,userId);
   if(existing){
-   if(!samePublicKey(existing.publicKey,identity.publicKey))
-    throw new Error('A different recovered identity is already enrolled on this browser.');
+   if(!samePublicKey(existing.publicKey,identity.publicKey)||Boolean(existing.journalKey)!==Boolean(identity.journalKey))
+    throw new Error('A different or incomplete recovered identity is already enrolled on this browser.');
    return;
   }
   try{
@@ -81,7 +81,7 @@ export async function storeRecoveredMessageIdentity(userId:string,identity:Ident
    await requestValue(tx.objectStore('recoveredIdentities').add({userId,...identity}));
   }catch(e){
    const concurrent=await readRecovered(db,userId);
-   if(concurrent&&samePublicKey(concurrent.publicKey,identity.publicKey))return;
+   if(concurrent&&samePublicKey(concurrent.publicKey,identity.publicKey)&&Boolean(concurrent.journalKey)===Boolean(identity.journalKey))return;
    throw e;
   }
  }finally{db.close();}
@@ -91,7 +91,7 @@ export async function deviceIdentity(userId:string):Promise<Identity>{
  const db=await getDb();
  try{
   const current=(await readRecovered(db,userId))??(await readIdentity(db,userId));
-  if(current)return {privateKey:current.privateKey,publicKey:current.publicKey};
+  if(current)return {privateKey:current.privateKey,publicKey:current.publicKey,journalKey:current.journalKey};
   const keys=await crypto.subtle.generateKey(algorithm,false,['deriveBits']) as CryptoKeyPair;
   const publicKey=clean(await crypto.subtle.exportKey('jwk',keys.publicKey));
   try{
