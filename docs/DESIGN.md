@@ -25,3 +25,9 @@ Dark theme reverses paper and ink thoughtfully rather than simply applying `filt
 ## Layout principles
 
 Medication records live in a **ruled chronological ledger**, with a time rail, person, dose, explicit outcome, and record action. The UI has one grounded summary strip, not a grid of statistic cards. People live in an index and detail view; prompts appear as large editorial quotes separated by hairline rules. Modals are single-task sheets. Motion is nonessential and disappears under reduced-motion settings. Phone design retains clear access via a bottom index rather than nesting navigation in hamburger drawers.
+
+## Appearance and contrast (first browser-review correction)
+
+The default is **System**, with explicit **Light** and **Dark** overrides available on account creation, the passkey gate, first-circle onboarding, the app header, and Settings. The preference is local to the device and is saved without private care data. A small CSP-compatible external initializer applies the selected theme before the React bundle loads to prevent a flash of the wrong background. All controls are labeled, keyboard-focusable, and expose their pressed state.
+
+Root text and background **must use theme tokens** (`var(--ink)` and `var(--paper)`). Never pair a fixed light-theme root text color with dark-theme surface variables: this rendered the passkey heading nearly invisible. Decorative dark-on-forest elements may remain intentionally fixed when both foreground and background are specified as a contrasting pair. The ledger's forest summary is always dark with light text rather than inheriting the status-green token, which becomes citron in dark mode. Verify the sign-up, passkey gate, household setup, ledger, and settings screens in each theme before release.
