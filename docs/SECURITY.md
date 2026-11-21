@@ -1,3 +1,5 @@
+> **Implementation update — November 21, 2026:** The draft branch now includes a version-2 recovery envelope wrapping an independent private-journal key, encrypted owner-only journal sync, explicit local-entry import, and server-enforced Adult/Teen/Child account classes. Earlier sections document historical pilot limitations and must be interpreted with the current implementation status in [RECOVERY_ARCHITECTURE.md](RECOVERY_ARCHITECTURE.md). Cross-device message recovery for new accounts is **not** secure device revocation. Legacy non-exportable message keys and unsent drafts are still not portable. No production security certification or real-user approval is implied.
+
 # Carehold threat boundaries and launch gates
 
 **Status: first source foundation, not security certified, not ready for real sensitive records.** This repository is public source code; database contents, credentials, OAuth secrets, patient data and invite tokens must remain private.
