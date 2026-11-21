@@ -4,14 +4,14 @@ import {samePublicKey,type Identity,type PublicKey} from './message-crypto.ts';
  * Experimental account recovery building block; NOT enabled for real data.
  *
  * Generates a fresh, random 256-bit recovery secret and wraps an account's P-256
- * private key locally. Only the ciphertext and public key may be uploaded.
+ * private key AND independently random 256-bit journal key locally. Only the ciphertext and public key may be uploaded.
  * This does not recover legacy, non-extractable browser keys.
  *
  * TODO before launch: verified device enrollment, device revocation/rotation,
  * journal encrypted sync, legacy-key migration, independent security review.
  */
 export type MessageRecoveryEnvelope = {
- v:1;
+ v:2;
  kdf:'HKDF-SHA256';
  alg:'AES-256-GCM';
  salt:string;
@@ -25,7 +25,7 @@ export type NewRecoveryIdentity = {
  envelope:MessageRecoveryEnvelope;
 };
 const encoder=new TextEncoder();
-const purpose='carehold-message-account-recovery-v1';
+const purpose='carehold-account-recovery-v2';
 const b64=(value:Uint8Array):string=>{
  let raw='';
  for(const byte of value)raw+=String.fromCharCode(byte);
@@ -50,11 +50,11 @@ export function validMessageRecoveryEnvelope(value:unknown):value is MessageReco
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const e=value as Record<string,unknown>;
  return Object.keys(e).sort().join(',')==='alg,ct,iv,kdf,publicKey,salt,v'&&
-  e.v===1&&e.kdf==='HKDF-SHA256'&&e.alg==='AES-256-GCM'&&
+  e.v===2&&e.kdf==='HKDF-SHA256'&&e.alg==='AES-256-GCM'&&
   validatePublic(e.publicKey)&&
   typeof e.salt==='string'&&/^[A-Za-z0-9_-]{22}$/.test(e.salt)&&
   typeof e.iv==='string'&&/^[A-Za-z0-9_-]{16}$/.test(e.iv)&&
-  typeof e.ct==='string'&&e.ct.length>=100&&e.ct.length<=2000&&/^[A-Za-z0-9_-]+$/.test(e.ct);
+  typeof e.ct==='string'&&e.ct.length>=200&&e.ct.length<=3000&&/^[A-Za-z0-9_-]+$/.test(e.ct);
 }
 function context(userId:string,key:PublicKey){
  return encoder.encode(purpose+':'+userId+':'+JSON.stringify(key));
@@ -91,16 +91,22 @@ export async function createMessageRecoveryIdentity(userId:string):Promise<NewRe
  const publicKey:PublicKey={kty:'EC',crv:'P-256',x:jwk.x!,y:jwk.y!};
  const raw=await crypto.subtle.exportKey('pkcs8',pair.privateKey);
  const bytes=new Uint8Array(raw);
+ // Independent random journal key; not derived from the ECDH messaging key.
+ const journalBytes=crypto.getRandomValues(new Uint8Array(32));
  try{
   const key=await wrappingKey(secret,salt);
-  const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:context(userId,publicKey)},key,raw);
-  const privateKey=await crypto.subtle.importKey('pkcs8',raw,{name:'ECDH',namedCurve:'P-256'},false,['deriveBits']);
-  return {
-   identity:{privateKey,publicKey},
-   recoveryCode:'CH1-'+b64(secret),
-   envelope:{v:1,kdf:'HKDF-SHA256',alg:'AES-256-GCM',salt:b64(salt),iv:b64(iv),ct:b64(new Uint8Array(ciphertext)),publicKey}
-  };
- }finally{bytes.fill(0);secret.fill(0);}
+  const bundle=encoder.encode(JSON.stringify({v:2,messagePrivateKey:b64(bytes),journalKey:b64(journalBytes)}));
+  try{
+   const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:context(userId,publicKey)},key,bundle);
+   const privateKey=await crypto.subtle.importKey('pkcs8',raw,{name:'ECDH',namedCurve:'P-256'},false,['deriveBits']);
+   const journalKey=await crypto.subtle.importKey('raw',journalBytes,'AES-GCM',false,['encrypt','decrypt']);
+   return {
+    identity:{privateKey,publicKey,journalKey},
+    recoveryCode:'CH1-'+b64(secret),
+    envelope:{v:2,kdf:'HKDF-SHA256',alg:'AES-256-GCM',salt:b64(salt),iv:b64(iv),ct:b64(new Uint8Array(ciphertext)),publicKey}
+   };
+  }finally{bundle.fill(0);}
+ }finally{bytes.fill(0);journalBytes.fill(0);secret.fill(0);}
 }
 /**
  * A passkey/account login alone cannot open this envelope. Successful
@@ -122,11 +128,22 @@ export async function openMessageRecoveryIdentity(
  }catch{throw new Error('Recovery failed. The code or encrypted record is incorrect.');}
  finally{secret.fill(0);}
  const bytes=new Uint8Array(raw);
+ let decoded:unknown;
+ try{decoded=JSON.parse(new TextDecoder().decode(bytes));}
+ catch{throw new Error('Encrypted recovery bundle is invalid.');}
+ finally{bytes.fill(0);}
+ if(!decoded||typeof decoded!=='object'||Array.isArray(decoded))throw new Error('Encrypted recovery bundle is invalid.');
+ const value=decoded as Record<string,unknown>;
+ if(value.v!==2||typeof value.messagePrivateKey!=='string'||typeof value.journalKey!=='string')
+  throw new Error('Encrypted recovery bundle is incomplete.');
+ const messageBytes=unb64(value.messagePrivateKey);
+ const journalBytes=unb64(value.journalKey,32);
  try{
-  const privateKey=await crypto.subtle.importKey('pkcs8',raw,{name:'ECDH',namedCurve:'P-256'},false,['deriveBits']);
+  const privateKey=await crypto.subtle.importKey('pkcs8',messageBytes,{name:'ECDH',namedCurve:'P-256'},false,['deriveBits']);
   await verifyPair(privateKey,envelope.publicKey);
-  return {privateKey,publicKey:envelope.publicKey};
- }finally{bytes.fill(0);}
+  const journalKey=await crypto.subtle.importKey('raw',journalBytes,'AES-GCM',false,['encrypt','decrypt']);
+  return {privateKey,publicKey:envelope.publicKey,journalKey};
+ }finally{messageBytes.fill(0);journalBytes.fill(0);}
 }
 export function assertMatchingRecoveryIdentity(identity:Identity,envelope:MessageRecoveryEnvelope){
  if(!samePublicKey(identity.publicKey,envelope.publicKey))
