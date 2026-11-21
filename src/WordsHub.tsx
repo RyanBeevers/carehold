@@ -335,7 +335,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     {journalError&&<p className="messages-error" role="alert">{journalError}</p>}
     <div className="words-response-actions">
      
-     {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void (draft.remoteConflict?draft.loadRemote():draft.reloadStored())}>{draft.remoteConflict?'Use other device copy':'Load other tab'}</button><button type="button" className="button outline small" onClick={()=>void draft.overwriteStored()}>Keep this device’s version</button></>}
+     {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void (draft.remoteConflict?draft.loadRemote():draft.reloadStored())}>{draft.remoteConflict?'Use other device copy':'Load other tab'}</button><button type="button" className="button outline small" disabled={draft.remoteConflict&&!(draft.text.trim()||draft.title.trim()||draft.prompt)} onClick={()=>void draft.overwriteStored()}>Keep this device’s version</button></>}
       {draft.status==='error'&&draft.syncEnabled&&<button type="button" className="button outline small" onClick={()=>void draft.retrySync()}>Retry encrypted sync</button>}
      <button type="submit" className="button outline small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}><BookOpen size={16}/>{journalBusy?'Saving…':'Save privately'}</button>
      <button type="button" className="button dark small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}
