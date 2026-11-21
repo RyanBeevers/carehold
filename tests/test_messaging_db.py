@@ -32,6 +32,19 @@ class DirectMessageIntegrity(unittest.TestCase):
             self.db.execute("INSERT INTO direct_threads VALUES('another','h','a:b','a','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO encrypted_message_copies VALUES('missing','b','cipher')")
+    def test_ownership_or_care_grant_does_not_create_thread_access(self):
+        # This is the same participant + household join used in Worker reads.
+        sql="""SELECT t.id FROM direct_threads t
+            JOIN direct_thread_members tm ON tm.thread_id=t.id AND tm.user_id=?
+            JOIN household_members hm ON hm.household_id=t.household_id AND hm.user_id=?
+            WHERE t.id=?"""
+        self.assertEqual(self.db.execute(sql,('a','a','t')).fetchone(),('t',))
+        self.assertFalse(self.db.execute(sql,('outsider','outsider','t')).fetchone())
+        # Explicit thread membership still wins over a new household owner role.
+        self.db.execute("INSERT INTO household_members VALUES('h','outsider','owner','later')")
+        self.assertFalse(self.db.execute(sql,('outsider','outsider','t')).fetchone())
+        self.db.execute("DELETE FROM household_members WHERE household_id='h' AND user_id='b'")
+        self.assertFalse(self.db.execute(sql,('b','b','t')).fetchone())
     def test_revocation_archives_old_pair_without_revival(self):
         self.db.execute("UPDATE direct_threads SET pair_key='revoked:'||id WHERE household_id='h' AND id IN (SELECT thread_id FROM direct_thread_members WHERE user_id='b')")
         self.db.execute("DELETE FROM direct_thread_members WHERE user_id='b'")

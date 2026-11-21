@@ -92,7 +92,7 @@ function Composer({thread,userId,householdId,audience,onSent}:{thread:Thread,use
  const [library,setLibrary]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
  const retry=useRef<{text:string,kind:Content['kind'],id:string,copies:Record<string,Envelope>}|null>(null);
  const available=promptsForAudience(audience).filter(p=>(topic==='All topics'||p.topic===topic)&&(relationship==='all'||p.relationship===relationship));
- const topics=[...new Set(promptsForAudience(audience).map(p=>p.topic))].sort();
+ const topics=[...new Set(promptsForAudience(audience).filter(p=>relationship==='all'||p.relationship===relationship).map(p=>p.topic))].sort();
  function rotate(){
   const result=rotatePrompt(available,seen,suggested?.id??null);
   setSuggested(result.prompt);setSeen(result.seen);
@@ -120,7 +120,7 @@ function Composer({thread,userId,householdId,audience,onSent}:{thread:Thread,use
  }
  return <div className="messages-composer">
   <div className="messages-subhead"><h3>Your words</h3><button className="quiet small" type="button" onClick={()=>setLibrary(v=>!v)}>{library?'Close prompts':'Guided prompts'}</button></div>
-  {library&&<div className="messages-prompts"><label>Relationship<select value={relationship} onChange={e=>{setRelationship(e.target.value as Relationship|'all');setSeen([]);setSuggested(null);}}><option value="all">All relationships</option>{relationshipOptions(audience).map(r=><option value={r} key={r}>{RELATIONSHIP_LABELS[r]}</option>)}</select></label><label>Category<select value={topic} onChange={e=>{setTopic(e.target.value);setSeen([]);setSuggested(null);}}><option>All topics</option>{topics.map(t=><option key={t}>{t}</option>)}</select></label>
+  {library&&<div className="messages-prompts"><label>Relationship<select value={relationship} onChange={e=>{setRelationship(e.target.value as Relationship|'all');setTopic('All topics');setSeen([]);setSuggested(null);}}><option value="all">All relationships</option>{relationshipOptions(audience).map(r=><option value={r} key={r}>{RELATIONSHIP_LABELS[r]}</option>)}</select></label><label>Category<select value={topic} onChange={e=>{setTopic(e.target.value);setSeen([]);setSuggested(null);}}><option>All topics</option>{topics.map(t=><option key={t}>{t}</option>)}</select></label>
    <button type="button" className="button outline small" onClick={rotate} disabled={!available.length}>Another prompt</button>
    {suggested&&<blockquote>{suggested.text}<button type="button" className="button dark small" onClick={()=>choose(suggested)}>Use and edit</button></blockquote>}
    <div className="messages-prompts-list">{available.map(p=><button type="button" key={p.id} onClick={()=>choose(p)}>{p.text}</button>)}</div>

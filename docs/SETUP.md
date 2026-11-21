@@ -196,3 +196,9 @@ Known blockers: no authenticated key verification, no multi-device/recovery,
 no independently audited E2EE, no completed end-to-end authorization testing,
 no minors/consent legal approval, no group threads or message push. Keep PR
 draft and keep staging/prod unmodified until explicitly approved.
+
+### Manual test checklist recording
+Record the actual test outcome separately for each browser/account (pass, fail,
+not run). Publishing source code and unit-test fixtures is not evidence that
+browser integration or the crypto recovery policy has passed. Include the
+failing console message and route, but redact all tokens and private writing.
