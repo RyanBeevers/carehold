@@ -1,11 +1,11 @@
 import {useEffect,useRef,useState} from 'react';
 import {api,StaleSessionRequest} from './lib/api';
-import {samePublicKey,seal,unseal,storedLegacyMessageIdentity,storeRecoveredMessageIdentity,type Envelope,type Identity,type PublicKey} from './lib/message-crypto';
+import {samePublicKey,seal,unseal,storedLegacyMessageIdentity,storeRecoveredMessageIdentity,storedPendingRecoveryEnvelope,storePendingRecoveryEnvelope,clearPendingRecoveryEnvelope,type Envelope,type Identity,type PublicKey} from './lib/message-crypto';
 import {sealWord,unsealWord} from './lib/words-space-crypto';
 import {createMessageRecoveryIdentity,openMessageRecoveryIdentity,type MessageRecoveryEnvelope,type NewRecoveryIdentity} from './lib/message-recovery';
 import {RecoveryCodeSaveGuide,RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 
-type Status='checking'|'legacy'|'show-code'|'resume'|'running'|'done'|'blocked';
+type Status='checking'|'legacy'|'show-code'|'resume-prestage'|'resume'|'running'|'done'|'blocked';
 type Stage={state:'none'|'staged'|'complete',envelope:MessageRecoveryEnvelope|null,publicKey:PublicKey|null};
 type Inventory={copies:{kind:'direct'|'words',sourceId:string,contextId:string,envelope:Envelope,migratedEnvelope:Envelope|null}[],hasMore:boolean};
 const errText=(e:unknown)=>e instanceof Error?e.message:'Migration stopped; no original data was erased.';
@@ -15,6 +15,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
  const [status,setStatus]=useState<Status>('checking');
  const [oldKey,setOldKey]=useState<Identity|null>(null),[pending,setPending]=useState<NewRecoveryIdentity|null>(null);
  const [stage,setStage]=useState<Stage|null>(null),[recoveryCode,setRecoveryCode]=useState('');
+ const [pendingResume,setPendingResume]=useState<MessageRecoveryEnvelope|null>(null);
  const [savedCode,setSavedCode]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [progress,setProgress]=useState({completed:0,verified:0});
  const cancel=useRef(false);
@@ -33,7 +34,11 @@ export function LegacyMessageMigration({userId}:{userId:string}){
      setStatus('blocked');return;
     }
     setOldKey(legacy);
-    setStatus(staged.state==='staged'?'resume':'legacy');
+    if(staged.state==='staged'){setStatus('resume');return;}
+    const unfinished=await storedPendingRecoveryEnvelope(userId,'legacy');
+    if(!active)return;
+    if(unfinished){setPendingResume(unfinished);setStatus('resume-prestage');}
+    else setStatus('legacy');
    }catch(e){if(active&&!(e instanceof StaleSessionRequest)){setError(errText(e));setStatus('blocked');}}
   })();
   return()=>{active=false;cancel.current=true;};
@@ -43,6 +48,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    const confirmed=await api<Stage>('/messages/recovery/migration');
    if(confirmed.state==='complete'&&confirmed.publicKey&&samePublicKey(confirmed.publicKey,next.publicKey)){
     await storeRecoveredMessageIdentity(userId,next);
+    await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
     setStage(confirmed);setPending(null);setRecoveryCode('');setStatus('done');
     return true;
    }
@@ -53,6 +59,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   if(busy)return;setBusy(true);setError('');
   try{
    const fresh=await createMessageRecoveryIdentity(userId);
+   await storePendingRecoveryEnvelope(userId,'legacy',fresh.envelope);
    setPending(fresh);setSavedCode(false);setStatus('show-code');
   }catch(e){setError(errText(e));}
   finally{setBusy(false);}
@@ -65,6 +72,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    const proof=await unseal(challenge.envelope,oldKey.privateKey,'carehold-legacy-proof-v1',userId,userId);
    if(proof.kind!=='message')throw new Error('Legacy key verification failed.');
    await api('/messages/recovery/migration','POST',{envelope:pending.envelope,proof:proof.text});
+   await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
    setStage({state:'staged',envelope:pending.envelope,publicKey:pending.identity.publicKey});
    await convert(pending.identity,oldKey);
   }catch(e){
@@ -77,6 +85,44 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    }catch{setStatus('show-code');}
    setError(errText(e)+' Preserve the original browser and saved code. No ciphertext was erased.');
   }
+  finally{setBusy(false);}
+ }
+ async function completeUnregisteredLegacySetup(){
+  if(!pendingResume||!oldKey||!savedCode||!recoveryCode.trim()||busy)return;
+  setBusy(true);setError('');
+  let next:Identity|null=null;
+  try{
+   next=await openMessageRecoveryIdentity(userId,recoveryCode.trim(),pendingResume);
+   const challenge=await api<{envelope:Envelope}>('/messages/recovery/migration/challenge','POST',{});
+   const proof=await unseal(challenge.envelope,oldKey.privateKey,'carehold-legacy-proof-v1',userId,userId);
+   if(proof.kind!=='message')throw new Error('Original private key verification failed.');
+   try{await api('/messages/recovery/migration','POST',{envelope:pendingResume,proof:proof.text});}
+   catch(e){
+    const existing=await api<Stage>('/messages/recovery/migration');
+    if(existing.state!=='staged'||!existing.publicKey||!samePublicKey(existing.publicKey,next.publicKey))throw e;
+   }
+   await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
+   setStage({state:'staged',envelope:pendingResume,publicKey:next.publicKey});
+   await convert(next,oldKey);
+   setRecoveryCode('');setPendingResume(null);
+  }catch(e){
+   if(next&&await acceptCommitted(next))return;
+   const existing=await api<Stage>('/messages/recovery/migration').catch(()=>null);
+   if(existing?.state==='staged'){setStage(existing);setStatus('resume');}
+   else setStatus('resume-prestage');
+   setError(errText(e)+' Original encrypted copies and saved recovery code were preserved.');
+  }finally{setBusy(false);}
+ }
+ async function discardUnregisteredLegacySetup(){
+  if(busy)return;
+  setBusy(true);setError('');
+  try{
+   const state=await api<Stage>('/messages/recovery/migration');
+   if(state.state!=='none')throw new Error('A migration is already staged or completed. Resume it rather than resetting.');
+   await clearPendingRecoveryEnvelope(userId,'legacy');
+   setPendingResume(null);setPending(null);setSavedCode(false);setRecoveryCode('');
+   setStatus('legacy');
+  }catch(e){setError(errText(e));}
   finally{setBusy(false);}
  }
  async function resume(){
@@ -103,6 +149,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    if(proof.kind!=='message')throw new Error('Original device key verification failed.');
    await api('/messages/recovery/migration/cancel','POST',{proof:proof.text});
    setStage({state:'none',publicKey:null,envelope:null});
+   await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
    setPending(null);setSavedCode(false);setRecoveryCode('');setStatus('legacy');
   }catch(e){setError(errText(e)+' Original encrypted history remains unchanged.');}
   finally{setBusy(false);}
@@ -148,6 +195,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   // has a replacement, then changes the active key in one transaction.
   await api('/messages/recovery/migration/finalize','POST',{confirm:true});
   await storeRecoveredMessageIdentity(userId,next);
+  await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
   setStatus('done');setPending(null);
  }
  if(status==='checking')return <p role="status">Checking legacy encryption…</p>;
@@ -161,6 +209,13 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   {status==='show-code'&&pending&&<><p>Save this recovery code securely before converting anything. It is shown only now, cannot be reconstructed, and is required if the migration is interrupted.</p>
    <RecoveryCodeSaveGuide code={pending.recoveryCode} saved={savedCode} onSavedChange={setSavedCode}/>
    <button type="button" className="button primary" disabled={!savedCode||busy} onClick={()=>void start()}>{busy?'Converting…':'Encrypt and verify all my older messages'}</button></>}
+  {status==='resume-prestage'&&pendingResume&&<><p><strong>Continue the original-browser setup you started.</strong> The unregistered key was kept here only as an encrypted envelope while you saved the recovery code. No code or original message key was stored in plaintext.</p>
+   <label>Saved recovery code<input type="password" autoComplete="off" spellCheck={false} value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value)} placeholder="CH1-…"/></label>
+   <p className="muted tiny">Find <strong>{RECOVERY_SEARCH_LABEL}</strong> in Apple Passwords, a trusted manager or a locked note.</p>
+   <label className="recovery-confirm"><input type="checkbox" checked={savedCode} onChange={e=>setSavedCode(e.target.checked)}/>I saved the code securely and can find it after losing this device.</label>
+   <button type="button" className="button primary" disabled={busy||!savedCode||!recoveryCode.trim()} onClick={()=>void completeUnregisteredLegacySetup()}>Finish original-browser migration setup</button>
+   <button type="button" className="button outline small" disabled={busy} onClick={()=>void discardUnregisteredLegacySetup()}>I didn't save it — discard only this unregistered attempt</button>
+   <p className="fine-print">Your old key, messages and other participants' encrypted copies will not be deleted.</p></>}
   {status==='resume'&&<><p>A migration is already staged. Do not generate a replacement key. On the original browser, enter the recovery code saved when you started.</p><label>Saved recovery code<input type="password" autoComplete="off" spellCheck={false} value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value)} placeholder="CH1-…"/></label>
    <p className="muted tiny">Search your Passwords app or safe notes for <strong>{RECOVERY_SEARCH_LABEL}</strong> to resume. Do not regenerate a key unless the staged migration is safely cancelled.</p>
    <button type="button" className="button primary" disabled={busy||!recoveryCode.trim()} onClick={()=>void resume()}>{busy?'Resuming…':'Resume verified migration'}</button>
