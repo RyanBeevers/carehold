@@ -13,7 +13,7 @@ class LinkedProfileVisibility(unittest.TestCase):
         self.db.execute("INSERT INTO households VALUES('h','Test','America/New_York','owner','now')")
         self.db.execute("INSERT INTO household_members VALUES('h','owner','owner','now')")
         self.db.execute("INSERT INTO household_members VALUES('h','child','member','now')")
-        self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,linked_user_id,created_at) VALUES('p','h','Child','child','now','now')")
+        self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,linked_user_id,created_at) VALUES('p','h','Child','child','child','now')")
     def test_link_does_not_create_a_care_grant(self):
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM profile_grants WHERE user_id='child'").fetchone()[0],0)
         q="SELECT id FROM profiles WHERE household_id=? AND linked_user_id=? AND archived_at IS NULL"
