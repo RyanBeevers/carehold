@@ -6,7 +6,8 @@ import {promptsForAudience,relationshipOptions,RELATIONSHIP_LABELS,rotatePrompt,
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
 import type {Identity} from './lib/message-crypto';
 import {MessageRecoveryGate} from './MessageRecoveryGate';
-import {listPrivateJournal,savePrivateJournal,deletePrivateJournal,type JournalEntry} from './lib/private-journal';
+import {listPrivateJournal,savePrivateJournal,deletePrivateJournal,type JournalEntry,type JournalDraft} from './lib/private-journal';
+import {listSyncedPrivateJournal,saveSyncedPrivateJournal,deleteSyncedPrivateJournal} from './lib/synced-private-journal';
 import {createEncryptedJournalBackup,openEncryptedJournalBackup} from './lib/journal-backup';
 import {ShareComposer,SharedSpaces,type ShareSeed,type WordContact} from './SharedWords';
 
@@ -38,6 +39,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushPublicKey,setPushPublicKey]=useState<string|null>(null),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
  const [feedback,setFeedback]=useState('');
  const [backupMode,setBackupMode]=useState<'export'|'import'|null>(null);
+ const [legacyCount,setLegacyCount]=useState(0),[migratingJournal,setMigratingJournal]=useState(false);
  const [backupPassphrase,setBackupPassphrase]=useState(''),[backupFile,setBackupFile]=useState<File|null>(null);
  const [backupBusy,setBackupBusy]=useState(false),[backupError,setBackupError]=useState(''),[backupNotice,setBackupNotice]=useState('');
  const lastInput=useRef(Date.now());
@@ -63,9 +65,37 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  const topics=[...new Set(options.filter(p=>relationship==='all'||p.relationship===relationship).map(p=>p.topic))].sort();
  const filtered=options.filter(p=>(topic==='All topics'||p.topic===topic)&&(relationship==='all'||p.relationship===relationship)&&
   (!search.trim()||(p.text+' '+p.topic).toLowerCase().includes(search.trim().toLowerCase())));
+ async function listJournal():Promise<JournalEntry[]>{
+  if(identity?.journalKey)return listSyncedPrivateJournal(userId,householdId,identity.journalKey);
+  return listPrivateJournal(userId,householdId);
+ }
+ async function saveJournalEntry(entry:JournalDraft,revision=0){
+  if(!identity)throw new Error('Set up encryption recovery before saving journal entries.');
+  if(identity.journalKey)return saveSyncedPrivateJournal(userId,householdId,identity.journalKey,entry,revision);
+  return savePrivateJournal(userId,householdId,entry,revision);
+ }
  async function reloadJournal(){
-  const items=await listPrivateJournal(userId,householdId);
+  const items=await listJournal();
   setEntries(items);
+ }
+ async function migrateJournal(){
+  if(!identity?.journalKey||migratingJournal)return;
+  setMigratingJournal(true);setJournalError('');
+  try{
+   const previous=await listPrivateJournal(userId,householdId);
+   const existing=new Set((await listSyncedPrivateJournal(userId,householdId,identity.journalKey)).map(e=>e.id));
+   let moved=0;
+   for(const entry of previous){
+    if(existing.has(entry.id))continue;
+    await saveSyncedPrivateJournal(userId,householdId,identity.journalKey,entry);
+    moved++;
+   }
+   // Retain original encrypted local copies until separate-device restoration passes.
+   setLegacyCount(0);
+   await reloadJournal();
+   setFeedback('Encrypted sync verified for '+moved+' local entries. Your original browser copies remain untouched.');
+  }catch(e){setJournalError(errorText(e));}
+  finally{setMigratingJournal(false);}
  }
  async function reloadActivity(){
   const r=await api<{events:ActivityEvent[]}>(`/activity?householdId=${encodeURIComponent(householdId)}`);
@@ -73,7 +103,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  }
  useEffect(()=>{
   let live=true;
-  void reloadJournal().catch(e=>{if(live)setJournalError(errorText(e));}).finally(()=>{if(live)setLoadingJournal(false);});
+  void listPrivateJournal(userId,householdId).then(items=>{if(live){setEntries(items);setLegacyCount(items.length);}}).catch(e=>{if(live)setJournalError(errorText(e));}).finally(()=>{if(live)setLoadingJournal(false);});
   setIdentity(null);setKeyError('');
   void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`)
    .then(r=>{if(live){setPeople(r.people);setContactsError('');}})
@@ -93,6 +123,15 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     void reloadActivity().catch(()=>{});},15000);
   return()=>{live=false;window.clearInterval(timer);document.removeEventListener('pointerdown',onInput);document.removeEventListener('keydown',onInput);window.removeEventListener('carehold:activity-changed',onActivity);};
  },[userId,householdId]);
+ useEffect(()=>{
+  if(!identity?.journalKey)return;
+  let live=true;setLoadingJournal(true);
+  void Promise.all([listSyncedPrivateJournal(userId,householdId,identity.journalKey),
+   listPrivateJournal(userId,householdId)]).then(([remote,local])=>{
+    if(live){setEntries(remote);setLegacyCount(local.filter(item=>!remote.some(saved=>saved.id===item.id)).length);}
+   }).catch(e=>{if(live)setJournalError(errorText(e));}).finally(()=>{if(live)setLoadingJournal(false);});
+  return()=>{live=false;};
+ },[identity,userId,householdId]);
  async function beginFresh(prompt:string|null=null){
   const cleared=await draft.discard();
   if(!cleared){setJournalError('Could not reset the previous draft. Your writing was not replaced.');return;}
@@ -131,9 +170,9 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   e.preventDefault();if(!draft.ready||!draft.text.trim()||journalBusy)return;
   setJournalBusy(true);setJournalError('');setFeedback('');
   try{
-   await savePrivateJournal(userId,householdId,{id:editing?.id||crypto.randomUUID(),prompt:draft.prompt,text:draft.text,title:draft.title.trim(),sharedAt:editing?.sharedAt??null,spaceId:editing?.spaceId??null},editing?.revision??0);
+   await saveJournalEntry({id:editing?.id||crypto.randomUUID(),prompt:draft.prompt,text:draft.text,title:draft.title.trim(),sharedAt:editing?.sharedAt??null,spaceId:editing?.spaceId??null},editing?.revision??0);
    await reloadJournal();const cleared=await draft.discard();
-   setEditing(null);selectTab('journal');setFeedback(cleared?'Saved privately to this device. No one else can see it.':'Entry saved, but a draft copy remains. Discard it manually.');
+   setEditing(null);selectTab('journal');setFeedback(cleared?identity?.journalKey?'Encrypted journal saved and synchronized privately.':'Saved privately to this device. No one else can see it.':'Entry saved, but a draft copy remains. Discard it manually.');
   }catch(e){setJournalError(errorText(e));}
   finally{setJournalBusy(false);}
  }
@@ -143,7 +182,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   setBackupBusy(true);setBackupError('');setBackupNotice('');
   try{
    if(backupMode==='export'){
-    const fresh=await listPrivateJournal(userId,householdId);
+    const fresh=await listJournal();
     if(!fresh.length)throw new Error('Save at least one private entry before exporting a backup.');
     const encrypted=await createEncryptedJournalBackup(userId,householdId,fresh,backupPassphrase);
     const blob=new Blob([encrypted],{type:'application/json'});
@@ -158,12 +197,12 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     if(!backupFile)throw new Error('Choose a Carehold encrypted backup file.');
     if(backupFile.size>7_000_000)throw new Error('Backup file exceeds the supported size.');
     const restored=await openEncryptedJournalBackup(await backupFile.text(),userId,householdId,backupPassphrase);
-    const existing=new Set((await listPrivateJournal(userId,householdId)).map(x=>x.id));
+    const existing=new Set((await listJournal()).map(x=>x.id));
     let inserted=0;
     for(const entry of restored){
      // Restores never replace entries already present: no silent overwrites.
      if(existing.has(entry.id))continue;
-     await savePrivateJournal(userId,householdId,entry);
+     await saveJournalEntry(entry);
      inserted++;
     }
     await reloadJournal();
@@ -176,8 +215,12 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  async function removeJournal(entryId:string){
   setJournalBusy(true);setJournalError('');
   try{
-   await deletePrivateJournal(userId,householdId,entryId);
-   await reloadJournal();setConfirmDelete(null);setFeedback('The local journal entry was deleted.');
+   if(identity?.journalKey){
+    const entry=entries.find(e=>e.id===entryId);
+    if(!entry)throw new Error('Journal entry unavailable; refresh before deleting.');
+    await deleteSyncedPrivateJournal(userId,householdId,identity.journalKey,entryId,entry.revision);
+   }else await deletePrivateJournal(userId,householdId,entryId);
+   await reloadJournal();setConfirmDelete(null);setFeedback(identity?.journalKey?'Journal deletion synchronized privately.':'The local journal entry was deleted.');
    if(editing?.id===entryId)setEditing(null);
   }catch(e){setJournalError(errorText(e));}finally{setJournalBusy(false);}
  }
@@ -233,14 +276,15 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    <small>{item.description}</small></button>)}</nav>
   {feedback&&<p className="words-status" role="status"><Check size={15}/>{feedback}</p>}
   {contactsError&&<p className="messages-error" role="alert">Could not load shareable accounts: {contactsError}</p>}
-   {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable on this browser.</strong> {keyError} Your private journal is still usable. If this is a second browser or another test profile signed into the same account, return to the original browser profile. Do not reset your account's key or clear the original browser data.</p>}
+   {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable.</strong> {keyError} Your existing local journal is preserved on this device. Never reset your account key to bypass this warning.</p>}
+   {identity?.journalKey&&legacyCount>0&&<div className="recovery-gate"><strong>{legacyCount} older journal entries are stored on this device only.</strong><p>Import them into private encrypted sync without deleting the original local copies. This can be safely retried.</p><button type="button" className="button outline" disabled={migratingJournal} onClick={()=>void migrateJournal()}>{migratingJournal?'Migrating…':'Safely migrate local journal'}</button></div>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} keyError={keyError} people={people}
     onCreated={sid=>{
     const current=seed;setSeed(null);setOpenSpaceId(sid);selectTab('shared');
     if(current?.kind==='journal'){
      if(current.sourceEntryId){
       const entry=entries.find(e=>e.id===current.sourceEntryId);
-      if(entry)void savePrivateJournal(userId,householdId,{id:entry.id,prompt:entry.prompt,text:entry.text,title:entry.title??'',sharedAt:Date.now(),spaceId:entry.spaceId??null},entry.revision)
+      if(entry)void saveJournalEntry({id:entry.id,prompt:entry.prompt,text:entry.text,title:entry.title??'',sharedAt:Date.now(),spaceId:entry.spaceId??null},entry.revision)
        .then(()=>reloadJournal()).catch(e=>setJournalError(errorText(e)));
      }else if(draft.text===current.text&&draft.prompt===current.prompt){
       void draft.discard().then(cleared=>{if(cleared)setEditing(null);else setJournalError('Shared, but the old device draft could not be cleared.');});
@@ -334,7 +378,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     {pendingLoad?.id===entry.id&&<div className="words-audience-confirm"><span>Replace your current in-progress writing with this entry? Your existing unsaved draft will no longer be visible.</span>
      <button type="button" className="quiet small" onClick={()=>setPendingLoad(null)}>Keep draft</button>
      <button type="button" className="button dark small" onClick={()=>startJournal(entry)}>Load entry</button></div>}
-    {confirmDelete===entry.id&&<div className="words-audience-confirm"><span>Delete the local entry? It cannot be recovered from Carehold.</span>
+    {confirmDelete===entry.id&&<div className="words-audience-confirm"><span>Delete this journal entry? It will be removed from your synchronized journal.</span>
      <button type="button" className="quiet small" onClick={()=>setConfirmDelete(null)}>Keep</button>
      <button type="button" className="button dark small" disabled={journalBusy} onClick={()=>void removeJournal(entry.id)}>Delete</button></div>}
     <div className="words-response-actions">
