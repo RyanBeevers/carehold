@@ -1,4 +1,4 @@
-export type Household={id:string,name:string,timezone:string,role:'owner'|'caregiver'|'member'};
+export type Household={id:string,name:string,timezone:string,role:'owner'|'caregiver'|'member',classification:'adult'|'teen'|'child'|'unverified'};
 export type Person={id:string,household_id:string,display_name:string,kind:'adult'|'child'|'pet',archived_at?:string|null,linked_user_id?:string|null,is_self?:number};
 export type LinkedSelfProfile={id:string,displayName:string,kind:'adult'|'child',canViewSchedule:boolean,canRecordDose:boolean,canViewHistory:boolean};
 export type Medication={id:string,profile_id:string,name:string,form:string,dose:string,instructions:string,cadence:'daily'|'weekdays'|'interval_days'|'prn',weekdays:number[],interval_days:number|null,anchor_date:string|null,start_date:string,end_date:string|null,clinician:string|null,refill_note:string|null,archived_at:string|null,times:string[],catalog_source:'rxterms'|null,catalog_identifier:string|null,normalized_name:string|null,brand_name:string|null,product_strength:string|null,dosage_form:string|null};
