@@ -1,5 +1,5 @@
 import type {Audience} from '../../shared/audience';
-export type Relationship='parent-child'|'parent-teen'|'child-parent'|'teen-parent'|'family';
+export type Relationship='parent-child'|'parent-teen'|'child-parent'|'teen-parent'|'adult-adult'|'family';
 export type Prompt={id:string,audience:Audience|'all',topic:string,text:string,relationship?:Relationship};
 /** Static prompt copy only. No private journaling or activity is persisted. */
 const starterPrompts:readonly Prompt[]=[
@@ -165,18 +165,40 @@ const groups:readonly Group[]=[
   'When do you feel most connected to the people around you?'
  ]}
 ];
+const adultToAdult:readonly Prompt[]=[
+ {id:'adult-1',audience:'parent',relationship:'adult-adult',topic:'Connection',text:'When have you felt most connected to me lately?'},
+ {id:'adult-2',audience:'parent',relationship:'adult-adult',topic:'Connection',text:'What helps us feel like partners rather than just people managing a household?'},
+ {id:'adult-3',audience:'parent',relationship:'adult-adult',topic:'Connection',text:'What ordinary moment together would you like more of?'},
+ {id:'adult-4',audience:'parent',relationship:'adult-adult',topic:'Connection',text:'What is something we used to do together that you miss?'},
+ {id:'adult-5',audience:'parent',relationship:'adult-adult',topic:'Appreciation',text:'What is one thing I do that makes you feel supported or understood?'},
+ {id:'adult-6',audience:'parent',relationship:'adult-adult',topic:'Appreciation',text:'What effort of yours do you wish I noticed more?'},
+ {id:'adult-7',audience:'parent',relationship:'adult-adult',topic:'Repair',text:'Is there a recent conversation you would like us to try again differently?'},
+ {id:'adult-8',audience:'parent',relationship:'adult-adult',topic:'Repair',text:'When we disagree, what makes it easier for you to stay connected to me?'},
+ {id:'adult-9',audience:'parent',relationship:'adult-adult',topic:'Repair',text:'When do you feel misunderstood by me, and what might help?'},
+ {id:'adult-10',audience:'parent',relationship:'adult-adult',topic:'Shared load',text:'What responsibility has been weighing on you that I might not see?'},
+ {id:'adult-11',audience:'parent',relationship:'adult-adult',topic:'Shared load',text:'What could we simplify together this week?'},
+ {id:'adult-12',audience:'parent',relationship:'adult-adult',topic:'Shared load',text:'What would teamwork feel like in our current season of life?'},
+ {id:'adult-13',audience:'parent',relationship:'adult-adult',topic:'Closeness',text:'What helps you feel cared for when you are tired or overwhelmed?'},
+ {id:'adult-14',audience:'parent',relationship:'adult-adult',topic:'Closeness',text:'Is there a kind of affection or attention you would like more of?'},
+ {id:'adult-15',audience:'parent',relationship:'adult-adult',topic:'Closeness',text:'When do you feel like we have room to be ourselves around each other?'},
+ {id:'adult-16',audience:'parent',relationship:'adult-adult',topic:'Boundaries',text:'What is one boundary or personal need you would like me to respect better?'},
+ {id:'adult-17',audience:'parent',relationship:'adult-adult',topic:'Boundaries',text:'How do we each want to balance time together and time alone?'},
+ {id:'adult-18',audience:'parent',relationship:'adult-adult',topic:'Looking ahead',text:'What would make the next month feel meaningful for us?'},
+ {id:'adult-19',audience:'parent',relationship:'adult-adult',topic:'Looking ahead',text:'What is one dream or hope we have not talked about in a while?'},
+ {id:'adult-20',audience:'parent',relationship:'adult-adult',topic:'Honesty',text:'What conversation have we been putting off that deserves a kind beginning?'}
+];
 export const prompts:readonly Prompt[]=[
- ...starterPrompts,
+ ...starterPrompts, ...adultToAdult,
  ...groups.flatMap((group,index)=>group.lines.map((line,offset)=>({
   id:'curated-'+index+'-'+offset,audience:group.audience,relationship:group.relationship,topic:group.topic,text:line
  })))
 ];
 export const RELATIONSHIP_LABELS:Record<Relationship,string>={
  'parent-child':'Parent → Child','parent-teen':'Parent → Teen',
- 'child-parent':'Child → Parent','teen-parent':'Teen → Parent','family':'Family'
+ 'child-parent':'Child → Parent','teen-parent':'Teen → Parent','adult-adult':'Adult ↔ Adult','family':'Family'
 };
 export function relationshipOptions(audience:Audience):Relationship[]{
- return audience==='parent'?['parent-child','parent-teen','family']:
+ return audience==='parent'?['adult-adult','parent-child','parent-teen','family']:
   audience==='child'?['child-parent','family']:['teen-parent','family'];
 }
 /** A shuffle bag: do not repeat until the current filtered set is exhausted. */
