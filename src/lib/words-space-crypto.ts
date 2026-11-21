@@ -9,6 +9,7 @@ export const MAX_WORD_WIRE_LENGTH=3000;
 export function validWordPayload(value:unknown):value is WordPayload{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const item=value as Record<string,unknown>;
+ if(Object.keys(item).sort().join(',')!=='kind,prompt,text')return false;
  return (item.kind==='prompt'||item.kind==='journal'||item.kind==='reflection'||item.kind==='discussion')&&
  typeof item.text==='string'&&item.text.trim().length>0&&item.text.length<=2600&&
  (item.prompt===null||typeof item.prompt==='string'&&item.prompt.length<=600);
