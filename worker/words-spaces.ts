@@ -126,11 +126,12 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
  if(path==='/api/words/spaces'&&req.method==='GET'){
   const hid=householdId(url.searchParams.get('householdId'));await member(db,hid,user.id);
   const result=await db.prepare(`SELECT s.id,s.initial_kind,s.created_by,s.created_at,u.name creator_name,
-   p.id initial_post_id,c.envelope_json FROM shared_word_spaces s
+   p.id initial_post_id,COALESCE(mc.envelope_json,c.envelope_json) envelope_json FROM shared_word_spaces s
    JOIN shared_word_participants own ON own.space_id=s.id AND own.user_id=?
    JOIN user u ON u.id=s.created_by
    JOIN shared_word_posts p ON p.space_id=s.id AND p.kind IN ('prompt','journal')
    JOIN shared_word_copies c ON c.post_id=p.id AND c.recipient_id=?
+   LEFT JOIN account_migrated_copies mc ON mc.source_kind='words' AND mc.source_id=p.id AND mc.user_id=c.recipient_id
    WHERE s.household_id=? ORDER BY s.created_at DESC LIMIT 100`)
    .bind(user.id,user.id,hid).all<{id:string,initial_kind:string,created_by:string,created_at:string,creator_name:string,initial_post_id:string,envelope_json:string}>();
   return respond({spaces:(result.results||[]).map(r=>({id:r.id,kind:r.initial_kind,createdBy:r.created_by,createdAt:r.created_at,creatorName:r.creator_name,
@@ -146,6 +147,9 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    ||b.recipientIds.some(x=>typeof x!=='string'||!x||x.length>140)||new Set(b.recipientIds).size!==b.recipientIds.length
    ||b.recipientIds.includes(user.id))fail(400,'Select 1–10 distinct other participants.');
   const selected=[user.id,...b.recipientIds as string[]].sort();
+  const frozen=await db.prepare("SELECT 1 FROM account_key_migrations WHERE state='staged' AND user_id IN ("+selected.map(()=>'?').join(',')+") LIMIT 1")
+   .bind(...selected).first();
+  if(frozen)fail(409,'A recipient is upgrading encryption. Retry after migration.');
   const copies=checkCopies(b.copies,selected);
   const placeholders=selected.map(()=>'?').join(',');
   const members=await db.prepare(`SELECT COUNT(*) n FROM household_members WHERE household_id=? AND user_id IN (${placeholders})`)
@@ -188,6 +192,9 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    const b=await body(req),postId=id(b.id),kind=b.kind;
    if(kind!=='reflection'&&kind!=='discussion')fail(400,'Choose a journal response or discussion reply.');
    if(ids.length<2||!ids.includes(user.id)||people.some(p=>!p.publicKey))fail(409,'A participant is unavailable for this shared space.');
+   const frozen=await db.prepare("SELECT 1 FROM account_key_migrations WHERE state='staged' AND user_id IN ("+ids.map(()=>'?').join(',')+") LIMIT 1")
+    .bind(...ids).first();
+   if(frozen)fail(409,'A participant is upgrading encryption. Retry after migration.');
    const copies=checkCopies(b.copies,ids);
    const hash=await digest(sid+':'+user.id+':'+kind+':'+JSON.stringify(ids.map(uid=>[uid,copies[uid]])));
    const prior=await db.prepare('SELECT space_id,author_id,kind,body_hash FROM shared_word_posts WHERE id=?')
@@ -205,8 +212,9 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    return respond({id:postId,accepted:true},201);
   }
   if(!path.endsWith('/posts')&&req.method==='GET'){
-   const result=await db.prepare(`SELECT p.id,p.author_id,p.kind,p.created_at,c.envelope_json FROM shared_word_posts p
+   const result=await db.prepare(`SELECT p.id,p.author_id,p.kind,p.created_at,COALESCE(mc.envelope_json,c.envelope_json) envelope_json FROM shared_word_posts p
     JOIN shared_word_copies c ON c.post_id=p.id AND c.recipient_id=?
+    LEFT JOIN account_migrated_copies mc ON mc.source_kind='words' AND mc.source_id=p.id AND mc.user_id=c.recipient_id
     WHERE p.space_id=? ORDER BY p.created_at,p.id LIMIT 300`).bind(user.id,sid)
     .all<{id:string,author_id:string,kind:string,created_at:string,envelope_json:string}>();
    return respond({id:sid,kind:space.initial_kind,createdBy:space.created_by,participants:people,
