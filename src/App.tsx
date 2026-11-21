@@ -110,7 +110,7 @@ export default function App(){
      const value=e.data;
      if(value?.type!=='carehold:push-test'||typeof value.testId!=='string')return;
      if(!['received','display-requested','display-error'].includes(value.stage))return;
-     setPushTrace(current=>current?.id===value.testId?{
+     setPushTrace(current=>current!==null&&current.id===value.testId?{
        ...current,
        received:current.received||value.stage==='received',
        displayRequested:current.displayRequested||value.stage==='display-requested',
