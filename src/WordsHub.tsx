@@ -274,7 +274,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  }
  return <div className="words-hub">
   <div className="words-hub-warning" role="note"><LockKeyhole size={18}/><div><strong>Fictional writing only — security review pending.</strong>
-   <p>Private journals and unsent drafts are encrypted locally on this browser. Shared spaces use experimental per-recipient encryption. New-account message recovery is experimental; private journals still need encrypted synchronization and minor-specific privacy review. Do not enter confidential family, health or therapeutic information.</p></div></div>
+   <p>Private journals and drafts are encrypted locally; recovery-enrolled accounts also synchronize encrypted copies. Only successfully synced content can be recovered on a new device with your saved recovery code. Shared messages and original-browser migration are experimental; independent device revocation and child/privacy review remain unfinished. Do not enter confidential family, health or therapeutic information.</p></div></div>
   {!identity&&<MessageRecoveryGate userId={userId} onReady={setIdentity} onError={setKeyError}/>}
   <nav className="words-hub-tabs" aria-label="Words sections">{TABS.map(item=><button type="button" key={item.id} className={tab===item.id&&!seed?'selected':''} aria-current={tab===item.id&&!seed?'page':undefined} onClick={()=>{setSeed(null);selectTab(item.id);setFeedback('');}}>
    <span>{item.title}{item.id==='activity'&&activity.length>0&&<b className="words-activity-count">{activity.length}</b>}</span>
