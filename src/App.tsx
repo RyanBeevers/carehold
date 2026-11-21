@@ -4,6 +4,7 @@ import {api,type Household,type Person,type Medication,type Entry,type DoseEvent
 import {authClient} from './lib/auth-client';
 import {promptsForAudience} from './lib/prompts';
 import type {Audience} from '../shared/audience';
+import {EMAIL_INPUT_PATTERN,normalizeEmailInput,isValidEmailInput} from '../shared/email';
 import {localDate} from '../shared/schedule';
 
 type Page='today'|'people'|'words'|'circle'|'settings';
@@ -46,6 +47,7 @@ type Pending={entry?:Entry,event?:DoseEvent,medication?:Medication,profile?:Pers
 type Member={user_id:string,name:string,email:string,role:'owner'|'caregiver'|'member'};
 export default function App(){
  const [theme,setTheme]=useState<Mode>(preference);
+ const emailInputRef=useRef<HTMLInputElement|null>(null);
  const [user,setUser]=useState<{id:string,email:string,name:string}|null>(null);
  const [hasPasskey,setHasPasskey]=useState(false);
  const [loading,setLoading]=useState(true);
@@ -119,8 +121,19 @@ export default function App(){
    if(!selected)return;try{const [m,h]=await Promise.all([api<{medications:Medication[]}>(`/medications?profileId=${selected}`),api<{events:DoseEvent[]}>(`/history?profileId=${selected}`).catch(()=>({events:[]}))]);setMeds(m.medications);setHistory(h.events);}catch(e){fail(e);}
  },[selected]);
  useEffect(()=>{void refreshPerson();},[refreshPerson]);
- async function authSubmit(e:FormEvent){e.preventDefault();setSaving(true);setError('');try{
-   const cleanEmail=email.trim().toLowerCase();
+ async function authSubmit(e:FormEvent<HTMLFormElement>){
+  e.preventDefault();setError('');
+  // Keep text replacement delimiters until the browser has expanded them.
+  const cleanEmail=normalizeEmailInput(emailInputRef.current?.value??email);
+  if(emailInputRef.current){
+    emailInputRef.current.value=cleanEmail;
+    emailInputRef.current.setCustomValidity(isValidEmailInput(cleanEmail)?'':'Enter a valid email address.');
+  }
+  setEmail(cleanEmail);
+  if(!e.currentTarget.reportValidity())return;
+  emailInputRef.current?.setCustomValidity('');
+  setSaving(true);
+  try{
    const result=authMode==='signup'?await authClient.signUp.email({name:authName.trim(),email:cleanEmail,password},{headers:{'X-Carehold-Access':accessCode.trim()}}):await authClient.signIn.email({email:cleanEmail,password});
    if(result.error)throw new Error(result.error.message||'Authentication failed.');
    if(authMode==='signup'){
@@ -184,9 +197,9 @@ export default function App(){
  const person=profiles.find(x=>x.id===selected);
 
  if(loading)return <div className="loading"><Mark size={70}/><p>Finding your place…</p></div>;
- if(!user)return <div className="entry-shell"><div className="entry-aside"><Mark size={76}/><div className="entry-tag">NOTHING GETS LOST IN THE SHUFFLE</div><h1>Care, held<br/><em>together.</em></h1><div className="hand-drawn-rule"/><p>The small everyday moments matter. One gentle place to keep track of them.</p><div className="entry-foot">PRIVATE HOUSEHOLD PILOT <span>✳</span> BUILT WITH CARE</div></div><div className="entry-panel"><div className="entry-toolbar"><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><div className="form-index">01 / WELCOME IN</div><h2>{authMode==='signup'?'Make room for care.':'Welcome back.'}</h2><p>{authMode==='signup'?'Create your account, then secure it with a passkey. You’ll need a pilot or household invitation code.':'Your circle is waiting.'}</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<form onSubmit={authSubmit} className="form-stack">
+ if(!user)return <div className="entry-shell"><div className="entry-aside"><Mark size={76}/><div className="entry-tag">NOTHING GETS LOST IN THE SHUFFLE</div><h1>Care, held<br/><em>together.</em></h1><div className="hand-drawn-rule"/><p>The small everyday moments matter. One gentle place to keep track of them.</p><div className="entry-foot">PRIVATE HOUSEHOLD PILOT <span>✳</span> BUILT WITH CARE</div></div><div className="entry-panel"><div className="entry-toolbar"><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><div className="form-index">01 / WELCOME IN</div><h2>{authMode==='signup'?'Make room for care.':'Welcome back.'}</h2><p>{authMode==='signup'?'Create your account, then secure it with a passkey. You’ll need a pilot or household invitation code.':'Your circle is waiting.'}</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<form onSubmit={authSubmit} className="form-stack" noValidate>
  {authMode==='signup'&&<><label>Your name<input required autoComplete="name" value={authName} onChange={e=>setAuthName(e.target.value)} placeholder="What should we call you?"/></label><AudienceField value={signupAudience} onChange={setSignupAudience}/><p className="fine-print">This chooses age-appropriate conversation starters, not medication access. Professional accounts come later. We do not collect children's birth dates in this pilot.</p></>}
- <label>Email address<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label>
+ <label>Email address<input ref={emailInputRef} type="text" inputMode="email" required autoComplete="email" autoCapitalize="none" spellCheck={false} pattern={EMAIL_INPUT_PATTERN} value={email} onChange={e=>{e.currentTarget.setCustomValidity('');setEmail(e.target.value);}} onBlur={e=>setEmail(normalizeEmailInput(e.currentTarget.value))} placeholder="you@example.com"/></label>
  <label>Password<input type="password" required minLength={10} autoComplete={authMode==='signup'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 10 characters"/></label>
  {authMode==='signup'&&<label>Pilot / invitation code<input required autoComplete="off" value={accessCode} onChange={e=>setAccessCode(e.target.value)} placeholder="Enter once — a household invitation follows you through setup"/></label>}
  <button className="button primary big" disabled={saving} type="submit">{saving?'One moment…':authMode==='signup'?'Create my account':'Sign in'} <ArrowUpRight size={18}/></button></form>{authMode==='signin'&&<button className="button outline" disabled={saving} onClick={signInWithPasskey}><KeyRound size={17}/> Sign in with a passkey</button>}<button className="text-link" onClick={()=>{setAuthMode(authMode==='signup'?'signin':'signup');setError('');}}>{authMode==='signup'?'Already have an account? Sign in':'New to Carehold? Create an account'}</button><div className="entry-notice"><ShieldCheck size={17}/>Your medication data stays in a permission-controlled care circle. Private writing is not enabled until encryption is ready.</div></div></div>;
