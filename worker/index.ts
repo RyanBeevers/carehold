@@ -3,6 +3,7 @@ import { localFrontendRedirect } from './local-frontend-redirect';
 import type { CareEnv, SessionUser, ProfileRow, MedicationRow } from './types';
 import { scheduledOn, localDate, localToInstant, occurrenceKey, validDate, validTime, timezoneValid, scheduleError, type Schedule } from '../shared/schedule';
 import { canAccess, validCapabilities, type Role, type Capability } from '../shared/policy';
+import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
 
 const dataHeaders = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'"};
@@ -80,6 +81,28 @@ function parseSchedule(b:Record<string,unknown>):{schedule:Schedule,times:string
   return {schedule,times:times.sort()};
 }
 function medSchedule(m:MedicationRow):Schedule {return {cadence:m.cadence,weekdays:JSON.parse(m.weekdays_json),intervalDays:m.interval_days??undefined,anchorDate:m.anchor_date??undefined,startDate:m.start_date,endDate:m.end_date};}
+type InvitationRow={
+ id:string;household_id:string;role:'member'|'caregiver';grants_json:string;
+ claimed_at:string|null;revoked_at:string|null;expires_at:string;
+};
+async function claimInvitation(db:D1Database,invitation:InvitationRow,userId:string) {
+ if(invitation.claimed_at||invitation.revoked_at||invitation.expires_at<=now())bad(409,'This invitation is expired, revoked or already used.');
+ const ts=now();
+ const grants=JSON.parse(invitation.grants_json) as {profileId:string,capabilities:Capability[]}[];
+ if(!Array.isArray(grants)||grants.some(g=>!g||!validCapabilities(g.capabilities)||typeof g.profileId!=='string'))bad(409,'Invitation permissions are invalid.');
+ try {
+  await db.batch([
+   db.prepare('UPDATE invitations SET claimed_by=?,claimed_at=? WHERE id=? AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at>?').bind(userId,ts,invitation.id,ts),
+   db.prepare('INSERT INTO household_members(household_id,user_id,role,joined_at) SELECT household_id,?,role,? FROM invitations WHERE id=? AND claimed_by=? AND claimed_at=?').bind(userId,ts,invitation.id,userId,ts),
+   ...grants.flatMap(g=>g.capabilities.map(cap=>db.prepare(`INSERT INTO profile_grants(household_id,profile_id,user_id,capability,created_at) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM household_members WHERE household_id=? AND user_id=?)`).bind(invitation.household_id,g.profileId,userId,cap,ts,invitation.household_id,userId)))
+  ]);
+ } catch {
+  bad(409,'Invitation cannot be accepted. It may have been used or this account already belongs to the household.');
+ }
+ const joined=await db.prepare('SELECT 1 FROM household_members WHERE household_id=? AND user_id=?').bind(invitation.household_id,userId).first();
+ if(!joined)bad(409,'Invitation was already claimed.');
+ return {joined:true,householdId:invitation.household_id};
+}
 async function handle(req:Request,env:CareEnv):Promise<Response> {
   const url=new URL(req.url), path=url.pathname,db=env.DB;
   checkRequest(req,env);
@@ -103,10 +126,48 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
   if(!path.startsWith('/api/'))return env.ASSETS.fetch(req);
   const user=await getUser(req,env);
   if(path==='/api/me'&&req.method==='GET') {
-    const pk=await db.prepare('SELECT id FROM passkey WHERE userId=? LIMIT 1').bind(user.id).first();
-    return json({user,hasPasskey:!!pk});
+    const [pk,persona,pending]=await Promise.all([
+      db.prepare('SELECT id FROM passkey WHERE userId=? LIMIT 1').bind(user.id).first(),
+      db.prepare('SELECT audience FROM account_audiences WHERE user_id=?').bind(user.id).first<{audience:Audience}>(),
+      db.prepare('SELECT invitation_id FROM pending_household_invites WHERE user_id=?').bind(user.id).first()
+    ]);
+    return json({user,hasPasskey:!!pk,audience:persona?.audience??null,pendingInvitation:!!pending});
+  }
+  // Initial audience selection and invitation staging are non-privileged onboarding.
+  // They do not grant household membership and do not bypass the passkey gate.
+  if(path==='/api/onboarding'&&req.method==='POST') {
+    const b=await jsonBody(req);
+    if(!validAudience(b.audience))bad(400,'Choose parent, child or teen.');
+    const inviteCode=trim(b.invitationCode,512),ts=now();
+    let invitationId:string|null=null;
+    if(inviteCode) {
+      const invite=await db.prepare('SELECT id FROM invitations WHERE token_hash=? AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at>?').bind(await sha256(inviteCode),ts).first<{id:string}>();
+      const pilotValid=env.PILOT_ACCESS_CODE&&await sha256(inviteCode)===await sha256(env.PILOT_ACCESS_CODE);
+      if(!invite&&!pilotValid)bad(403,'That pilot or household invitation is invalid or expired.');
+      invitationId=invite?.id??null;
+    }
+    const changes=[db.prepare(`INSERT INTO account_audiences(user_id,audience,updated_at) VALUES(?,?,?)
+      ON CONFLICT(user_id) DO UPDATE SET audience=excluded.audience,updated_at=excluded.updated_at`).bind(user.id,b.audience,ts)];
+    if(invitationId)changes.push(db.prepare(`INSERT INTO pending_household_invites(user_id,invitation_id,created_at) VALUES(?,?,?)
+      ON CONFLICT(user_id) DO UPDATE SET invitation_id=excluded.invitation_id,created_at=excluded.created_at`).bind(user.id,invitationId,ts));
+    await db.batch(changes);
+    return json({audience:b.audience,pendingInvitation:!!invitationId});
   }
   await requirePasskey(db,user.id);
+  if(path==='/api/me/audience'&&req.method==='POST') {
+    const b=await jsonBody(req);
+    if(!validAudience(b.audience))bad(400,'Choose parent, child or teen.');
+    await db.prepare(`INSERT INTO account_audiences(user_id,audience,updated_at) VALUES(?,?,?)
+      ON CONFLICT(user_id) DO UPDATE SET audience=excluded.audience,updated_at=excluded.updated_at`).bind(user.id,b.audience,now()).run();
+    return json({audience:b.audience});
+  }
+  if(path==='/api/invitations/accept-pending'&&req.method==='POST') {
+    const pending=await db.prepare(`SELECT i.* FROM pending_household_invites p JOIN invitations i ON i.id=p.invitation_id WHERE p.user_id=?`).bind(user.id).first<InvitationRow>();
+    if(!pending)bad(404,'No pending household invitation.');
+    const joined=await claimInvitation(db,pending,user.id);
+    await db.prepare('DELETE FROM pending_household_invites WHERE user_id=?').bind(user.id).run();
+    return json(joined);
+  }
   if(path==='/api/households'&&req.method==='GET') {
     const h=await db.prepare('SELECT h.id,h.name,h.timezone,m.role FROM households h JOIN household_members m ON m.household_id=h.id WHERE m.user_id=? ORDER BY h.created_at').bind(user.id).all();
     return json({households:h.results});
@@ -114,6 +175,8 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
   if(path==='/api/households'&&req.method==='POST') {
     const b=await jsonBody(req),name=required(b.name,80),zone=trim(b.timezone,64)||'America/New_York';
     if(!timezoneValid(zone))bad(400,'Choose a valid timezone.');
+    const account=await db.prepare('SELECT audience FROM account_audiences WHERE user_id=?').bind(user.id).first<{audience:Audience}>();
+    if(account?.audience!=='parent')bad(403,'Only a parent or caregiver can start a care circle in this pilot.');
     const id=uuid(),ts=now();
     await db.batch([
       db.prepare('INSERT INTO households(id,name,timezone,created_by,created_at) VALUES(?,?,?,?,?)').bind(id,name,zone,user.id,ts),
@@ -295,17 +358,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     const b=await jsonBody(req),hash=await sha256(required(b.code,512));
     const invitation=await db.prepare('SELECT * FROM invitations WHERE token_hash=? AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at>?').bind(hash,now()).first<any>();
     if(!invitation)bad(404,'Invitation expired or already accepted.');
-    const ts=now(),grants=JSON.parse(invitation.grants_json) as {profileId:string,capabilities:Capability[]}[];
-    try {
-      await db.batch([
-        db.prepare('UPDATE invitations SET claimed_by=?,claimed_at=? WHERE id=? AND claimed_at IS NULL AND revoked_at IS NULL').bind(user.id,ts,invitation.id),
-        db.prepare('INSERT INTO household_members(household_id,user_id,role,joined_at) SELECT household_id,?,role,? FROM invitations WHERE id=? AND claimed_by=? AND claimed_at=?').bind(user.id,ts,invitation.id,user.id,ts),
-        ...grants.flatMap(g=>g.capabilities.map(cap=>db.prepare(`INSERT INTO profile_grants(household_id,profile_id,user_id,capability,created_at) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM household_members WHERE household_id=? AND user_id=?)`).bind(invitation.household_id,g.profileId,user.id,cap,ts,invitation.household_id,user.id)))
-      ]);
-    } catch { bad(409,'Invitation cannot be accepted. It may have been used or this account already belongs to the household.'); }
-    const joined=await db.prepare('SELECT 1 FROM household_members WHERE household_id=? AND user_id=?').bind(invitation.household_id,user.id).first();
-    if(!joined)bad(409,'This invitation was already claimed.');
-    return json({joined:true,householdId:invitation.household_id});
+    return json(await claimInvitation(db,invitation as InvitationRow,user.id));
   }
   if(path==='/api/push/config'&&req.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null});
   if(path==='/api/push/subscribe'&&req.method==='POST') {

@@ -35,6 +35,19 @@ class DatabaseIntegrity(unittest.TestCase):
         self.db.execute("INSERT INTO household_members VALUES('h1','u2','caregiver','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO profile_grants VALUES('h1','p1','u2','journal_read','now')")
+    def test_audience_is_non_privileged_and_restricted_to_pilot_types(self):
+        self.db.execute("INSERT INTO account_audiences(user_id,audience,updated_at) VALUES('u1','parent','now')")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("INSERT INTO account_audiences(user_id,audience,updated_at) VALUES('u2','doctor','now')")
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM profile_grants").fetchone()[0], 0)
+
+    def test_pending_invite_stores_reference_not_bearer_code(self):
+        self.db.execute("""INSERT INTO invitations(id,household_id,token_hash,role,grants_json,created_by,created_at,expires_at)
+            VALUES('i1','h1','hashed-secret','member','[]','u1','now','later')""")
+        self.db.execute("INSERT INTO pending_household_invites(user_id,invitation_id,created_at) VALUES('u2','i1','now')")
+        self.assertEqual(self.db.execute("SELECT invitation_id FROM pending_household_invites WHERE user_id='u2'").fetchone()[0],'i1')
+        self.assertIsNone(self.db.execute("SELECT 1 FROM household_members WHERE user_id='u2'").fetchone())
+
     def test_duplicate_member_and_push_delivery_rejected(self):
         with self.assertRaises(sqlite3.IntegrityError):self.db.execute("INSERT INTO household_members VALUES('h1','u1','caregiver','now')")
         self.db.execute("INSERT INTO push_deliveries(id,user_id,occurrence_key,state) VALUES('x','u1','occ','failed')")
