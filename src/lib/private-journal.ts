@@ -55,7 +55,7 @@ async function keyFor(db:IDBDatabase,scope:string,create:boolean):Promise<Crypto
  const existing=await keyRow(db,scope);
  if(existing)return existing.key;
  if(!create)return undefined;
- const key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+ const key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']) as CryptoKey;
  const tx=db.transaction('keys','readwrite'),done=settled(tx);
  try{
   await Promise.all([request(tx.objectStore('keys').add({scope,key} satisfies KeyRow)),done]);
