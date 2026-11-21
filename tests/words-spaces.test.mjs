@@ -28,7 +28,7 @@ test('journal body and prompt stay bounded; no plaintext wire props',()=>{
  assert.equal(validWordPayload({kind:'reflection',prompt:null,text:' ' }),false);
  assert.equal(validWordPayload({kind:'journal',prompt:null,text:'x'.repeat(2601)}),false);
  assert.equal(validWordPayload({kind:'journal',prompt:'x'.repeat(601),text:'hi'}),false);
- assert.equal(validWordPayload({kind:'journal',prompt:null,text:'hi',recipientIds:['secret']}),true);
+ assert.equal(validWordPayload({kind:'journal',prompt:null,text:'hi',recipientIds:['unexpected']}),false);
  const server=readFileSync(new URL('../worker/words-spaces.ts',import.meta.url),'utf8');
  const migration=readFileSync(new URL('../migrations/0007_shared_words_activity.sql',import.meta.url),'utf8');
  assert.doesNotMatch(migration,/\bplaintext\s+TEXT\b|\bbody\s+TEXT\b|\bprompt_text\s+TEXT\b/i);
