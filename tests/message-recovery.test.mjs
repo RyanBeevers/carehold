@@ -44,6 +44,6 @@ test('worker rejects malformed recovery metadata and injected plaintext/private 
  assert.equal(validStoredRecoveryEnvelope({...a.envelope,recoveryCode:a.recoveryCode}),false);
  assert.equal(validStoredRecoveryEnvelope({...a.envelope,privateJwk:{d:'secret'}}),false);
  assert.equal(validStoredRecoveryEnvelope({...a.envelope,iv:'wrong'}),false);
- assert.equal(validStoredRecoveryEnvelope({...a.envelope,v:2}),false);
+ assert.equal(validStoredRecoveryEnvelope({...a.envelope,v:1}),false);
  assert.equal(validStoredRecoveryEnvelope(null),false);
 });
