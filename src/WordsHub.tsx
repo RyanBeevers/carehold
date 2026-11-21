@@ -27,7 +27,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   return TABS.some(item=>item.id===section)?section as Tab:'explore';
  }),[topic,setTopic]=useState('All topics'),[relationship,setRelationship]=useState<Relationship|'all'>('all'),[search,setSearch]=useState('');
  const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
- const [identity,setIdentity]=useState<Identity|null>(null),[people,setPeople]=useState<WordContact[]>([]),[keyError,setKeyError]=useState('');
+ const [identity,setIdentity]=useState<Identity|null>(null),[people,setPeople]=useState<WordContact[]>([]),[keyError,setKeyError]=useState(''),[contactsError,setContactsError]=useState('');
  const [entries,setEntries]=useState<JournalEntry[]>([]),[editing,setEditing]=useState<{id:string,revision:number,sharedAt?:number|null,spaceId?:string|null}|null>(null);
  const [pendingPrompt,setPendingPrompt]=useState<Prompt|null>(null),[pendingNew,setPendingNew]=useState(false);
  const [journalQuery,setJournalQuery]=useState(''),[journalVisibility,setJournalVisibility]=useState<'all'|'shared'|'private'>('all');
@@ -84,8 +84,8 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    }catch(e){if(live&&!(e instanceof StaleSessionRequest))setKeyError(errorText(e));}
   })();
   void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`)
-   .then(r=>{if(live)setPeople(r.people);})
-   .catch(e=>{if(live&&!(e instanceof StaleSessionRequest))setKeyError(errorText(e));});
+   .then(r=>{if(live){setPeople(r.people);setContactsError('');}})
+   .catch(e=>{if(live&&!(e instanceof StaleSessionRequest))setContactsError(errorText(e));});
   void api<{enabled:boolean}>(`/words/push-preference?householdId=${encodeURIComponent(householdId)}`)
    .then(r=>{if(live)setPushEnabled(r.enabled);}).catch(()=>{});
   void api<{configured:boolean,subscriptionCount:number}>(`/push/status?householdId=${encodeURIComponent(householdId)}`)
@@ -239,7 +239,8 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    <span>{item.title}{item.id==='activity'&&activity.length>0&&<b className="words-activity-count">{activity.length}</b>}</span>
    <small>{item.description}</small></button>)}</nav>
   {feedback&&<p className="words-status" role="status"><Check size={15}/>{feedback}</p>}
-  {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable on this browser.</strong> {keyError} Your private journal is still usable. If this is a second browser or another test profile signed into the same account, return to the original browser profile. Do not reset your account's key or clear the original browser data.</p>}
+  {contactsError&&<p className="messages-error" role="alert">Could not load shareable accounts: {contactsError}</p>}
+   {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable on this browser.</strong> {keyError} Your private journal is still usable. If this is a second browser or another test profile signed into the same account, return to the original browser profile. Do not reset your account's key or clear the original browser data.</p>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} keyError={keyError} people={people}
     onCreated={sid=>{
     const current=seed;setSeed(null);setOpenSpaceId(sid);selectTab('shared');
@@ -254,7 +255,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     }
     setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));
    }}
-    onCancel={()=>setSeed(null)} onRefreshPeople={()=>void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`).then(r=>setPeople(r.people)).catch(e=>setKeyError(errorText(e)))}/>:
+    onCancel={()=>setSeed(null)} onRefreshPeople={()=>void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`).then(r=>{setPeople(r.people);setContactsError('');}).catch(e=>setContactsError(errorText(e)))}/>:
   tab==='explore'?<section className="words-explore" aria-label="Prompt library">
    <div className="words-hub-section-top"><div><span className="mono kicker">A GENTLE PLACE TO BEGIN</span><h2>Find the right words.</h2><p className="muted">Browse 100+ thoughtful prompts. Share one as an invitation, or use it as inspiration for your own entry.</p></div></div>
    <div className="words-filter-row">
