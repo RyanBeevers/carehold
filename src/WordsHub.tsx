@@ -330,12 +330,13 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     <label htmlFor="words-hub-editor">Your journal entry</label>
     <textarea id="words-hub-editor" rows={9} maxLength={2600} value={draft.text} disabled={!draft.ready||journalBusy}
      onChange={e=>draft.setText(e.target.value)} placeholder="Start wherever it feels natural…" onBlur={()=>{if(draft.enabled)void draft.flush();}}/>
-    <div className="words-editor-footer"><span className="muted tiny">{draft.enabled?draft.status==='saved'?'Encrypted draft saved on this device':draft.status==='conflict'?'Another tab updated this draft':draft.status==='error'?'Local draft autosave failed':'Encrypted local draft autosave is on':'Encrypted draft autosave is starting'}</span><span className="mono tiny">{draft.text.length} / 2600</span></div>
+    <div className="words-editor-footer"><span className="muted tiny">{draft.enabled?draft.status==='saved'?(draft.syncEnabled&&draft.synced?'Encrypted draft synchronized privately':'Encrypted draft saved on this device'):draft.status==='conflict'?(draft.remoteConflict?'Another device saved a different draft':'Another tab updated this draft'):draft.status==='error'?'Local draft saved; check synchronization':'Encrypted local draft autosave is on':'Encrypted draft autosave is starting'}</span><span className="mono tiny">{draft.text.length} / 2600</span></div>
     {draft.error&&<p className="messages-error" role="alert">{draft.error}</p>}
     {journalError&&<p className="messages-error" role="alert">{journalError}</p>}
     <div className="words-response-actions">
      
-     {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void draft.reloadStored()}>Load other tab</button><button type="button" className="button outline small" onClick={()=>void draft.overwriteStored()}>Keep this version</button></>}
+     {draft.status==='conflict'&&<><button type="button" className="button outline small" onClick={()=>void (draft.remoteConflict?draft.loadRemote():draft.reloadStored())}>{draft.remoteConflict?'Use other device copy':'Load other tab'}</button><button type="button" className="button outline small" onClick={()=>void draft.overwriteStored()}>Keep this device’s version</button></>}
+      {draft.status==='error'&&draft.syncEnabled&&<button type="button" className="button outline small" onClick={()=>void draft.retrySync()}>Retry encrypted sync</button>}
      <button type="submit" className="button outline small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}><BookOpen size={16}/>{journalBusy?'Saving…':'Save privately'}</button>
      <button type="button" className="button dark small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}
       onClick={()=>startSharing({kind:'journal',prompt:draft.prompt,text:draft.text,title:draft.title})}><Users size={16}/> Share this entry</button>
