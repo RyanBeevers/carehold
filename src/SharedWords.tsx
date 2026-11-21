@@ -61,8 +61,8 @@ export function ShareComposer({seed,userId,householdId,identity,people,onCreated
   </form>
  </section>;
 }
-export function SharedSpaces({userId,householdId,identity,openSpaceId,onPrivateSaved}:{
- userId:string,householdId:string,identity:Identity|null,openSpaceId:string|null,onPrivateSaved:()=>void
+export function SharedSpaces({userId,householdId,identity,openSpaceId,onCloseSpace,onPrivateSaved}:{
+ userId:string,householdId:string,identity:Identity|null,openSpaceId:string|null,onCloseSpace:()=>void,onPrivateSaved:()=>void
 }){
  const [spaces,setSpaces]=useState<(SpaceSummary&{preview:WordPayload|null})[]>([]);
  const [active,setActive]=useState<string|null>(openSpaceId),[loading,setLoading]=useState(true),[error,setError]=useState('');
@@ -84,8 +84,19 @@ export function SharedSpaces({userId,householdId,identity,openSpaceId,onPrivateS
   return()=>{live=false;};
  },[identity,householdId]);
  useEffect(()=>{if(openSpaceId)setActive(openSpaceId);},[openSpaceId]);
+ useEffect(()=>{
+  if(!identity)return;
+  let live=true,lastInteracted=Date.now();
+  const record=()=>{lastInteracted=Date.now();};
+  const poll=()=>{if(live&&document.visibilityState==='visible'&&Date.now()-lastInteracted<90_000)
+   void refresh().catch(e=>{if(live&&!(e instanceof StaleSessionRequest))setError(message(e));});};
+  window.addEventListener('pointerdown',record);window.addEventListener('keydown',record);
+  document.addEventListener('visibilitychange',poll);
+  const interval=window.setInterval(poll,15000);
+  return()=>{live=false;window.clearInterval(interval);window.removeEventListener('pointerdown',record);window.removeEventListener('keydown',record);document.removeEventListener('visibilitychange',poll);};
+ },[identity,householdId]);
  if(active)return <SharedSpaceDetail key={active} spaceId={active} userId={userId} householdId={householdId} identity={identity}
-  onBack={()=>{setActive(null);void refresh().catch(e=>setError(message(e)));}} onPrivateSaved={onPrivateSaved}/>;
+  onBack={()=>{setActive(null);onCloseSpace();void refresh().catch(e=>setError(message(e)));}} onPrivateSaved={onPrivateSaved}/>;
  return <section className="words-shared" aria-label="Shared journal spaces">
   <div className="words-hub-section-top"><div><span className="mono kicker">PROMPTS & JOURNALS</span><h2>Shared spaces.</h2></div><button type="button" className="quiet small" onClick={()=>void refresh().catch(e=>setError(message(e)))}><RotateCw size={15}/> Refresh</button></div>
   {error&&<p role="alert" className="messages-error">{error}</p>}
