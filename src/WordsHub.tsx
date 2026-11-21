@@ -47,20 +47,21 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   void reloadJournal().catch(e=>{if(live)setJournalError(errorText(e));}).finally(()=>{if(live)setLoadingJournal(false);});
   void (async()=>{
    try{
-    const [id,contacts,pref,device]=await Promise.all([
-     deviceIdentity(userId),
-     api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`),
-     api<{enabled:boolean}>(`/words/push-preference?householdId=${encodeURIComponent(householdId)}`),
-     api<{configured:boolean,subscriptionCount:number}>(`/push/status?householdId=${encodeURIComponent(householdId)}`)
-    ]);
+    const id=await deviceIdentity(userId);
     const remote=await api<{publicKey:PublicKey|null}>('/messages/keys/me');
     if(remote.publicKey&&!samePublicKey(id.publicKey,remote.publicKey))
      throw new Error('A different device key is already enrolled for this account. Do not clear the original device; recovery has not been implemented.');
     await api('/messages/keys/me','POST',{publicKey:id.publicKey});
-    if(!live)return;
-    setIdentity(id);setPeople(contacts.people);setPushEnabled(pref.enabled);setPushReady(device.configured&&device.subscriptionCount>0);
+    if(live)setIdentity(id);
    }catch(e){if(live&&!(e instanceof StaleSessionRequest))setKeyError(errorText(e));}
   })();
+  void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`)
+   .then(r=>{if(live)setPeople(r.people);})
+   .catch(e=>{if(live&&!(e instanceof StaleSessionRequest))setKeyError(errorText(e));});
+  void api<{enabled:boolean}>(`/words/push-preference?householdId=${encodeURIComponent(householdId)}`)
+   .then(r=>{if(live)setPushEnabled(r.enabled);}).catch(()=>{});
+  void api<{configured:boolean,subscriptionCount:number}>(`/push/status?householdId=${encodeURIComponent(householdId)}`)
+   .then(r=>{if(live)setPushReady(r.configured&&r.subscriptionCount>0);}).catch(()=>{});
   void reloadActivity().catch(()=>{});
   const onInput=()=>{lastInput.current=Date.now();};
   const onActivity=()=>{if(live)void reloadActivity().catch(()=>{});};
