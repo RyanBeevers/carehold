@@ -19,3 +19,10 @@ CREATE TABLE account_migrated_copies (
  PRIMARY KEY(user_id,source_kind,source_id)
 );
 CREATE INDEX migrated_copies_source ON account_migrated_copies(source_kind,source_id,user_id);
+
+-- Short-lived proof-of-possession for legacy browser private keys.
+CREATE TABLE account_key_migration_challenges (
+ user_id TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+ proof_digest TEXT NOT NULL,
+ expires_at INTEGER NOT NULL
+);
