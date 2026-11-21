@@ -49,7 +49,11 @@ export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHan
      try{return {...m,content:await unseal(m.envelope,key!.privateKey,active,m.id,userId)};}
      catch{return {...m,content:null};}
     }));
-    if(live)setItems(values);
+    if(live){
+     setItems(values);
+     await api('/activity/seen','POST',{householdId,sourceKind:'direct',sourceId:active});
+     window.dispatchEvent(new Event('carehold:activity-changed'));
+    }
    }catch(e){if(live&&!(e instanceof StaleSessionRequest))setError(errorText(e));}
   }
   setItems([]);void load();
