@@ -63,3 +63,26 @@ Before release, implement and review:
 5. **Tests:** reauthenticate after 3-minute lock, 1-minute background expiry, refresh / direct `/words` URL, offline resume, cross-tab/device conflicts, passkey recovery, consent-revocation and no plaintext API/storage leaks. Never tie draft access to household owner role.
 
 **Separate navigation milestone now implemented:** Browser URLs such as `/words` remain stable across reload and sign-out. The page is restored *after authentication* without exposing care content before login. This navigation continuity is distinct from (and does not currently include) draft restoration.
+
+## Experimental encrypted device-local autosave (2026-11-21)
+
+**Status:** opt-in, local-encryption prototype is implemented, **NOT approved for confidential medical, child, family or therapeutic writings**. Sending, cross-device sync, shared recipient encryption and clinician access remain disabled.
+
+On Words, the first draft is still in-memory until the user explicitly selects **Enable encrypted device autosave**. This creates a 256-bit, nonextractable WebCrypto AES-GCM key scoped to this account + care circle and stores it using IndexedDB structured cloning, not an exportable raw key. The editor then encrypts the content (text and selected writing prompt) before each device-local write, using a fresh 96-bit IV and AEAD additional authenticated data binding it to account and care circle. Saves debounce after ~1 second of editing, flush on blur, visibility changes and navigation where the browser permits, and show **Saving / Saved on this device / Recovered / Error**. After passkey reauthentication, the same browser and origin can restore the encrypted draft. Drafts older than **90 days since last save** are deleted automatically on inspection. Explicit **Discard** removes the encrypted draft and waits for queued saves to finish first. Selected recipient IDs and sharing mode never persist, and restored content starts private.
+
+**Security limitation:** the nonextractable CryptoKey is stored on the *same browser origin* as the ciphertext, and scripts running on that origin can still invoke it after a browser compromise. Server sign-in gates the Carehold UI but is not itself a cryptographic vault unlock. This does **not** deliver E2EE, withstand an XSS attack, prove one account cannot access another user's key in the same compromised origin, or provide secure device-loss recovery. It is a device-only recovery prototype for fictional writing, not an independent security review or authorization to store real sensitive data. Clearing browser site data or uninstalling the PWA can irrevocably remove the local key and draft. Do not imply the server can recover it.
+
+**Conflict behavior:** optimistic compare-and-swap revisions avoid one tab silently overwriting a newer draft from another. A conflict keeps the current in-memory writing visible and offers explicit two-step **Load saved / Replace saved** controls. No background merge or automatic sharing occurs.
+
+**Release gate remaining:** a separately reviewed account-bound key-wrapping/recovery design (potentially PRF-capable passkeys where supported, with explicit fallback and compatibility testing), recovery after device loss and credential rotation, XSS hardening, cross-device synchronization, minor/guardian consent design, deletion/retention verification, and third-party security review. No real private or clinical writing until those gates close.
+
+### Acceptance: fictional text only
+
+1. Open Words; see **Autosave off**. Type a fictional draft, choose Enable encrypted device autosave, wait for **Saved on this device**. Reload `/words`, confirm the text and prompt recover.
+2. Lock after inactivity or click Lock now, sign back in with passkey, confirm the same fictional draft is restored.
+3. Switch to another account or circle and verify it does not display the original draft. Switch back and verify restoration (same device only).
+4. Change text, wait for the save indicator, refresh, check last saved content. Test visibility/background resume, and network offline (no API draft writes).
+5. Open two tabs with the same account/circle and edit the same previously saved draft. The second stale writer must show a conflict and require explicit choice; it must never silently replace the newer ciphertext.
+6. Select sharing-preview recipients, refresh, and verify restored draft stays **Just me** with no selected recipients.
+7. Discard; verify no draft returns after refresh and the key remains available for a new encrypted draft. Check storage-permission denial and cleared site data.
+8. Confirm no journal plaintext is sent through APIs, query strings, push messages, logs or browser network requests. Check IndexedDB `carehold-words-local-v1`: draft records contain ciphertext/nonce/revision only, not typed text.

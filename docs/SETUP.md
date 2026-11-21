@@ -148,3 +148,9 @@ The URL is deliberately retained when locked, signed out or held behind passkey/
 An installed PWA can reopen at `/` instead of its last on-screen route. To avoid returning to Today in that case, Carehold remembers only a **single public page label** (`today`, `people`, `words`, `circle` or `settings`) under the browser preference key `carehold-last-page`. When `/` is opened again, the app restores that page and replaces the URL with its canonical path. A direct URL such as `/settings` always overrides the saved page. Missing, invalid or blocked local storage falls back to Today without errors.
 
 This browser preference is not per-account, but it contains no household ID, patient identity, medication information, writing, recipient information, credentials or access token. Every protected screen still requires current authenticated access. It does **not** restore unsaved Words drafts, which remain intentionally nonpersistent until encrypted autosave is ready.
+
+## Device-local encrypted autosave prototype (fictional writing ONLY)
+
+In Words, click **Enable encrypted device autosave** once per account and care circle, then type a fictional draft. A nonexportable AES-GCM key and encrypted draft are kept in IndexedDB `carehold-words-local-v1`, and writing is automatically saved locally after a short delay. Reload or unlock Carehold to restore it on the same browser/device. This is **opt-in and experimental, NOT a finished confidential journal**. The device-held key can be used by scripts running on this origin. Clearing browser data loses the draft; no cross-device sync, key recovery, real message sending, or E2EE is implemented.
+
+Review `docs/PRIVATE_WORDS_PHASE.md` for threat limitations and the manual regression checklist. The new feature requires **no D1 migration**, no additional npm dependencies and no remote deployment. Test with fabricated writing only.

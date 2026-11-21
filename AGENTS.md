@@ -83,3 +83,8 @@ Household-only use does **not** waive baseline security. Stop new sensitive-data
 - **High-priority next slice:** autosave encrypted private writing, with restoration after inactivity locking / sign-in and refresh. Do **not** implement draft persistence without client-side encryption, independent key management, recovery, account isolation, deletion and security tests. Current Words text is fictional, unsaved and erased on navigation/sign-out.
 
 - For a fresh PWA icon launch at `/`, the only stored navigation preference permitted is one of the five public page labels. Direct links override it, and storage exceptions must not break the app. This metadata is not user-scoped; never expand it to include IDs or content.
+
+## Experimental encrypted autosave scope
+- `src/lib/words-vault.ts` and `src/lib/useWordsDraftVault.ts` implement an **opt-in device-local prototype**, for fictional writing only. Ciphertext, AES-GCM IV, revision and last save time are persisted in IndexedDB; the nonexportable CryptoKey is also stored by the same origin. This is **not** independent account cryptographic isolation, secure key recovery, E2EE or protection against XSS. Keep medical/minor/therapeutic real content out pending review.
+- No plaintext in browser storage, network, logs or notifications. Never persist recipient selections or silently share drafts. Bind ciphertext to account+circle, detect simultaneous-tab revisions, and preserve the option to discard.
+- For real production content, design separate secure key management, passkey PRF compatibility + fallback, wrap/recovery/device rotation, encryption and independent review. Do not describe current opt-in vault as production-ready secure journaling.

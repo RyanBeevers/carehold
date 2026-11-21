@@ -16,7 +16,8 @@ test('recipient preview includes only explicitly selected eligible users',()=>{
 });
 test('preview UX never offers persistent sending or a storage API',()=>{
  const source=readFileSync(new URL('../src/WordsDraftStudio.tsx',import.meta.url),'utf8');
- assert.match(source,/Saving and sending are intentionally unavailable/);
+ assert.match(source,/Actual message sending/);
+ assert.match(source,/Enable encrypted device autosave/);
  assert.match(source,/Sending not enabled/);
  assert.doesNotMatch(source,/(?:localStorage|sessionStorage|indexedDB|WebSocket|sendMessage\(|saveDraft\()/);
  assert.equal(WORDS_DRAFT_MAX_LENGTH,3000);

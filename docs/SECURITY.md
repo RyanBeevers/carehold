@@ -62,3 +62,9 @@ Page navigation uses only five constant paths (Today / People / Words / Circle /
 Navigation restoration intentionally does not restore unsaved local-only writing. Future autosave requires client-side encryption, device-bound key protection/recovery, authenticated restoration and account/household isolation before any persistent drafts are introduced. Never solve the usability issue by persisting plaintext drafts in browser storage.
 
 The PWA may store the last visited **public page label only** in `localStorage` to restore navigation when the launcher opens `/`. It is not a draft cache or an authorization/session cache. Unknown or storage-blocked values fall back to Today; explicit path links always win. This preference can persist across different users of the same browser, so never attach private profile/account metadata to it.
+
+## Experimental Words encrypted local draft store (NOT E2EE)
+
+The new opt-in encrypted autosave encrypts content before device-local IndexedDB writes using AES-GCM 256, unique random 96-bit nonces and account/circle-bound additional authenticated data; the same-origin database stores a nonexportable CryptoKey and ciphertext. This is **not cryptographic account isolation, not independent key unlock, and not E2EE**. Same-origin scripts or a sufficiently compromised browser can invoke stored keys. Do not rely on this feature for private medical, therapeutic, child or high-risk writings. Device loss and site-data clear destroy recoverability.
+
+The app deliberately persists no recipient selection. Version checks and explicit conflict choices mitigate simultaneous tabs. Actual secure journaling and selective sharing require independent cryptographic architecture review, external security testing, consent policies and key recovery before release.
