@@ -80,3 +80,17 @@ The Settings notification button does **not** register a device until all three 
 From **People**, a household owner can link an adult/child medication profile to an **existing household member account**. Pets cannot be linked. One account may be linked to at most one profile **per household**. Link/unlink changes are audited. A member must first be invited and joined (with passkey) before the link can be made. Revoking a household member also clears their profile link while preserving the audit record.
 
 **This is identity association only, not automatic permission:** the linked account gains no new ability to view or manage medication history or private content. The owner must still share profile-level medication capabilities explicitly through the invitation/grant mechanism. Link permissions and caregiver permissions are independent. Future private journaling will require independent recipient consent and E2EE before any sharing.
+
+## Banking-style inactivity lock and action feedback
+
+Carehold uses `SESSION_IDLE_SECONDS=180` and `SESSION_REFRESH_SECONDS=30` in **Better Auth**. The DB-backed session has a three-minute sliding expiry and disables cookie caching for request-time checks. The frontend masks content and signs out after **3 minutes of no pointer/keyboard/touch/scroll activity**, or **1 minute away from the visible app**. OS/browser suspension can pause timers, so the visibility/pageshow check compares elapsed time on return. A guarded heartbeat runs only during recent user activity (not while idle or backgrounded). No session token or clinical information is persisted in browser storage.
+
+**Manual browser tests before sensitive usage:**
+1. Sign in with a test passkey and verify the Today/People UI. Leave the app untouched for >3 minutes. It should show `Carehold is locked` instead of any medication data. Clicking **Unlock with passkey** should use the platform authenticator and restore the care circle without typing an email/password.
+2. Repeat with the tab/app backgrounded for >1 minute, then return. It must be locked immediately on return, not only when the delayed timer eventually fires.
+3. Keep interacting with Carehold for >3 minutes and confirm the server session stays alive and actions work. Verify the API rejects previously authenticated care-data requests after expiry/sign-out (including from another tab). Any stale, in-flight API response must not re-open the sensitive UI without fresh authentication.
+4. After lock, try **Use email and password instead**; check that it requires explicit sign-in and does not show previous profiles first.
+5. Test both Light/Dark and desktop/mobile screens, including passkey prompts and switching away briefly (<1 minute). Verify changing appearance or recording a dose does not unexpectedly sign out.
+6. Trigger an error on a page action while scrolled far down: an accessible, dismissible toast should appear in the visible viewport without scrolling. Form-level errors in sign-up, lock, and dialogs stay inline. Notification permission/configuration errors stay beside the Settings control.
+
+**Caveat:** Browser focus/background detection cannot replace a native OS lock and cannot prove another app is secure. A brief network outage may delay server-side sign-out, but protected APIs stop accepting the expired session. Do not call the privacy posture audited until tested on real supported devices and security reviewed.

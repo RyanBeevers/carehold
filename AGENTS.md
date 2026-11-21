@@ -61,3 +61,8 @@ Household-only use does **not** waive baseline security. Stop new sensitive-data
 - `profiles.linked_user_id` is an optional, auditable **identity association**, never an authorization shortcut. Linking requires an owner and existing household member; no pet links; one user per profile per household. Revoking membership unlinks the profile and writes history. Do not infer permission from the link.
 - Test push requests are opt-in, authenticated, rate-limited per user, and contain no sensitive medication/patient data. Browser registration, server push-service acceptance, and actual OS notification display are three distinct states.
 - Never overwrite an existing VAPID private key as part of local setup; doing so invalidates existing push subscriptions. Keep VAPID material in ignored local secrets or secret manager only.
+
+## Sensitive-screen timeout and feedback
+- Keep **server-enforced short sessions** (three-minute sliding expiry) independent of UI presentation. The frontend's three-minute idle or one-minute background timer must mask all care content and attempt actual sign-out; require passkey/password authentication to return. Do not make a cosmetic PIN overlay that leaves an authorized session usable indefinitely.
+- Never send session tokens or medication records to browser persistence for unlock. Avoid refresh heartbeats when hidden/inactive. Respect OS suspension: check elapsed time on visibility/focus/pageshow.
+- Every user action should have local visible feedback. Prefer inline errors for form/dialog fields and notification settings, and a fixed, accessible toast for page-wide success/error. Do not force a scroll to a page-header banner.

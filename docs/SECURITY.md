@@ -36,3 +36,8 @@ A household owner's account link associates an already-joined user with an exist
 
 ## Real push testing
 Notification preferences are opt-in. VAPID private key stays secret; the public key alone is sent to the browser. A test push is authenticated, checked for household membership and enabled preference, rate-limited (at most once per minute/user), and carries no medication, person or journal contents. Third-party push-service acceptance alone is not a delivery receipt from the browser; installed device display must be tested separately.
+
+## Short sessions and on-resume lock
+Better Auth server sessions use a three-minute sliding expiration with periodic refresh only on session use, and cookie caching remains disabled. The client independently covers inactivity and app backgrounding, **masks data immediately**, requests sign-out, and requires real passkey or password reauthentication (never a cosmetic unlock). On resume, the elapsed background time is checked even if the OS suspended JavaScript timers. Heartbeats cease when idle or hidden.
+
+The client must not treat timestamps, background events, or a toast as an authorization boundary. A paused/offline client may not complete sign-out immediately; sensitive APIs must reject expired/revoked sessions. The app clears care state on lock and rejects stale identity responses. Confirm WebAuthn, session expiry and reauthentication behavior during real device testing before clinical use.
