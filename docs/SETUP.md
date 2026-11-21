@@ -94,3 +94,7 @@ Carehold uses `SESSION_IDLE_SECONDS=180` and `SESSION_REFRESH_SECONDS=30` in **B
 6. Trigger an error on a page action while scrolled far down: an accessible, dismissible toast should appear in the visible viewport without scrolling. Form-level errors in sign-up, lock, and dialogs stay inline. Notification permission/configuration errors stay beside the Settings control.
 
 **Caveat:** Browser focus/background detection cannot replace a native OS lock and cannot prove another app is secure. A brief network outage may delay server-side sign-out, but protected APIs stop accepting the expired session. Do not call the privacy posture audited until tested on real supported devices and security reviewed.
+
+### One-time session migration
+
+Migration `0005_revoke_legacy_sessions.sql` deliberately revokes **all existing login sessions** after replacing the former 7-day default. This is important because changing Better Auth's `expiresIn` does not necessarily shorten sessions that were already issued under the old policy. After `npm run db:local`, users will need to **sign in again once** with their existing passkeys/passwords; medication, household and account data are not deleted. This migration is not approved for remote execution without reviewing its effect on all currently signed-in users.
