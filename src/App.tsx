@@ -49,6 +49,11 @@ function Banner({kind,text,close}:{kind:'error'|'success',text:string,close:()=>
 const blankMed=()=>({name:'',form:'',dose:'',instructions:'',cadence:'daily',weekdays:[1,2,3,4,5],intervalDays:'2',startDate:todayOnDevice(),endDate:'',anchorDate:todayOnDevice(),times:['08:00'],clinician:'',refillNote:'',catalogSource:null as 'rxterms'|null,catalogIdentifier:null as string|null,normalizedName:null as string|null,brandName:null as string|null,productStrength:null as string|null,dosageForm:null as string|null});
 
 type Pending={entry?:Entry,event?:DoseEvent,medication?:Medication,profile?:Person};
+type LockedCorrectionDraft={
+ userId:string,householdId:string,event:DoseEvent,reason:string,
+ status:(typeof statuses)[number]|null,kind:'not_administered'|null,
+ mode:'correction'|'later',actualAt:string,idempotencyKey:string
+};
 type Member={user_id:string,name:string,email:string,role:'owner'|'caregiver'|'member'};
 export default function App(){
  const [theme,setTheme]=useState<Mode>(preference);
@@ -58,6 +63,9 @@ export default function App(){
  const [locked,setLocked]=useState(false),[lockError,setLockError]=useState('');
  const lockingRef=useRef(false),authEpochRef=useRef(0);
  const logoutInFlight=useRef<Promise<unknown>|null>(null);
+ // Temporary same-tab memory only, never localStorage or an API payload.
+ // Cleared on explicit sign-out or switching accounts. Masked behind passkey lock.
+ const correctionAfterLock=useRef<LockedCorrectionDraft|null>(null);
  const [toast,setToast]=useState<{id:number,kind:'success'|'error'|'info',message:string}|null>(null);
  const toastSequence=useRef(0);
  const [loading,setLoading]=useState(true);
@@ -188,15 +196,22 @@ export default function App(){
    setPushEnabled(false);setPushConfig(null);setPushFeedback(null);setPushSubscriptionCount(0);setPushTrace(null);setLocalNotificationFeedback('');
    setError('');setToast(null);setAuthMode('signin');
  },[]);
- const lockNow=useCallback(()=>{
+ const lockNow=(reason='')=>{
    if(lockingRef.current)return;
+   // Preserve a draft only across the same-tab passkey lock; do not retain
+   // plaintext in browser storage or share it with another signed-in account.
+   if(modal==='correct'&&pending.event&&user?.id&&hid){
+     correctionAfterLock.current={userId:user.id,householdId:hid,event:pending.event,
+       reason:correctionReason,status:doseStatus,kind:correctionKind,mode:correctionMode,
+       actualAt:doseActualAt,idempotencyKey:doseIdempotency};
+   }else correctionAfterLock.current=null;
    lockingRef.current=true;authEpochRef.current+=1;
-   setLocked(true);setLockError('');
+   setLocked(true);setLockError(reason);
    clearSensitive();
    logoutInFlight.current=authClient.signOut().catch(()=>{
      setLockError('Unable to contact the server. Reconnect before unlocking.');
    });
- },[clearSensitive]);
+ };
  const refreshIdentity=useCallback(async()=>{
    const epoch=authEpochRef.current;
    try{
@@ -224,13 +239,22 @@ export default function App(){
  }
  async function showPasswordSignin(){
    await logoutInFlight.current;
+   correctionAfterLock.current=null;
    lockingRef.current=false;setLocked(false);setAuthMode('signin');setLockError('');
  }
- useIdleSecurity(Boolean(user&&hasPasskey&&!locked&&!loading),lockNow,()=>{
-   const epoch=authEpochRef.current;
-   void authClient.getSession({query:{disableCookieCache:true}}).then(result=>{
-     if(epoch===authEpochRef.current&&!result.data?.user)lockNow();
-   }).catch(()=>{});
+ useIdleSecurity(Boolean(user&&hasPasskey&&!locked&&!loading),()=>lockNow(),()=>{
+   const epoch=authEpochRef.current,expectedUserId=user?.id;
+   // A real network request (not a possibly cached client-side session read)
+   // keeps Better Auth's sliding short session alive while someone is typing.
+   void fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store',
+     headers:{Accept:'application/json'}})
+    .then(async response=>{
+     if(!response.ok||epoch!==authEpochRef.current||!expectedUserId)return;
+     const result=await response.json() as {user?:{id:string}|null}|null;
+     if(epoch!==authEpochRef.current)return;
+     if(result?.user?.id!==expectedUserId)
+       lockNow('This browser’s session expired or switched accounts. Your unfinished correction is retained in this tab for the same account.');
+    }).catch(()=>{/* A transient network error is not an authenticated sign-out. */});
  });
  const refreshHouseholds=useCallback(async()=>{
    if(!user||!hasPasskey)return;
@@ -316,6 +340,7 @@ export default function App(){
  }catch(e){fail(e);}finally{setSaving(false);}}
  async function addPasskey(){setSaving(true);setError('');try{const r=await authClient.passkey.addPasskey({name:'My device'});if(r.error)throw new Error(r.error.message||'Could not add passkey.');await refreshIdentity();notice('Your passkey is ready.');}catch(e){fail(e);}finally{setSaving(false);}}
  async function logout(){
+   correctionAfterLock.current=null;
    authEpochRef.current+=1;clearSensitive();setLocked(false);lockingRef.current=false;
    try{await authClient.signOut();}catch{showToast('error','Could not contact the server. Your session will expire shortly.');}
  }
@@ -470,6 +495,20 @@ export default function App(){
    try{await api('/me/audience','POST',{audience:next});setAudience(next);notice('Prompt preferences updated.');}
    catch(e){fail(e);}finally{setSaving(false);}
  }
+ useEffect(()=>{
+   if(locked||!user?.id)return;
+   const draft=correctionAfterLock.current;
+   if(!draft)return;
+   if(draft.userId!==user.id){correctionAfterLock.current=null;return;}
+   if(hid!==draft.householdId)return;
+   correctionAfterLock.current=null;
+   setPending({event:draft.event});
+   setCorrectionReason(draft.reason);setDoseStatus(draft.status);
+   setCorrectionKind(draft.kind);setCorrectionMode(draft.mode);
+   setDoseActualAt(draft.actualAt);setDoseIdempotency(draft.idempotencyKey);
+   setModal('correct');
+   showToast('info','Your unfinished correction was restored after passkey unlock.');
+ },[locked,user?.id,hid]);
  const person=profiles.find(x=>x.id===selected);
  useEffect(()=>{
   if(page!=='people'||!planFocusTarget||person?.id!==planFocusTarget)return;
