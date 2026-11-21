@@ -6,6 +6,7 @@ import {promptsForAudience,relationshipOptions,RELATIONSHIP_LABELS,rotatePrompt,
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
 import {deviceIdentity,samePublicKey,type Identity,type PublicKey} from './lib/message-crypto';
 import {listPrivateJournal,savePrivateJournal,deletePrivateJournal,type JournalEntry} from './lib/private-journal';
+import {createEncryptedJournalBackup,openEncryptedJournalBackup} from './lib/journal-backup';
 import {ShareComposer,SharedSpaces,type ShareSeed,type WordContact} from './SharedWords';
 
 type Tab='explore'|'write'|'journal'|'shared'|'activity';
@@ -32,6 +33,9 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  const [seed,setSeed]=useState<ShareSeed|null>(null),[openSpaceId,setOpenSpaceId]=useState<string|null>(null);
  const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushPublicKey,setPushPublicKey]=useState<string|null>(null),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
  const [feedback,setFeedback]=useState('');
+ const [backupMode,setBackupMode]=useState<'export'|'import'|null>(null);
+ const [backupPassphrase,setBackupPassphrase]=useState(''),[backupFile,setBackupFile]=useState<File|null>(null);
+ const [backupBusy,setBackupBusy]=useState(false),[backupError,setBackupError]=useState(''),[backupNotice,setBackupNotice]=useState('');
  const lastInput=useRef(Date.now());
  function selectTab(next:Tab){
   if(tab!==next){
@@ -120,6 +124,42 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    setEditing(null);selectTab('journal');setFeedback(cleared?'Saved privately to this device. No one else can see it.':'Entry saved, but a draft copy remains. Discard it manually.');
   }catch(e){setJournalError(errorText(e));}
   finally{setJournalBusy(false);}
+ }
+ async function backupJournal(e:FormEvent){
+  e.preventDefault();
+  if(!backupMode||backupBusy)return;
+  setBackupBusy(true);setBackupError('');setBackupNotice('');
+  try{
+   if(backupMode==='export'){
+    const fresh=await listPrivateJournal(userId,householdId);
+    if(!fresh.length)throw new Error('Save at least one private entry before exporting a backup.');
+    const encrypted=await createEncryptedJournalBackup(userId,householdId,fresh,backupPassphrase);
+    const blob=new Blob([encrypted],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const anchor=document.createElement('a');
+    anchor.href=url;anchor.download='carehold-journal-'+new Date().toISOString().slice(0,10)+'.encrypted.json';
+    document.body.appendChild(anchor);
+    anchor.click();anchor.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),5000);
+    setBackupNotice(`Encrypted backup downloaded for ${fresh.length} private journal entr${fresh.length===1?'y':'ies'}. Store it securely and keep the passphrase separately.`);
+   }else{
+    if(!backupFile)throw new Error('Choose a Carehold encrypted backup file.');
+    if(backupFile.size>7_000_000)throw new Error('Backup file exceeds the supported size.');
+    const restored=await openEncryptedJournalBackup(await backupFile.text(),userId,householdId,backupPassphrase);
+    const existing=new Set((await listPrivateJournal(userId,householdId)).map(x=>x.id));
+    let inserted=0;
+    for(const entry of restored){
+     // Restores never replace entries already present: no silent overwrites.
+     if(existing.has(entry.id))continue;
+     await savePrivateJournal(userId,householdId,entry);
+     inserted++;
+    }
+    await reloadJournal();
+    setBackupNotice(`Restored ${inserted} private entr${inserted===1?'y':'ies'}; skipped ${restored.length-inserted} existing entr${restored.length-inserted===1?'y':'ies'}. No shared-space keys were imported.`);
+   }
+   setBackupPassphrase('');setBackupFile(null);setBackupMode(null);
+  }catch(e){setBackupError(errorText(e));}
+  finally{setBackupBusy(false);}
  }
  async function removeJournal(entryId:string){
   setJournalBusy(true);setJournalError('');
@@ -225,7 +265,26 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   tab==='journal'?<section className="words-journal-shelf" aria-label="My private journal">
    <div className="words-hub-section-top"><div><span className="mono kicker">ONLY ON THIS DEVICE</span><h2>My journal.</h2><p className="muted">Each saved entry stays private until you deliberately share a snapshot. Clearing site data can permanently erase local entries.</p></div>
     <button type="button" className="button dark small" onClick={()=>{setEditing(null);selectTab('write');}}><PenLine size={15}/> Write something</button></div>
-   {loadingJournal&&<p className="muted">Opening your local journal…</p>}
+   <div className="words-backup-toolbar">
+     <button type="button" className="quiet small" disabled={backupBusy||entries.length===0} onClick={()=>{setBackupMode(backupMode==='export'?null:'export');setBackupError('');setBackupPassphrase('');setBackupFile(null);}}><LockKeyhole size={15}/> Export encrypted backup</button>
+     <button type="button" className="quiet small" disabled={backupBusy} onClick={()=>{setBackupMode(backupMode==='import'?null:'import');setBackupError('');setBackupPassphrase('');setBackupFile(null);}}><BookOpen size={15}/> Restore encrypted backup</button>
+    </div>
+    {backupMode&&<form className="words-backup-form" onSubmit={e=>void backupJournal(e)} aria-label="Encrypted journal backup">
+     <h3>{backupMode==='export'?'Back up private entries':'Restore private entries'}</h3>
+     <p className="muted tiny">{backupMode==='export'?'Only your saved private entries are included. Protect the downloaded file and remember this passphrase.':'Restores only entries for this same account and care circle, skipping existing entries. No current writing will be overwritten.'} Shared discussion keys, medication records and unsaved drafts are not included.</p>
+     {backupMode==='import'&&<label>Encrypted Carehold backup file
+      <input type="file" accept=".json,application/json" required onChange={e=>setBackupFile(e.target.files?.[0]??null)}/>
+     </label>}
+     <label>Backup passphrase (at least 12 characters)
+      <input type="password" autoComplete="off" minLength={12} maxLength={1024} required value={backupPassphrase} onChange={e=>setBackupPassphrase(e.target.value)} placeholder="Use a unique, memorable passphrase"/>
+     </label>
+     <div className="words-response-actions"><button type="submit" className="button dark small" disabled={backupBusy||backupPassphrase.length<12||(backupMode==='import'&&!backupFile)}>{backupBusy?'Working…':backupMode==='export'?'Download encrypted backup':'Restore entries'}</button>
+      <button type="button" className="button outline small" disabled={backupBusy} onClick={()=>{setBackupMode(null);setBackupPassphrase('');setBackupFile(null);setBackupError('');}}>Cancel</button>
+     </div>
+     {backupError&&<p className="messages-error" role="alert">{backupError}</p>}
+    </form>}
+    {backupNotice&&<p className="words-status" role="status"><Check size={15}/>{backupNotice}</p>}
+    {loadingJournal&&<p className="muted">Opening your local journal…</p>}
    {journalError&&<p className="messages-error" role="alert">{journalError}</p>}
    {!loadingJournal&&entries.length===0&&<p className="words-empty">No saved entries yet. The Write section is a quiet place to start.</p>}
    <div className="words-private-ledger">{entries.map(entry=><article className="words-entry-row" key={entry.id}>
