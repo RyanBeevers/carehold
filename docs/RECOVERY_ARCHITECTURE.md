@@ -1,7 +1,7 @@
 # Carehold encrypted account recovery — staged implementation
 
 **Status (2026-11-21): experimental, UNREVIEWED and not ready for real family data.**
-The current branch adds a first recovery-capable path for **freshly enrolled message accounts and encrypted private journals**, not full legacy migration, per-device revocation, cross-device drafts or audited security. Keep PR #1 in draft; do not merge or deploy for sensitive records.
+The draft branch now includes fresh-account recovery, a **staged non-destructive migration of legacy direct/Words ciphertext on the original browser**, recovery-key encrypted private journals and unsent draft sync, and server-side account classification. None of these new paths is browser E2E verified. This is NOT a device-revocation protocol or audited security implementation. Keep PR #1 in draft; do not merge or deploy for sensitive records.
 
 ## What was implemented in this development pass
 
@@ -33,7 +33,7 @@ This temporary design restores one stable account ECDH private key onto multiple
 
 The old key in IndexedDB is non-extractable. It is possible to decrypt legacy ciphertext *on the original trusted browser*, but not export its private key for recovery. It is **not** safe to overwrite \`message_device_keys\` or reset a user merely to make new messages work.
 
-Required migration, not yet implemented:
+Implemented migration design (requires verification):
 
 1. Preserve all original device keys and old envelope rows.
 2. On the original authorized browser, decrypt each accessible legacy ciphertext copy client-side.
@@ -52,13 +52,35 @@ Migration \`0012_private_journal_sync.sql\` adds \`private_journal_sync\` with \
 
 Words journal saving, editing, encrypted manual backup/restore, private discussion notes and deletion are wired to this path when a v2 recovery-backed identity is enrolled. Each update uses an exact expected revision; conflicts fail rather than overwriting silently. Deletion creates a server-side tombstone. Older device-only journal keys and ciphertext are **not** erased. Words offers an explicit, resumable import into encrypted sync on an original browser that can still decrypt its legacy local journal.
 
-**Limitations:** no proven offline-first multi-device conflict merge; changing contents while offline requires the author to retry after connectivity returns. Local unsent draft vaults do not sync or recover; retained local legacy journal copies remain device dependent. No server backup/restore verification, independently validated key hierarchy, independent account-key verification, retention/deletion review, or device revocation is complete. The old manual encrypted backup is still an optional additional safeguard. Do not use sensitive real data yet.
+**Limitations:** no proven offline-first multi-device conflict merge; changing contents while offline requires the author to retry after connectivity returns. On recovery-capable accounts, unsent drafts are synced as encrypted ciphertext with a revision-guarded copy while device-local autosave remains the fallback. Offline edits may be newer than the server; a user must explicitly reconcile conflicts. Legacy journal copies still require import from their original browser. No server backup/restore verification, independently validated key hierarchy, independent account-key verification, retention/deletion review, or device revocation is complete. The old manual encrypted backup is still an optional additional safeguard. Do not use sensitive real data yet.
 
 ## Authoritative medication permissions
 
 Migration \`0013_member_classification.sql\` records \`adult\`, \`teen\`, \`child\`, or \`unverified\` separately from \`owner\`, \`caregiver\`, or \`member\`. Owner accounts are initialized as adult and new invitees are unverified until classified by the household owner, with audited classification changes. Minors and unverified accounts are denied medication edits and administration recording by server-side authorization regardless of grants. Adults may self-manage their **own linked Adult profile** as Members without extra caregiver privilege. A minor cannot upgrade their own classification by editing Words audiences or replaying onboarding.
 
 Every relevant API and E2E flow needs regression validation. An owner in one circle who is marked minor in another is blocked from owner administration; avoid treating household roles as globally validated age or legal guardianship.
+
+
+
+## Legacy message/Words migration v1 (migrations 0014 and original-browser proof)
+
+The \`account_key_migrations\` record stages a new **v2** recovery envelope without changing the old \`message_device_keys\` public key. The original browser obtains a short-lived, authenticated challenge encrypted for its existing ECDH key. Only the browser that can decrypt the challenge can provide the proof to stage a candidate recovery key. The server stores a one-time SHA-256 proof digest and checks the challenge's bound original public key and expiration.
+
+The client inventories every currently authorized copy addressed to that account (direct messages and shared Words posts). It decrypts each existing copy **on the original browser only**, encrypts a replacement to the staged new account public key, verifies the new ciphertext decrypts to exactly the same content and saves the copy in an append-only per-user staging table. All previously authorized copies, other participants' copies and the old browser private key remain retained.
+
+Staged copies are **not** used for normal reads. A server-side completeness query must find no accessible legacy copies without a replacement before \`finalize\` atomically inserts the recovery envelope and updates the account's public key. Direct and Words reads then prefer the migrated ciphertext for that user, while every other participant still reads their original copy. While a user is staging a migration, new posts to conversations involving them are rejected and can be retried after migration; new submissions also carry the current public-key roster and the Worker rejects stale rosters.
+
+A staged migration can be resumed with the saved code or **cancelled only by proving possession of the original private key**. Cancellation deletes only uncommitted staged copies. Database constraints prohibit deleting completed migrated copies. A permanently lost old browser key cannot be recreated by this protocol; older content with no decryptable authorized source remains inaccessible.
+
+Limitations: TOFU public-key identity, a stable per-account ECDH key imported on each recovered browser, lack of independent revocation/cryptographic key epochs, race conditions at migration boundaries, and the absence of a reviewed recovery/deletion policy remain release blockers. Do not describe the current functionality as independently revocable per-device end-to-end encryption.
+
+## Recoverable unsent drafts (migration 0015)
+
+\`private_draft_sync\` stores the owning authenticated user/household, a client-derived opaque scope hash, ciphertext, nonce, monotonic revision, last modified timestamp and a tombstone. It never stores the draft text, prompt, title or recipient selection. \`src/lib/recoverable-drafts.ts\` encrypts with the independent v2 journal content key, authenticated to the account, exact local draft scope and revision.
+
+The existing local draft vault remains authoritative when offline. After account recovery the same draft scope can hydrate on a different browser; if two copies differ, the client must explicitly choose **Use other device copy** or **Keep this device's draft** rather than silently resolving it. Server writes and deletion use expected revisions. Remote deletion happens before local discard so a previously deleted draft cannot unexpectedly reappear from the cloud. Unsynced local edits may not be recoverable until synchronization succeeds; draft retention is 90 days. This prototype requires a full two-device, slow-network, sign-out and stale-session acceptance pass.
+
+All encrypted journal and draft sync requests include an expected account identifier; the Worker compares it to the active authenticated session to prevent stale asynchronous requests from one account being applied to another account after switching logins.
 
 
 ## Required verification before staging promotion
@@ -74,7 +96,7 @@ Mandatory browser flows:
 5. A second account and household remain isolated.
 6. Reload, lock/unlock, clearing browser storage, account switching, failed network POST and simultaneous enrollment are safe.
 7. Existing legacy users are never silently rotated; old message/journal records remain present after migration.
-8. A **newly synced** private journal entry is readable after second-browser recovery; the original local-only journal is explicitly imported without losing old ciphertext. Unsent drafts remain local.
+8. A synced journal and an unsent draft both restore after new-browser recovery, while locally saved legacy journal entries require explicit import and original ciphertext remains retained.
 9. Verify dark/light summary contrast on desktop/mobile; confirm no native browser prompts.
 10. Validate that login alone, without an independent recovery code, does not decrypt on a new device.
 
@@ -82,9 +104,9 @@ Mandatory browser flows:
 
 ## Remaining prioritized work
 
-1. Implement legacy message/Words copy migration with versioned envelopes, no destructive rotation.
+1. Execute and harden the new original-browser legacy message/Words migration E2E, including restart/cancel, ciphertext integrity, and concurrent writes.
 2. Replace shared account-key-on-every-device with verified distinct device credentials and explicit revocation/key epochs.
-3. Validate encrypted journal sync, existing-entry import, offline conflicts, backups and recovery in real browsers; separately implement recoverable drafts if product requirements demand them.
+3. Execute encrypted journal and draft synchronization, restore, discard, offline/conflict, and session-switch tests; review retention and user-visible recovery promises.
 4. Execute API-level and browser permission escalation tests for the new Adult/Teen/Child classification implementation.
 5. Complete full E2E regression, staging backup/restore, external security review and documented rollback.
 6. Only then discuss release and real household data.
