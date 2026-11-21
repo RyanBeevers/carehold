@@ -140,7 +140,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const kind=b.kind;
   if(kind!=='prompt'&&kind!=='journal')fail(400,'Select a prompt or journal entry.');
   if(!Array.isArray(b.recipientIds)||b.recipientIds.length<1||b.recipientIds.length>10
-   ||b.recipientIds.some(x=>typeof x!=='string'||!uuid.test(x))||new Set(b.recipientIds).size!==b.recipientIds.length
+   ||b.recipientIds.some(x=>typeof x!=='string'||!x||x.length>140)||new Set(b.recipientIds).size!==b.recipientIds.length
    ||b.recipientIds.includes(user.id))fail(400,'Select 1–10 distinct other participants.');
   const selected=[user.id,...b.recipientIds as string[]].sort();
   const copies=checkCopies(b.copies,selected);
