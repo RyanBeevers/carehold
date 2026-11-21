@@ -33,6 +33,7 @@ const rxCui=(v:unknown):string|null=>typeof v==='string'&&/^\d{1,20}$/.test(v)?v
 const text=(v:unknown,max=160):string|null=>typeof v==='string'&&v.trim()&&v.trim().length<=max?v.trim():null;
 export function normalizeMedicationSearch(value:unknown):string{
  if(typeof value!=='string')throw new CatalogError(400,'Enter a medication name to search.');
+ if(/[\u0000-\u001f\u007f]/.test(value))throw new CatalogError(400,'Medication search cannot include control characters.');
  const q=value.trim().replace(/\s+/g,' ');
  if(q.length<2||q.length>64||!/^[\p{L}\p{M}\p{N} .+/'()\-]+$/u.test(q))
   throw new CatalogError(400,'Search using 2–64 letters or numbers from a medication name.');
