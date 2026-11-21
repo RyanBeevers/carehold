@@ -84,8 +84,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>
   const secret=randomProof(),expires=Date.now()+5*60000;
   const envelope=await seal({kind:'message',text:secret},publicKey as PublicKey,
    'carehold-legacy-proof-v1',user.id,user.id);
-  await db.prepare('INSERT INTO account_key_migration_challenges(user_id,proof_digest,expires_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET proof_digest=excluded.proof_digest,expires_at=excluded.expires_at')
-   .bind(user.id,await hash(secret),expires).run();
+  await db.prepare('INSERT INTO account_key_migration_challenges(user_id,original_jwk,proof_digest,expires_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET original_jwk=excluded.original_jwk,proof_digest=excluded.proof_digest,expires_at=excluded.expires_at')
+   .bind(user.id,registered.public_jwk,await hash(secret),expires).run();
   return send({envelope,expiresAt:expires});
  }
  if(path==='/api/messages/recovery/migration'&&req.method==='GET')
@@ -108,8 +108,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>
   if(next===current.public_jwk)fail(409,'Replacement key must differ from legacy key.');
   if(typeof b.proof!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(b.proof))
    fail(403,'Prove access to the original browser key before migration.');
-  const challenge=await db.prepare('SELECT 1 FROM account_key_migration_challenges WHERE user_id=? AND proof_digest=? AND expires_at>?')
-   .bind(user.id,await hash(b.proof),Date.now()).first();
+  const challenge=await db.prepare('SELECT 1 FROM account_key_migration_challenges WHERE user_id=? AND proof_digest=? AND original_jwk=? AND expires_at>?')
+   .bind(user.id,await hash(b.proof),current.public_jwk,Date.now()).first();
   if(!challenge)fail(403,'Legacy key challenge is incorrect or expired. Request another challenge.');
 
   try{
