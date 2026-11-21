@@ -29,6 +29,11 @@ test('journal sections are navigable without encoding journal or participant IDs
 test('a saved private journal is not automatically shared on navigation',()=>{
  assert.match(hub,/savePrivateJournal\(userId,householdId/);
  assert.match(hub,/startSharing\(\{kind:'journal'/);
- assert.match(shared,/onCreated\(sid\)/);
+ // ShareComposer now keeps an idempotent attempt ID for safe retries. Only the
+ // explicit POST can lead to onCreated; private journal saves never call it.
+ assert.match(shared,/await api\('\/words\/spaces','POST'/);
+ assert.match(shared,/onCreated\(attempt\.id\)/);
+ const savePrivate=hub.slice(hub.indexOf('async function saveJournal('),hub.indexOf('async function removeJournal('));
+ assert.doesNotMatch(savePrivate,/\/words\/spaces|startSharing\(|onCreated\(/);
  assert.match(shared,/if\(!canSend\|\|!identity\)return/);
 });
