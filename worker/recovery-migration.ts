@@ -72,10 +72,11 @@ async function sourceAllowed(db:D1Database,kind:Kind,id:string,uid:string){
 async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>{
  const db=env.DB,url=new URL(req.url),path=url.pathname,stage=await readStage(db,user.id);
  if(path==='/api/messages/recovery/migration/challenge'&&req.method==='POST'){
-  if(stage)fail(409,'Migration is already staged or complete.');
+  if(stage?.state==='complete')fail(409,'Migration is already complete.');
   const registered=await db.prepare('SELECT public_jwk FROM message_device_keys WHERE user_id=?')
    .bind(user.id).first<{public_jwk:string}>();
   if(!registered)fail(409,'No legacy encryption key is registered.');
+  if(stage?.state==='staged'&&stage.original_jwk!==registered.public_jwk)fail(409,'Original migration key changed unexpectedly.');
   const publicKey:unknown=JSON.parse(registered.public_jwk);
   if(!validPublicJwk(publicKey))fail(409,'Legacy encryption key is invalid.');
   const existing=await db.prepare('SELECT 1 FROM message_account_recovery WHERE user_id=?')
@@ -127,6 +128,27 @@ async function route(req:Request,env:CareEnv,user:SessionUser):Promise<Response>
  const current=await db.prepare('SELECT public_jwk FROM message_device_keys WHERE user_id=?')
   .bind(user.id).first<{public_jwk:string}>();
  if(current?.public_jwk!==stage.original_jwk)fail(409,'Public key changed unexpectedly. Original records preserved.');
+ if(path==='/api/messages/recovery/migration/cancel'&&req.method==='POST'){
+  const b=await body(req);
+  if(typeof b.proof!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(b.proof))
+   fail(403,'The original private key must authorize cancellation.');
+  const checked=await db.prepare('SELECT 1 FROM account_key_migration_challenges WHERE user_id=? AND original_jwk=? AND proof_digest=? AND expires_at>?')
+   .bind(user.id,stage.original_jwk,await hash(b.proof),Date.now()).first();
+  if(!checked)fail(403,'Original encryption key proof is incorrect or expired.');
+  try{
+   const result=await db.batch([
+    db.prepare("DELETE FROM account_migrated_copies WHERE user_id=? AND EXISTS(SELECT 1 FROM account_key_migrations WHERE user_id=? AND state='staged')")
+     .bind(user.id,user.id),
+    db.prepare("DELETE FROM account_key_migrations WHERE user_id=? AND state='staged'").bind(user.id),
+    db.prepare('DELETE FROM account_key_migration_challenges WHERE user_id=?').bind(user.id)
+   ]);
+   if(result[1].meta.changes!==1)fail(409,'Migration changed concurrently. Refresh and preserve the original browser.');
+  }catch(e){
+   if(e instanceof MigrationError)throw e;
+   fail(409,'Could not safely cancel migration. No original ciphertext was removed.');
+  }
+  return send({cancelled:true,originalKeyPreserved:true});
+ }
  if(path==='/api/messages/recovery/migration/copies'&&req.method==='GET'){
   const raw=url.searchParams.get('offset')??'0';
   if(!/^(0|[1-9]\d{0,5})$/.test(raw)||Number(raw)>100000)fail(400,'Invalid page offset.');
