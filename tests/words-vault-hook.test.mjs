@@ -12,4 +12,6 @@ test('autosave waits for hydration and encrypts before storage',()=>{
 test('draft clearing awaits outstanding saves before deletion',()=>{
  assert.match(source,/await queue\.current\.catch/);
  assert.match(source,/discardDeviceDraft\(/);
+ assert.match(source,/discarding\.current=true/);
+ assert.match(source,/if\(discarding\.current\|\|!isEnabled\.current/);
 });
