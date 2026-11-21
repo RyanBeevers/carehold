@@ -119,8 +119,12 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
   try{
    const identity=await openMessageRecoveryIdentity(userId,code.trim(),pendingResume);
    const remote=await api<Remote>('/messages/keys/me');
-   if(remote.publicKey&&!samePublicKey(remote.publicKey,identity.publicKey))
-    throw new Error('Another encryption identity was enrolled. This unfinished setup was not used.');
+   if(remote.publicKey){
+    const enrolled=await api<RecoveryStatus>('/messages/recovery');
+    if(!samePublicKey(remote.publicKey,identity.publicKey)||!enrolled.configured||
+     !enrolled.envelope||JSON.stringify(enrolled.envelope)!==JSON.stringify(pendingResume))
+     throw new Error('The enrolled identity or recovery record differs from the unfinished attempt. No keys were replaced.');
+   }
    if(!remote.publicKey){
     try{await api('/messages/recovery','POST',{envelope:pendingResume});}
     catch(e){
