@@ -292,7 +292,8 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
    }
    if(path==='/api/medications'&&req.method==='GET') {
     const pid=required(url.searchParams.get('profileId'));await profileAccess(db,pid,user.id,'view_schedule');
-    const meds=await db.prepare('SELECT * FROM medications WHERE profile_id=? AND archived_at IS NULL ORDER BY name').bind(pid).all<MedicationRow>();
+    const includeArchived=url.searchParams.get('includeArchived')==='1';
+    const meds=await db.prepare('SELECT * FROM medications WHERE profile_id=? AND (?=1 OR archived_at IS NULL) ORDER BY archived_at IS NOT NULL,name').bind(pid,includeArchived?1:0).all<MedicationRow>();
     const withTimes=await Promise.all((meds.results||[]).map(async m=>({
       ...m,weekdays:JSON.parse(m.weekdays_json),times:(await db.prepare('SELECT hhmm FROM medication_times WHERE medication_id=? ORDER BY hhmm').bind(m.id).all<{hhmm:string}>()).results.map(x=>x.hhmm)
     })));
@@ -307,6 +308,22 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
       ...times.map(t=>db.prepare('INSERT INTO medication_times(medication_id,hhmm) VALUES(?,?)').bind(id,t)),
       db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)').bind(uuid(),id,user.id,ts,null,JSON.stringify({...b,...catalog,times}))];
     await db.batch(queries);return json({id},201);
+  }
+  const medArchive=path.match(/^\/api\/medications\/([0-9a-f-]+)\/(archive|restore)$/);
+  if(medArchive&&req.method==='POST') {
+    const old=await db.prepare('SELECT * FROM medications WHERE id=?').bind(medArchive[1]).first<MedicationRow>();
+    if(!old)bad(404,'Medication not found.');
+    await profileAccess(db,old!.profile_id,user.id,'manage_medication');
+    const shouldArchive=medArchive[2]==='archive';
+    if(Boolean(old!.archived_at)===shouldArchive)return json({archived:shouldArchive,unchanged:true});
+    const when=now(),updated={...old,archived_at:shouldArchive?when:null,updated_at:when};
+    await db.batch([
+      db.prepare('UPDATE medications SET archived_at=?,updated_at=? WHERE id=? AND archived_at IS ?')
+        .bind(updated.archived_at,when,old!.id,old!.archived_at),
+      db.prepare('INSERT INTO medication_changes(id,medication_id,changed_by,changed_at,before_json,after_json) VALUES(?,?,?,?,?,?)')
+        .bind(uuid(),old!.id,user.id,when,JSON.stringify(old),JSON.stringify(updated))
+    ]);
+    return json({archived:shouldArchive});
   }
   const medMatch=path.match(/^\/api\/medications\/([0-9a-f-]+)$/);
   if(medMatch&&req.method==='PATCH') {
