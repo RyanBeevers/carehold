@@ -68,7 +68,7 @@ export async function openEncryptedJournalBackup(
  text:string,userId:string,householdId:string,passphrase:string
 ):Promise<JournalDraft[]>{
  validatePassphrase(passphrase);
- if(typeof text!=='string'||text.length>MAX_JSON_LENGTH+1_000_000)
+ if(typeof text!=='string'||text.length>7_000_000)
   throw new Error('This backup file is too large.');
  let parsed:unknown;
  try{parsed=JSON.parse(text);}catch{throw new Error('This file is not a Carehold journal backup.');}
