@@ -75,3 +75,9 @@
 @keyframes carehold-toast-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:720px){.app-toast{right:12px;left:12px;bottom:88px;width:auto}.lock-screen{padding:24px}.lock-screen .button{width:100%}}
 @media(prefers-reduced-motion:reduce){.app-toast{animation:none}}
+
+/* Web Push diagnostics: separate gateway acceptance from browser and OS display. */
+.push-diagnostics{border-top:1px solid var(--line);margin-top:20px;padding-top:16px;display:grid;gap:7px}
+.push-diagnostics .kicker{margin-bottom:6px;color:var(--muted)}
+.push-diagnostics p{font-size:12px;line-height:1.5;margin:0}
+.push-diagnostics .notification-feedback{margin-top:8px}
