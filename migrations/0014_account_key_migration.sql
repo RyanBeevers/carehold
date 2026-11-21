@@ -23,6 +23,7 @@ CREATE INDEX migrated_copies_source ON account_migrated_copies(source_kind,sourc
 -- Short-lived proof-of-possession for legacy browser private keys.
 CREATE TABLE account_key_migration_challenges (
  user_id TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+ original_jwk TEXT NOT NULL,
  proof_digest TEXT NOT NULL,
  expires_at INTEGER NOT NULL
 );
