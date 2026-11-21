@@ -1,4 +1,4 @@
-import {api} from './api';
+import {api} from './api.ts';
 import type {JournalDraft,JournalEntry} from './private-journal';
 
 /** Owner-only encrypted sync: backend stores ciphertext, never journal text. */
