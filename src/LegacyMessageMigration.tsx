@@ -49,10 +49,21 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   if(!pending||!savedCode||!oldKey||busy)return;
   setBusy(true);setError('');
   try{
-   await api('/messages/recovery/migration','POST',{envelope:pending.envelope});
+   const challenge=await api<{envelope:Envelope}>('/messages/recovery/migration/challenge','POST',{});
+   const proof=await unseal(challenge.envelope,oldKey.privateKey,'carehold-legacy-proof-v1',userId,userId);
+   if(proof.kind!=='message')throw new Error('Legacy key verification failed.');
+   await api('/messages/recovery/migration','POST',{envelope:pending.envelope,proof:proof.text});
    setStage({state:'staged',envelope:pending.envelope,publicKey:pending.identity.publicKey});
    await convert(pending.identity,oldKey);
-  }catch(e){setError(errText(e)+' Keep your saved recovery code and original browser; migration can resume.');setStatus('resume');}
+  }catch(e){
+   try{
+    const state=await api<Stage>('/messages/recovery/migration');
+    if(state.state==='staged'){setStage(state);setStatus('resume');}
+    else if(state.state==='complete'){setStatus('done');}
+    else setStatus('show-code');
+   }catch{setStatus('show-code');}
+   setError(errText(e)+' Preserve the original browser and saved code. No ciphertext was erased.');
+  }
   finally{setBusy(false);}
  }
  async function resume(){
