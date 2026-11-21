@@ -145,7 +145,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   {keyError&&<p className="messages-error" role="alert">Sharing or notification setup: {keyError}. Private journaling remains available.</p>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} people={people}
     onCreated={sid=>{setSeed(null);setOpenSpaceId(sid);selectTab('shared');setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));}}
-    onCancel={()=>setSeed(null)}/>:
+    onCancel={()=>setSeed(null)} onRefreshPeople={()=>void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`).then(r=>setPeople(r.people)).catch(e=>setKeyError(errorText(e)))}/>:
   tab==='explore'?<section className="words-explore" aria-label="Prompt library">
    <div className="words-hub-section-top"><div><span className="mono kicker">A GENTLE PLACE TO BEGIN</span><h2>Find the right words.</h2><p className="muted">Browse 100+ thoughtful prompts. Share one as an invitation, or use it as inspiration for your own entry.</p></div></div>
    <div className="words-filter-row">
