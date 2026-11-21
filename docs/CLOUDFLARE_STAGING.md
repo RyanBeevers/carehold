@@ -85,15 +85,15 @@ It will:
 5. Export a private, gitignored staging D1 backup to `backups/` (do not publish: contains credentials and app records).
 6. Apply the pending staging D1 migrations.
 7. Build and deploy the staging Worker with the current `dist` assets.
-8. Show the configured health endpoint. Verify it in the browser.
+8. Query the D1-backed `/api/health/ready` endpoint and **fail if the current schema is missing**. Verify the host in the browser.
 
 A remotely applied migration is not automatically rolled back if the subsequent Worker deployment fails. Retain the database backup and inspect the failure before retrying.
 
-Once the HTTPS origin is live, create **new fictional staging accounts** rather than copying local dev data. Test password/passkey registration, sign-out, other-browser recovery, and cross-household authorization. Verify `/api/health` returns `{"ok":true,"product":"carehold"}`.
+Once the HTTPS origin is live, create **new fictional staging accounts** rather than copying local dev data. Test password/passkey registration, sign-out, other-browser recovery, and cross-household authorization. Verify `/api/health/ready` returns `{"ok":true,"product":"carehold"}` (or stop on HTTP 503).
 
 ## 5. Production is a separate later gate
 
-There is currently **no production deployment** in this workflow. Do not use the staging name, D1 ID, secret or origin as a production substitute. Cloudflare's `env.production` contains deliberate placeholders. A production go-live must separately address device-key authenticity and revocation, minor/guardian privacy and consent, safe recovery, backups and retention, vulnerability testing, incident handling, and production WebAuthn domain selection. Passing functional E2E does not prove these security properties.
+There is currently **no production deployment** in this workflow. Do not use the staging name, D1 ID, secret or origin as a production substitute. Cloudflare's `env.production` contains deliberate placeholders. A production go-live must separately address device-key authenticity and revocation, minor/guardian privacy and consent, safe recovery, backups and retention, vulnerability testing, incident handling, and production WebAuthn domain selection. A fail-closed production preflight and an explicitly approved release script are prepared in [the production runbook](CLOUDFLARE_PRODUCTION.md); they are **not** production approval. Passing functional E2E does not prove these security properties.
 
 ## Troubleshooting
 
