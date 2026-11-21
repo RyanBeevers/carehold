@@ -1,6 +1,7 @@
 import type {CareEnv,SessionUser} from './types';
 import {notifyPrivateRecipients} from './words-spaces';
 import {exactParticipants,mayStartDirectMessage,pairKey,validPublicJwk,validSealedEnvelope} from './messages-policy';
+import {validStoredRecoveryEnvelope} from './message-recovery-policy';
 /** Fictional text only: TOFU key registry, one device/account, no reviewed E2EE.
  * API never receives plaintext. No read receipts, views or typing tracking. */
 const headers={'Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
@@ -52,6 +53,34 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    const r=await db.prepare('SELECT public_jwk FROM message_device_keys WHERE user_id=?').bind(user.id).first<{public_jwk:string}>();
    if(r?.public_jwk!==encoded)fail(409,'This account has another message device. Recovery is not available; do not clear browser data.');
    return respond({registered:true});
+  }
+ }
+ if(path==='/api/messages/recovery'){
+  if(req.method==='GET'){
+   const row=await db.prepare('SELECT envelope_json,public_jwk FROM message_account_recovery WHERE user_id=?')
+    .bind(user.id).first<{envelope_json:string,public_jwk:string}>();
+   return respond({configured:!!row,envelope:row?JSON.parse(row.envelope_json):null});
+  }
+  if(req.method==='POST'){
+   const b=await read(req);
+   if(!validStoredRecoveryEnvelope(b.envelope))fail(400,'Invalid recovery ciphertext.');
+   const payload=b.envelope,encoded=JSON.stringify(payload.publicKey);
+   // Never replace a legacy key or silently rotate an account's identity.
+   const existing=await db.prepare('SELECT public_jwk FROM message_device_keys WHERE user_id=?')
+    .bind(user.id).first<{public_jwk:string}>();
+   if(existing)fail(409,'This account already has an encryption identity. Legacy migration requires its original key; no keys were changed.');
+   const wrapped=JSON.stringify(payload),now=new Date().toISOString();
+   try{
+    await db.batch([
+     db.prepare('INSERT INTO message_device_keys(user_id,public_jwk,created_at) VALUES(?,?,?)')
+      .bind(user.id,encoded,now),
+     db.prepare('INSERT INTO message_account_recovery(user_id,public_jwk,envelope_json,created_at) VALUES(?,?,?,?)')
+      .bind(user.id,encoded,wrapped,now)
+    ]);
+   }catch{
+    fail(409,'Another enrollment was completed or the recovery database is unavailable. Reload and verify keys before proceeding.');
+   }
+   return respond({configured:true,publicKey:payload.publicKey},201);
   }
  }
  if(path==='/api/messages/contacts'&&req.method==='GET'){
