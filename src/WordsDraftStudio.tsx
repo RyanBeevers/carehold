@@ -3,6 +3,7 @@ import {ArrowUpRight,Check,Eye,LockKeyhole,RotateCcw,ShieldAlert,Users,X} from '
 import type {Audience} from '../shared/audience';
 import {api,StaleSessionRequest} from './lib/api';
 import {WORDS_DRAFT_MAX_LENGTH,previewDisclosureLabel,previewRecipients,type PreviewMode,type RecipientOption} from './lib/words-preview';
+import {useWordsDraftVault} from './lib/useWordsDraftVault';
 
 export type WordsPromptSelection={id:string,text:string,audience:Audience,sequence:number};
 type RecipientResult={recipients:RecipientOption[]};
@@ -13,13 +14,15 @@ type RecipientResult={recipients:RecipientOption[]};
  * The component unmounts (destroying the draft state) outside Words.
  */
 export function WordsDraftStudio({
- audience,householdId,selectedPrompt,
+ audience,householdId,userId,selectedPrompt,
 }:{
- audience:Audience,householdId:string,selectedPrompt:WordsPromptSelection|null
+ audience:Audience,householdId:string,userId:string,selectedPrompt:WordsPromptSelection|null
 }){
+ const vault=useWordsDraftVault(userId,householdId);
+ const {text:draft,prompt,setText:setDraft,setPrompt,ready:vaultReady,enabled:vaultEnabled,status:vaultStatus,error:vaultError}=vault;
  const [expanded,setExpanded]=useState(false);
- const [draft,setDraft]=useState('');
- const [prompt,setPrompt]=useState<string|null>(null);
+ const [vaultBusy,setVaultBusy]=useState(false);
+ const [conflictChoice,setConflictChoice]=useState<'reload'|'overwrite'|null>(null);
  const [mode,setMode]=useState<PreviewMode>('private');
  const [recipients,setRecipients]=useState<RecipientOption[]>([]);
  const [recipientIds,setRecipientIds]=useState<string[]>([]);
@@ -29,13 +32,16 @@ export function WordsDraftStudio({
  const lastSelection=useRef(0);
 
  useEffect(()=>{
-   if(!selectedPrompt||selectedPrompt.sequence===lastSelection.current||selectedPrompt.audience!==audience)return;
+   if(!vaultReady||!selectedPrompt||selectedPrompt.sequence===lastSelection.current||selectedPrompt.audience!==audience)return;
    lastSelection.current=selectedPrompt.sequence;
    // A new writing prompt does not overwrite an in-progress draft.
    setPrompt(selectedPrompt.text);
    setExpanded(true);
    setClearConfirm(false);
- },[selectedPrompt,audience]);
+ },[selectedPrompt,audience,vaultReady]);
+ useEffect(()=>{
+   if(vaultReady&&(draft.length>0||prompt!==null))setExpanded(true);
+ },[vaultReady]);
 
  useEffect(()=>{
    if(mode!=='recipients')return;
@@ -59,10 +65,30 @@ export function WordsDraftStudio({
    if(next==='private'){setRecipientIds([]);setRecipientError('');}
    setClearConfirm(false);
  }
- function discardDraft(){
-   setDraft('');setPrompt(null);setMode('private');setRecipientIds([]);
-   setRecipients([]);setRecipientError('');setClearConfirm(false);
+ async function discardDraft(){
+   setVaultBusy(true);
+   const erased=await vault.discard();
+   setVaultBusy(false);
+   if(!erased)return;
+   setMode('private');setRecipientIds([]);setRecipients([]);
+   setRecipientError('');setClearConfirm(false);
  }
+ async function changeVault(action:'enable'|'reload'|'overwrite'|'retry'){
+   setVaultBusy(true);
+   try{
+     if(action==='enable')await vault.enable();
+     else if(action==='reload')await vault.reloadStored();
+     else if(action==='overwrite')await vault.overwriteStored();
+     else await vault.flush();
+     setConflictChoice(null);
+   }finally{setVaultBusy(false);}
+ }
+ const saveLabel={
+   loading:'Checking this device…',off:'Autosave off',ready:'Encrypted local autosave is ready',
+   editing:'Unsaved changes — saving shortly',saving:'Encrypting and saving…',
+   saved:'Saved on this device',restored:'Recovered from this device',
+   conflict:'Another tab saved a newer version',error:'Local save unavailable — text remains here'
+ }[vaultStatus];
  const heading=audience==='child'?'A place for your words':audience==='teen'?'Put it into words':'A moment to write';
  const placeholder=audience==='child'?'You can write a few words, or a whole story…':audience==='teen'?'Start wherever it makes sense to you…':'Write whatever comes to mind…';
 
@@ -79,13 +105,24 @@ export function WordsDraftStudio({
    </div>
    <div className="words-studio-notice" role="note">
      <ShieldAlert size={19} aria-hidden="true"/>
-     <p><strong>Prototype, not secure journaling.</strong> Use fictional text only. Nothing is saved or sent through Carehold, and your draft disappears when you leave Words, lock, or sign out. This isn't end-to-end encrypted storage.</p>
+     <p><strong>Experimental device-only drafts — fictional text only.</strong> {vaultEnabled?'Autosave encrypts writing before storing it in this browser. It is not synced or sent. The stored key can still be used by code running on this device; this is not end-to-end encryption. Clearing browser site data deletes drafts.':'Without autosave, writing disappears when you leave or lock Carehold. You can opt in to a device-only encrypted save for testing; it is not independently reviewed or safe for real confidential writing.'}</p>
    </div>
+   <div className="words-vault-controls" role="status" aria-live="polite">
+     <div><strong>{saveLabel}</strong>{vaultEnabled&&vault.savedAt&&<span>Last saved: {new Date(vault.savedAt).toLocaleString()}</span>}</div>
+     {!vaultEnabled&&vaultReady&&<button type="button" className="button outline small" disabled={vaultBusy} onClick={()=>void changeVault('enable')}><LockKeyhole size={15}/> Enable encrypted device autosave</button>}
+     {vaultError&&<p role="alert" className="words-vault-error">{vaultError}</p>}
+     {vaultStatus==='error'&&vaultEnabled&&<button type="button" className="button outline small" disabled={vaultBusy} onClick={()=>void changeVault('retry')}>Retry saving</button>}
+   </div>
+   {vaultStatus==='conflict'&&<div className="words-vault-conflict">
+     <strong>Two tabs have different drafts.</strong>
+     <p>The writing on this screen is still here. Choose whether to load the other tab's saved version or replace it with this version. Neither choice sends a message.</p>
+     {conflictChoice?<div className="words-studio-confirm"><span>{conflictChoice==='reload'?'Replace this unsaved writing with the stored version?':'Replace the previously saved version with this writing?'}</span><button type="button" className="button outline small" onClick={()=>setConflictChoice(null)}>Cancel</button><button type="button" className="button dark small" disabled={vaultBusy} onClick={()=>void changeVault(conflictChoice)}>{conflictChoice==='reload'?'Load saved':'Replace saved'}</button></div>:<div className="words-studio-actions"><button type="button" className="button outline small" onClick={()=>setConflictChoice('reload')}>Review saved version</button><button type="button" className="button outline small" onClick={()=>setConflictChoice('overwrite')}>Keep this version</button></div>}
+   </div>}
    {expanded&&<div id="words-studio-editor" className="words-studio-editor">
      {prompt&&<div className="words-studio-prompt"><span className="mono kicker">WRITING FROM THIS PROMPT</span><blockquote>{prompt}</blockquote><button type="button" className="quiet small" onClick={()=>setPrompt(null)} aria-label="Remove writing prompt"><X size={15}/> Remove prompt</button></div>}
      <label className="words-studio-draft-label" htmlFor="words-studio-draft">Your words</label>
-     <textarea id="words-studio-draft" className="words-studio-textarea" value={draft} onChange={e=>{setDraft(e.target.value);setClearConfirm(false);}} maxLength={WORDS_DRAFT_MAX_LENGTH} rows={6} placeholder={placeholder} autoComplete="off" spellCheck={false} autoCorrect="off" aria-describedby="words-studio-help"/>
-     <div className="words-studio-meta"><span id="words-studio-help">Only in this page's memory. Not saved, copied, or sent.</span><span className="mono" aria-label="Character count">{draft.length} / {WORDS_DRAFT_MAX_LENGTH}</span></div>
+     <textarea id="words-studio-draft" className="words-studio-textarea" value={draft} disabled={!vaultReady||vaultBusy} onChange={e=>{setDraft(e.target.value);setClearConfirm(false);}} onBlur={()=>{if(vaultEnabled)void vault.flush();}} maxLength={WORDS_DRAFT_MAX_LENGTH} rows={6} placeholder={placeholder} autoComplete="off" spellCheck={false} autoCorrect="off" aria-describedby="words-studio-help"/>
+     <div className="words-studio-meta"><span id="words-studio-help">{vaultEnabled?'Encrypted locally on this browser after you enable autosave. Never sent or synced.':'Only in this page’s memory until you opt in. Not saved or sent.'}</span><span className="mono" aria-label="Character count">{draft.length} / {WORDS_DRAFT_MAX_LENGTH}</span></div>
      <fieldset className="words-studio-sharing">
        <legend>Who would see it?</legend>
        <div className="words-studio-modes">
@@ -108,9 +145,9 @@ export function WordsDraftStudio({
      </div>}
      <div className="words-studio-status"><Eye size={17} aria-hidden="true"/><div><strong>{label}</strong><span>{mode==='private'?'The private-by-default option stays selected.':'A recipient would only see content you explicitly chose to send, after secure sharing is implemented.'}</span></div></div>
      <div className="words-studio-footer">
-       <p>Saving and sending are intentionally unavailable until encryption and consent controls are ready.</p>
+       <p>{vaultEnabled?'Autosave is for testing on this device only. Actual message sending, cross-device recovery and confidential journals are still disabled.':'Sending remains disabled. To survive refresh or a banking-style lock, enable the experimental encrypted device autosave.'}</p>
        <div className="words-studio-actions">
-         {clearConfirm?<div className="words-studio-confirm" role="group" aria-label="Confirm draft discard"><span>Discard this draft?</span><button type="button" className="button outline small" onClick={()=>setClearConfirm(false)}>Keep</button><button type="button" className="button dark small" onClick={discardDraft}>Discard</button></div>:<button type="button" className="button outline small" onClick={()=>canClear?setClearConfirm(true):discardDraft()}><RotateCcw size={15}/> Clear draft</button>}
+         {clearConfirm?<div className="words-studio-confirm" role="group" aria-label="Confirm draft discard"><span>Discard this draft?</span><button type="button" className="button outline small" onClick={()=>setClearConfirm(false)}>Keep</button><button type="button" className="button dark small" disabled={vaultBusy} onClick={()=>void discardDraft()}>Discard</button></div>:<button type="button" className="button outline small" onClick={()=>canClear?setClearConfirm(true):discardDraft()}><RotateCcw size={15}/> Clear draft</button>}
          <span className="words-studio-disabled-send" aria-disabled="true">Sending not enabled</span>
        </div>
      </div>
