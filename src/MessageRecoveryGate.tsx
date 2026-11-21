@@ -22,6 +22,7 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
  const [enrolledPublic,setEnrolledPublic]=useState<PublicKey|null>(null);
  const [saved,setSaved]=useState(false),[code,setCode]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const announceRecovery=()=>window.dispatchEvent(new CustomEvent('carehold:recovery-ready',{detail:{userId}}));
  useEffect(()=>{
   let live=true;
   setMode('checking');setError('');setPending(null);setSaved(false);setCode('');
@@ -69,7 +70,7 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
   try{
    await api('/messages/recovery','POST',{envelope:pending.envelope});
    await storeRecoveredMessageIdentity(userId,pending.identity);
-   onReady(pending.identity);setMode('ready');
+   onReady(pending.identity);announceRecovery();setMode('ready');
    setCode('');setPending(null);setNotice('Encryption recovery configured. Keep your recovery code offline.');
   }catch(e){
    try{
@@ -77,7 +78,7 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
     if(existing.configured&&existing.envelope){
      if(pending&&samePublicKey(existing.envelope.publicKey,pending.identity.publicKey)){
       await storeRecoveredMessageIdentity(userId,pending.identity);
-      onReady(pending.identity);setMode('ready');setPending(null);
+      onReady(pending.identity);announceRecovery();setMode('ready');setPending(null);
       setNotice('Enrollment was already completed; this browser recovered the saved identity.');
       return;
      }
@@ -98,7 +99,7 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    if(!samePublicKey(identity.publicKey,enrolledPublic))throw new Error('The recovered key does not match the registered identity.');
    await storeRecoveredMessageIdentity(userId,identity);
    setCode('');
-   onReady(identity);setMode('ready');setNotice('Message key restored on this device.');
+   onReady(identity);announceRecovery();setMode('ready');setNotice('Message key restored on this device.');
   }catch(e){setError(errorText(e));}
   finally{setBusy(false);}
  }
