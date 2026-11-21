@@ -10,7 +10,14 @@ export type Identity={privateKey:CryptoKey,publicKey:PublicKey,journalKey?:Crypt
 export type Content={kind:'prompt'|'message',text:string};
 export type Envelope={v:1,epk:PublicKey,iv:string,salt:string,ct:string};
 const enc=new TextEncoder(),dec=new TextDecoder();
+import type {MessageRecoveryEnvelope} from './message-recovery.ts';
 const dbName='carehold-direct-message-keys-v1';
+export type RecoverySetupFlow='fresh'|'legacy';
+type PendingRecovery={scope:string,createdAt:number,envelope:MessageRecoveryEnvelope};
+const pendingScope=(userId:string,flow:RecoverySetupFlow)=>{
+ if(!userId||userId.length>200||!['fresh','legacy'].includes(flow))throw new Error('Sign in to preserve encrypted setup.');
+ return flow+':'+userId;
+};
 const algorithm={name:'ECDH',namedCurve:'P-256'} as const;
 function clean(jwk:JsonWebKey):PublicKey{
  if(jwk.kty!=='EC'||jwk.crv!=='P-256'||!jwk.x||!jwk.y)throw new Error('Unsupported public key.');
@@ -31,13 +38,15 @@ function unb64(value:string):Uint8Array<ArrayBuffer>{
 function getDb():Promise<IDBDatabase>{
  if(!('indexedDB' in globalThis)||!crypto.subtle)throw new Error('This browser cannot store encrypted message keys.');
  return new Promise((resolve,reject)=>{
-  const request=indexedDB.open(dbName,2);
+  const request=indexedDB.open(dbName,3);
   request.onupgradeneeded=()=>{
    if(!request.result.objectStoreNames.contains('identities'))
     request.result.createObjectStore('identities',{keyPath:'userId'});
    // Never replace the old non-extractable private key during recovery.
    if(!request.result.objectStoreNames.contains('recoveredIdentities'))
     request.result.createObjectStore('recoveredIdentities',{keyPath:'userId'});
+   if(!request.result.objectStoreNames.contains('pendingRecoveries'))
+    request.result.createObjectStore('pendingRecoveries',{keyPath:'scope'});
   };
   request.onsuccess=()=>resolve(request.result);
   request.onerror=()=>reject(request.error??new Error('Cannot open device key store.'));
@@ -55,6 +64,48 @@ async function readRecovered(db:IDBDatabase,userId:string):Promise<Row|undefined
  const tx=db.transaction('recoveredIdentities','readonly');
  return requestValue(tx.objectStore('recoveredIdentities').get(userId)) as Promise<Row|undefined>;
 }
+
+/** Holds only a *wrapped* enrollment envelope, never the CH1 recovery secret.
+ * Keeps a setup attempt resumable after iOS Safari/PWA background locking. */
+export async function storedPendingRecoveryEnvelope(userId:string,flow:RecoverySetupFlow):Promise<MessageRecoveryEnvelope|null>{
+ const scope=pendingScope(userId,flow),db=await getDb();
+ try{
+  const row=await requestValue<PendingRecovery|undefined>(db.transaction('pendingRecoveries','readonly').objectStore('pendingRecoveries').get(scope));
+  if(!row)return null;
+  if(row.scope!==scope||row.envelope?.v!==2)throw new Error('An incompatible pending recovery setup exists. No data was erased.');
+  return row.envelope;
+ }finally{db.close();}
+}
+export async function storePendingRecoveryEnvelope(userId:string,flow:RecoverySetupFlow,envelope:MessageRecoveryEnvelope):Promise<void>{
+ const scope=pendingScope(userId,flow);
+ const expected='alg,ct,iv,kdf,publicKey,salt,v';
+ if(envelope?.v!==2||Object.keys(envelope).sort().join(',')!==expected||JSON.stringify(envelope).length>5000)
+  throw new Error('Refusing to store unexpected recovery setup data.');
+ const db=await getDb();
+ try{
+  const existing=await requestValue<PendingRecovery|undefined>(db.transaction('pendingRecoveries','readonly').objectStore('pendingRecoveries').get(scope));
+  if(existing){
+   if(JSON.stringify(existing.envelope)===JSON.stringify(envelope))return;
+   throw new Error('An unfinished recovery enrollment already exists. Resume or discard it before generating a new key.');
+  }
+  try{
+   await requestValue(db.transaction('pendingRecoveries','readwrite').objectStore('pendingRecoveries').add({
+    scope,createdAt:Date.now(),envelope
+   } satisfies PendingRecovery));
+  }catch(e){
+   const competing=await requestValue<PendingRecovery|undefined>(db.transaction('pendingRecoveries','readonly').objectStore('pendingRecoveries').get(scope));
+   if(competing&&JSON.stringify(competing.envelope)===JSON.stringify(envelope))return;
+   throw e;
+  }
+ }finally{db.close();}
+}
+export async function clearPendingRecoveryEnvelope(userId:string,flow:RecoverySetupFlow):Promise<void>{
+ const scope=pendingScope(userId,flow),db=await getDb();
+ try{
+  await requestValue(db.transaction('pendingRecoveries','readwrite').objectStore('pendingRecoveries').delete(scope));
+ }finally{db.close();}
+}
+
 /** Read legacy identity even after a v2 key is installed, for safe verification. */
 export async function storedLegacyMessageIdentity(userId:string):Promise<Identity|null>{
  if(!userId||userId.length>200)throw new Error('Sign in before accessing encrypted data.');
