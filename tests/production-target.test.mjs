@@ -17,7 +17,8 @@ test('production target accepts a distinct D1 database, Worker and exact HTTPS R
  assert.deepEqual(checkProductionTarget(valid()),[]);
 });
 test('production target fails closed on placeholders and unconfigured D1',()=>{
- const actual=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
+ const actual=valid();
+ actual.env.production.vars.APP_ORIGIN='https://REPLACE-PRODUCTION-HOST';
  assert.ok(checkProductionTarget(actual).length>0);
  const altered=valid();
  altered.env.production.d1_databases[0].database_id='REPLACE_PRODUCTION_D1_ID';
