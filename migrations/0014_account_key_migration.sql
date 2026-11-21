@@ -27,3 +27,11 @@ CREATE TABLE account_key_migration_challenges (
  proof_digest TEXT NOT NULL,
  expires_at INTEGER NOT NULL
 );
+
+-- A committed migrated copy is immutable: cancel can affect staged work only.
+CREATE TRIGGER protect_completed_recipient_copy
+BEFORE DELETE ON account_migrated_copies
+WHEN EXISTS(SELECT 1 FROM account_key_migrations m WHERE m.user_id=OLD.user_id AND m.state='complete')
+BEGIN
+ SELECT RAISE(ABORT,'Completed encryption migration copies cannot be deleted');
+END;
