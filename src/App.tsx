@@ -543,7 +543,7 @@ export default function App(){
    isPet={profiles.find(p=>p.id===medProfile)?.kind==='pet'} disabled={saving}
    onNameChange={name=>setMedForm(v=>({...v,name,catalogSource:null,catalogIdentifier:null,normalizedName:null,brandName:null,productStrength:null,dosageForm:null}))}
    onSelect={item=>setMedForm(v=>({...v,name:item.name,catalogSource:'rxterms',catalogIdentifier:item.conceptRxCui,normalizedName:item.name,brandName:item.brandName,productStrength:null,dosageForm:null}))}
-   onProduct={(option,conceptRxCui)=>setMedForm(v=>({...v,catalogIdentifier:option?.rxCui??conceptRxCui,productStrength:option?.label??null,dosageForm:null}))}
+   onProduct={(option,conceptRxCui)=>setMedForm(v=>({...v,form:option?'':v.form,catalogIdentifier:option?.rxCui??conceptRxCui,productStrength:option?.label??null,dosageForm:null}))}
    onManual={()=>setMedForm(v=>({...v,catalogSource:null,catalogIdentifier:null,normalizedName:null,brandName:null,productStrength:null,dosageForm:null}))}/>
    {medForm.catalogSource==='rxterms'&&medForm.productStrength?
    <p className="muted tiny">Product strength and form are already identified as “{medForm.productStrength}.” You only need to enter the actual prescribed dose below.</p>:
