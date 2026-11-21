@@ -111,7 +111,7 @@ export function SharedSpaces({userId,householdId,identity,keyError,openSpaceId,o
   <div className="words-hub-section-top"><div><span className="mono kicker">PROMPTS & JOURNALS</span><h2>Shared spaces.</h2></div><button type="button" className="quiet small" onClick={()=>void refresh().catch(e=>setError(message(e)))}><RotateCw size={15}/> Refresh</button></div>
   {error&&<p role="alert" className="messages-error">Unable to load shared spaces: {error} <button type="button" className="quiet small" onClick={()=>void refresh().catch(e=>setError(message(e)))}>Retry</button></p>}
   {!identity&&<p role="alert" className="messages-error">{keyError?
-    'Shared spaces still exist, but this browser cannot decrypt them because its key differs from the registered device key. Use the original browser profile for this account. Do not clear its site data or rotate its key.':
+    'Encrypted content cannot open on this browser: ' + keyError + ' If you previously used this account in another browser profile, return to that original profile. Do not clear its site data or replace the device key.':
     'Checking this browser’s encryption key. Shared writing remains encrypted until it is ready.'}</p>}
   {loading&&<p className="muted">Finding your shared spaces…</p>}
   {!loading&&!error&&spaces.length===0&&<p className="words-empty">No shared prompts or journal entries are available to this account in this care circle. Check which test account and browser profile you are using.</p>}
@@ -210,7 +210,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   <button type="button" className="quiet small" onClick={onBack}><ArrowLeft size={15}/> All shared spaces</button>
   {error&&<p role="alert" className="messages-error">{error}</p>}
   {!identity?<p role="alert" className="messages-error">{keyError?
-    'This browser cannot decrypt the space: the local key differs from the enrolled account key. Return to the browser profile that originally enrolled this account. The space has not been deleted.':
+    'Encrypted content cannot open on this device: ' + keyError + ' Use the original browser profile for this account if you have switched browser profiles. No shared-space record was deleted.':
     'Waiting for your encrypted device identity. If it does not load, return to Shared spaces and review the device key warning.'}</p>:
    !detail?error?<p role="alert">Unable to open this shared space. Use Back and retry from the list.</p>:<p className="muted">Opening your shared space…</p>:<>
    <header className="words-space-intro">
