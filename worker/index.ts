@@ -6,6 +6,7 @@ import { canAccess, validCapabilities, type Role, type Capability } from '../sha
 import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
+import {handleMessages} from './messages';
 
 const dataHeaders = {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'"};
 class ApiError extends Error { constructor(public code:number,message:string){super(message);} }
@@ -155,6 +156,7 @@ async function handle(req:Request,env:CareEnv):Promise<Response> {
     return json({audience:b.audience,pendingInvitation:!!invitationId});
   }
   await requirePasskey(db,user.id);
+   if(path.startsWith('/api/messages/'))return handleMessages(req,env,user);
   if(path==='/api/me/audience'&&req.method==='POST') {
     const b=await jsonBody(req);
     if(!validAudience(b.audience))bad(400,'Choose parent, child or teen.');
