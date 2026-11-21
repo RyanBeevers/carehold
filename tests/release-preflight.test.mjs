@@ -25,3 +25,15 @@ test('private journal backup controls are opt-in and restore never silently over
  assert.match(hub,/input type="password"/);
  assert.match(hub,/setBackupPassphrase\(''\)/);
 });
+
+test('staging release never targets production or skips the verified build',()=>{
+ const release=readFileSync(new URL('../scripts/release-staging.sh',import.meta.url),'utf8');
+ assert.match(packageJson.scripts['release:staging'],/release-staging\.sh/);
+ assert.match(packageJson.scripts['deploy:staging'],/npm run build && wrangler deploy --env staging/);
+ assert.match(release,/npm run verify:pre-e2e/);
+ assert.match(release,/read -r -p "Type DEPLOY STAGING/);
+ assert.match(release,/wrangler d1 export carehold-staging --remote --env staging/);
+ assert.match(release,/npm run db:remote/);
+ assert.match(release,/npm run deploy:staging/);
+ assert.doesNotMatch(release,/--env production|carehold-production/);
+});
