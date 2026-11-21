@@ -2,8 +2,10 @@ import type {CareEnv,SessionUser} from './types';
 import {notifyPrivateRecipients} from './words-spaces';
 import {exactParticipants,mayStartDirectMessage,pairKey,validPublicJwk,validSealedEnvelope} from './messages-policy';
 import {validStoredRecoveryEnvelope} from './message-recovery-policy';
-/** Fictional text only: TOFU key registry, one device/account, no reviewed E2EE.
- * API never receives plaintext. No read receipts, views or typing tracking. */
+/** Fictional text only: TOFU public key registry, not reviewed E2EE.
+ * Fresh-account recovery wraps a stable account key; legacy keys stay intact.
+ * Full device revocation, journal sync and key migration are not supported.
+ * API never receives plaintext or recovery codes. No read receipts. */
 const headers={'Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
 const respond=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers});
 class MessageError extends Error{constructor(public status:number,message:string){super(message);}}
