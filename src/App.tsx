@@ -251,7 +251,14 @@ export default function App(){
    correctionAfterLock.current=null;
    lockingRef.current=false;setLocked(false);setAuthMode('signin');setLockError('');
  }
- useIdleSecurity(Boolean(user&&hasPasskey&&!locked&&!loading),()=>lockNow(),()=>{
+ useIdleSecurity(Boolean(user&&hasPasskey&&!locked&&!loading),(reason)=>{
+    // An auto-lock protects THIS tab's screen, not the browser-wide cookie.
+    // Signing out here would unexpectedly evict an actively used second tab.
+    const message=reason==='away'
+      ? 'This tab locked after one minute in the background. Unlock with your passkey to continue.'
+      : 'This tab locked after three minutes without detected activity. Unlock with your passkey to continue.';
+    lockNow(message,false);
+  },()=>{
    const epoch=authEpochRef.current,expectedUserId=user?.id;
    // A real network request (not a possibly cached client-side session read)
    // keeps Better Auth's sliding short session alive while someone is typing.
