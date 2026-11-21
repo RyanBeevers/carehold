@@ -47,7 +47,7 @@ export function MedicationCatalogPicker({profileId,value,catalog,isPet,disabled=
   onSelect(result);
  }
  function changeName(next:string){
-  setSelected(null);setManual(false);setActive(-1);
+  setSelected(null);setActive(-1);
   setOpened(true);onNameChange(next);
  }
  function manualEntry(){
@@ -75,10 +75,10 @@ export function MedicationCatalogPicker({profileId,value,catalog,isPet,disabled=
   <div className="med-catalog-input">
    <Search size={17} aria-hidden="true"/>
    <input id={listId+'-input'} role="combobox" aria-autocomplete="list"
-    aria-controls={listId+'-options'} aria-expanded={listVisible} aria-haspopup="listbox"
+    aria-controls={listVisible&&results.length>0?listId+'-options':undefined} aria-expanded={listVisible} aria-haspopup="listbox"
     aria-activedescendant={listVisible&&active>=0?listId+'-option-'+active:undefined}
     required maxLength={150} autoComplete="off" spellCheck={false} value={value} disabled={disabled}
-    placeholder="Search by brand or generic name"
+    placeholder="Search medication name (no patient details)"
     onFocus={()=>{setFocused(true);setOpened(true);}}
     onBlur={()=>{window.setTimeout(()=>{setFocused(false);setOpened(false);},130);}}
     onChange={e=>changeName(e.target.value)} onKeyDown={keys}/>
@@ -119,8 +119,9 @@ export function MedicationCatalogPicker({profileId,value,catalog,isPet,disabled=
     </div>}
    <p className="med-catalog-hint">This describes the packaged product, not how much this person or pet should receive. Enter the exact prescribed dose separately below.</p>
   </div>}
-  {manual&&<p className="med-catalog-manual-state"><Check size={15}/> Custom medication name. You can enter any medication, supplement, compounded preparation or veterinary prescription.</p>}
+  {manual&&<div className="med-catalog-manual-mode"><p className="med-catalog-manual-state"><Check size={15}/> Custom medication name. Enter a medication, supplement, compounded preparation or veterinary prescription.</p>
+   <button type="button" className="quiet small" onClick={()=>{setManual(false);setFocused(true);document.getElementById(listId+'-input')?.focus();}}><Search size={14}/> Search the directory instead</button></div>}
   {isPet&&<p className="med-catalog-pet">Veterinary note: this directory primarily lists human products. A match does not establish safety or appropriate dosing for an animal. Custom entry is always supported.</p>}
-  <p className="med-catalog-hint">{explain}</p>
+  <p className="med-catalog-hint">{explain} Search for the medication name only; never enter a patient's personal details into the directory search.</p>
  </div>;
 }
