@@ -116,7 +116,10 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const hid=householdId(url.searchParams.get('householdId'));await member(db,hid,user.id);
   const result=await db.prepare(`SELECT u.id,u.name,k.public_jwk FROM household_members hm
    JOIN user u ON u.id=hm.user_id LEFT JOIN message_device_keys k ON k.user_id=u.id
-   WHERE hm.household_id=? AND hm.user_id<>? ORDER BY u.name LIMIT 40`)
+   WHERE hm.household_id=? AND hm.user_id<>?
+    AND NOT EXISTS(SELECT 1 FROM profiles archived WHERE archived.household_id=hm.household_id
+     AND archived.linked_user_id=hm.user_id AND archived.archived_at IS NOT NULL)
+    ORDER BY u.name LIMIT 40`)
    .bind(hid,user.id).all<{id:string,name:string,public_jwk:string|null}>();
   return respond({people:(result.results||[]).map(r=>({id:r.id,name:r.name,publicKey:r.public_jwk?JSON.parse(r.public_jwk):null}))});
  }
@@ -148,6 +151,10 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const members=await db.prepare(`SELECT COUNT(*) n FROM household_members WHERE household_id=? AND user_id IN (${placeholders})`)
    .bind(hid,...selected).first<{n:number}>();
   if(members?.n!==selected.length)fail(403,'A selected person is no longer in this care circle.');
+  const retired=await db.prepare(`SELECT COUNT(*) n FROM profiles
+   WHERE household_id=? AND archived_at IS NOT NULL AND linked_user_id IN (${placeholders})`)
+   .bind(hid,...selected).first<{n:number}>();
+  if(retired?.n)fail(409,'An archived profile is linked to this account. Restore it before starting a new shared space.');
   const keys=await db.prepare(`SELECT COUNT(*) n FROM message_device_keys WHERE user_id IN (${placeholders})`)
    .bind(...selected).first<{n:number}>();
   if(keys?.n!==selected.length)fail(409,'Each participant must first open Words or Messages on their own device.');
