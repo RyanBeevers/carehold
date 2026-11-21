@@ -161,7 +161,9 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   // Initial audience selection and invitation staging are non-privileged onboarding.
   // They do not grant household membership and do not bypass the passkey gate.
   if(path==='/api/onboarding'&&req.method==='POST') {
-    const b=await jsonBody(req);
+    const alreadyJoined=await db.prepare('SELECT 1 FROM household_members WHERE user_id=? LIMIT 1').bind(user.id).first();
+     if(alreadyJoined)bad(403,'Onboarding cannot change the audience of an existing household member.');
+     const b=await jsonBody(req);
     if(!validAudience(b.audience))bad(400,'Choose parent, child or teen.');
     const inviteCode=trim(b.invitationCode,512),ts=now();
     let invitationId:string|null=null;
@@ -207,6 +209,8 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     if(!timezoneValid(zone))bad(400,'Choose a valid timezone.');
     const account=await db.prepare('SELECT audience FROM account_audiences WHERE user_id=?').bind(user.id).first<{audience:Audience}>();
     if(account?.audience!=='parent')bad(403,'Only a parent or caregiver can start a care circle in this pilot.');
+     const minor=await db.prepare("SELECT 1 FROM household_member_classes WHERE user_id=? AND classification IN ('teen','child') LIMIT 1").bind(user.id).first();
+     if(minor)bad(403,'Minors cannot create an administrative care circle.');
     const id=uuid(),ts=now();
     await db.batch([
       db.prepare('INSERT INTO households(id,name,timezone,created_by,created_at) VALUES(?,?,?,?,?)').bind(id,name,zone,user.id,ts),
