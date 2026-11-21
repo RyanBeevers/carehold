@@ -83,10 +83,15 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   setMigratingJournal(true);setJournalError('');
   try{
    const previous=await listPrivateJournal(userId,householdId);
-   const existing=new Set((await listSyncedPrivateJournal(userId,householdId,identity.journalKey)).map(e=>e.id));
+   const existing=new Map((await listSyncedPrivateJournal(userId,householdId,identity.journalKey)).map(e=>[e.id,e] as const));
    let moved=0;
    for(const entry of previous){
-    if(existing.has(entry.id))continue;
+    const remote=existing.get(entry.id);
+    if(remote){
+     if(remote.text!==entry.text||remote.title!==entry.title||remote.prompt!==entry.prompt)
+      throw new Error('The same journal entry has different versions on this device and the server. No copies were overwritten. Export a local backup before resolving the conflict.');
+     continue;
+    }
     await saveSyncedPrivateJournal(userId,householdId,identity.journalKey,entry);
     moved++;
    }
