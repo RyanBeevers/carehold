@@ -8,9 +8,13 @@ const hub=readFileSync(new URL('../src/WordsHub.tsx',import.meta.url),'utf8');
 
 test('all journal, activity and push preference paths pass through authenticated Worker router',()=>{
  assert.match(index,/await requirePasskey\(db,user\.id\)/);
- assert.match(index,/path\.startsWith\('\/api\/words\/'\)/);
+ assert.match(index,/path==='\/api\/words\/people'/);
+ assert.match(index,/path==='\/api\/words\/push-preference'/);
+ assert.match(index,/path==='\/api\/words\/spaces'/);
+ assert.match(index,/path\.startsWith\('\/api\/words\/spaces\/'\)/);
  assert.match(index,/path==='\/api\/activity'/);
- assert.match(index,/path\.startsWith\('\/api\/activity\/'\)/);
+ assert.match(index,/path==='\/api\/activity\/seen'/);
+ assert.match(index,/path==='\/api\/words\/recipient-options'/);
  assert.match(index,/return handleWordSpaces\(req,env,user,ctx\)/);
  for(const p of ['/api/words/push-preference','/api/words/people','/api/words/spaces','/api/activity','/api/activity/seen'])
   assert.ok(spaces.includes(p),`Worker missing ${p} implementation`);
