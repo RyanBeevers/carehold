@@ -59,6 +59,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const rows=await db.prepare(`SELECT u.id,u.name,k.public_jwk FROM household_members m
    JOIN user u ON u.id=m.user_id LEFT JOIN message_device_keys k ON k.user_id=u.id
    WHERE m.household_id=? AND m.user_id<>? AND (?='owner' OR m.role='owner')
+   AND NOT EXISTS(SELECT 1 FROM profiles archived WHERE archived.household_id=m.household_id
+     AND archived.linked_user_id=m.user_id AND archived.archived_at IS NOT NULL)
    ORDER BY u.name LIMIT 50`).bind(hid,user.id,role).all<{id:string,name:string,public_jwk:string|null}>();
   return respond({contacts:(rows.results||[]).map(r=>({id:r.id,name:r.name,publicKey:r.public_jwk?JSON.parse(r.public_jwk):null}))});
  }
@@ -82,6 +84,9 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   if(to===user.id)fail(400,'Select another account.');
   const other=await membership(db,hid,to);
   if(!mayStartDirectMessage(role,other))fail(403,'This recipient is not available to start a conversation.');
+  const archived=await db.prepare('SELECT COUNT(*) n FROM profiles WHERE household_id=? AND archived_at IS NOT NULL AND linked_user_id IN (?,?)')
+   .bind(hid,user.id,to).first<{n:number}>();
+  if(archived?.n)fail(409,'An archived linked profile prevents starting a new conversation. Existing history remains readable.');
   const keys=await db.prepare('SELECT COUNT(*) AS n FROM message_device_keys WHERE user_id IN (?,?)')
    .bind(user.id,to).first<{n:number}>();
   if(keys?.n!==2)fail(409,'Both accounts must open Messages on their own devices first.');
