@@ -17,7 +17,6 @@ export function pageFromPath(pathname:string):AppPage{
 export function canonicalPagePath(pathname:string):string{
  return pagePath(pageFromPath(pathname));
 }
-/** Only normal left clicks should be intercepted. Others keep native link behavior. */
 /**
  * Restores a public route on a fresh PWA launch at "/" only. Nothing sensitive
  * is persisted: the value is one of five constant page labels.
@@ -38,6 +37,7 @@ export function restorePage(pathname:string,readLast:()=>string|null):AppPage{
 export function rememberPage(page:AppPage,write:(key:string,value:string)=>void):void{
  try{write(LAST_PAGE_KEY,page);}catch{/* Storage denial never blocks navigation. */}
 }
+/** Only normal left clicks should be intercepted. Others keep native link behavior. */
 export function shouldHandlePageClick(
  click:{button:number,defaultPrevented:boolean,metaKey:boolean,ctrlKey:boolean,shiftKey:boolean,altKey:boolean}
 ):boolean{

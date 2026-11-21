@@ -142,3 +142,9 @@ The URL is deliberately retained when locked, signed out or held behind passkey/
 4. Use browser Back/Forward across pages; test a copied `/people` link opened in a new tab and direct `/circle` refresh on the Worker-served build.
 5. Visit `/`, `/words/` and an unknown path; confirm canonical safe navigation goes to a known page and no data is exposed before authentication.
 6. Verify leaving the local-only Words studio or refreshing still **discards** its fictional writing. Encrypted autosave is a documented next phase, not part of this routing patch.
+
+### PWA relaunch at the manifest root (navigation-only preference)
+
+An installed PWA can reopen at `/` instead of its last on-screen route. To avoid returning to Today in that case, Carehold remembers only a **single public page label** (`today`, `people`, `words`, `circle` or `settings`) under the browser preference key `carehold-last-page`. When `/` is opened again, the app restores that page and replaces the URL with its canonical path. A direct URL such as `/settings` always overrides the saved page. Missing, invalid or blocked local storage falls back to Today without errors.
+
+This browser preference is not per-account, but it contains no household ID, patient identity, medication information, writing, recipient information, credentials or access token. Every protected screen still requires current authenticated access. It does **not** restore unsaved Words drafts, which remain intentionally nonpersistent until encrypted autosave is ready.

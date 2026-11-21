@@ -14,7 +14,7 @@ test('each app page has a unique, shareable, non-sensitive URL',()=>{
   assert.equal(canonicalPagePath(path),path);
  }
 });
-test('legacy root and invalid routes fail closed to Today and do not reveal data',()=>{
+test('legacy root defaults to Today and invalid routes fail closed without data',()=>{
  for(const path of ['/', '/today/', '/words/unknown','/people/test-profile-id','/unrecognized','/API/secret']){
   if(path==='/words/unknown'||path==='/people/test-profile-id')assert.equal(pageFromPath(path),'today');
   assert.ok(APP_PATHS[pageFromPath(path)]);
