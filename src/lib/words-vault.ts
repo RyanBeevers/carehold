@@ -3,8 +3,9 @@
  *
  * This is NOT E2EE and not an independently reviewed privacy solution:
  * non-exportable AES CryptoKeys are persisted by this same-origin IndexedDB,
- * and can be invoked by scripts running on this origin. No device recovery,
- * cross-device sync, or shared messaging is implemented. Fictional test text
+ * and can be invoked by scripts running on this origin. A separate v2 account
+ * recovery key can encrypt a second ciphertext-only draft copy for sync.
+ * Unsent drafts are never automatically shared with a recipient. Fictional test text
  * only until the separate key-management and minors/consent gates are met.
  */
 export const WORDS_VAULT_DB='carehold-words-local-v1';
