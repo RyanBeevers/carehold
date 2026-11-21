@@ -33,13 +33,15 @@ npm run db:remote
 printf '\nDeploying verified code and freshly built assets to staging...\n'
 npm run deploy:staging
 printf '\nDeployed staging Worker. Verify login, passkey, household isolation, recovery and API health before use.\n'
-printf 'Check: %s/api/health\n' "$origin"
-if command -v curl >/dev/null 2>&1; then
-  if curl --fail --silent --show-error --max-time 15 "$origin/api/health"; then
-    printf '\nStaging health endpoint responded successfully.\n'
-  else
-    printf '\nWARNING: The Worker deployed but the configured staging health URL failed. Check APP_ORIGIN, workers.dev/custom routes and deployment logs.\n' >&2
-  fi
+printf 'Checking D1/schema readiness: %s/api/health/ready\n' "$origin"
+if ! command -v curl >/dev/null 2>&1; then
+  printf 'curl is required to confirm staging readiness.\n' >&2
+  exit 1
 fi
+if ! curl --fail --silent --show-error --max-time 20 "$origin/api/health/ready"; then
+  printf '\nSTAGING NOT READY: the Worker deployed but D1, required migrations or hostname may be incorrect. Do not test accounts until repaired.\n' >&2
+  exit 1
+fi
+printf '\nStaging D1/schema readiness passed.\n'
 printf 'Staging database backup: %s\n' "$backup"
 printf 'This is a staging pilot deployment, not an independent security review or approval for confidential family data.\n'
