@@ -32,3 +32,12 @@ test('export blocks too-short passwords and duplicate saved entry identifiers',a
  await assert.rejects(createEncryptedJournalBackup(user,household,entries,'too-short'),/at least 12/);
  await assert.rejects(createEncryptedJournalBackup(user,household,[entries[0],entries[0]],password),/repeated/);
 });
+
+test('encrypted backup preserves title, sharing marker and private-board note association',async()=>{
+ const rich=[{...entries[0],title:'A fictional chapter',sharedAt:1760000000000,spaceId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}];
+ const file=await createEncryptedJournalBackup(user,household,rich,password);
+ assert.doesNotMatch(file,/A fictional chapter|sharedAt|spaceId/);
+ const restored=await openEncryptedJournalBackup(file,user,household,password);
+ assert.deepEqual(restored,[{id:rich[0].id,text:rich[0].text,prompt:rich[0].prompt,
+  title:rich[0].title,sharedAt:rich[0].sharedAt,spaceId:rich[0].spaceId}]);
+});
