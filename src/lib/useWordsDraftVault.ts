@@ -123,11 +123,23 @@ export function useWordsDraftVault(userId:string,householdId:string){
    revision.current=result.revision;
    if(!alive.current)return;
    setSavedAt(result.savedAt);
+   if(remoteKey.current){
+    if(remoteBlocked.current&&!force)throw new DraftConflictError();
+    try{
+     const updated=await saveSyncedDraft(userId,householdId,remoteKey.current,snapshot,remoteRevision.current);
+     remoteRevision.current=updated.revision;
+     remoteBlocked.current=false;setRemoteConflict(false);setSynced(true);
+    }catch(e){
+     if(e instanceof Error&&/another device|newer draft|conflict|changed/i.test(e.message)){
+      remoteBlocked.current=true;setRemoteConflict(true);
+      throw new DraftConflictError();
+     }
+     setSynced(false);throw e;
+    }
+   }
    if(edit===editNo.current){
     dirty.current=false;conflicted.current=false;setStatus('saved');setError('');
-   }else{
-    setStatus('editing');
-   }
+   }else setStatus('editing');
   }).catch(e=>{
    if(!alive.current)return;
    lastQueued.current=Math.min(lastQueued.current,edit-1);
@@ -143,7 +155,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
  },[userId,householdId]);
 
  useEffect(()=>{
-  if(!ready||!enabled||status==='conflict'||!dirty.current)return;
+  if(!ready||!enabled||status==='conflict'||status==='error'||!dirty.current)return;
   const timer=window.setTimeout(()=>{void flush();},1000);
   return()=>window.clearTimeout(timer);
  },[text,prompt,title,ready,enabled,status==='conflict',flush]);
@@ -191,6 +203,10 @@ export function useWordsDraftVault(userId:string,householdId:string){
  },[userId,householdId,flush]);
 
  const reloadStored=useCallback(async()=>{
+  if(remoteBlocked.current){
+   setError('Two devices saved different drafts. Choose the remote copy or explicitly keep this device’s copy.');
+   return;
+  }
   setStatus('loading');
   try{
    await queue.current.catch(()=>{});
@@ -223,6 +239,12 @@ export function useWordsDraftVault(userId:string,householdId:string){
    // Finish any outstanding encrypted save before deleting it, so a pending
    // write cannot resurrect an intentionally discarded draft.
    await queue.current.catch(()=>{});
+   if(remoteKey.current){
+    // Remote deletion must succeed before clearing local ciphertext.
+    const changed=await deleteSyncedDraft(userId,householdId,remoteKey.current,remoteRevision.current);
+    remoteRevision.current=changed;remoteBlocked.current=false;
+    setSynced(true);setRemoteConflict(false);
+   }
    if(isEnabled.current)await discardDeviceDraft(userId,householdId);
    if(!alive.current)return false;
    current.current={...INITIAL};setTextState('');setPromptState(null);setTitleState('');
