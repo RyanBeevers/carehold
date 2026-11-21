@@ -37,6 +37,17 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   })();
   return()=>{active=false;cancel.current=true;};
  },[userId]);
+ async function acceptCommitted(next:Identity):Promise<boolean>{
+  try{
+   const confirmed=await api<Stage>('/messages/recovery/migration');
+   if(confirmed.state==='complete'&&confirmed.publicKey&&samePublicKey(confirmed.publicKey,next.publicKey)){
+    await storeRecoveredMessageIdentity(userId,next);
+    setStage(confirmed);setPending(null);setRecoveryCode('');setStatus('done');
+    return true;
+   }
+  }catch{}
+  return false;
+ }
  async function generate(){
   if(busy)return;setBusy(true);setError('');
   try{
@@ -56,6 +67,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    setStage({state:'staged',envelope:pending.envelope,publicKey:pending.identity.publicKey});
    await convert(pending.identity,oldKey);
   }catch(e){
+   if(pending&&await acceptCommitted(pending.identity))return;
    try{
     const state=await api<Stage>('/messages/recovery/migration');
     if(state.state==='staged'){setStage(state);setStatus('resume');}
@@ -69,14 +81,17 @@ export function LegacyMessageMigration({userId}:{userId:string}){
  async function resume(){
   if(!stage?.envelope||!oldKey||busy)return;
   setBusy(true);setError('');
+  let identity:Identity|null=null;
   try{
-   const identity=await openMessageRecoveryIdentity(userId,recoveryCode.trim(),stage.envelope);
+   identity=await openMessageRecoveryIdentity(userId,recoveryCode.trim(),stage.envelope);
    if(!stage.publicKey||!samePublicKey(identity.publicKey,stage.publicKey))
     throw new Error('The saved code does not match the staged account identity.');
    await convert(identity,oldKey);
    setRecoveryCode('');
-  }catch(e){setError(errText(e));setStatus('resume');}
-  finally{setBusy(false);}
+  }catch(e){
+   if(identity&&await acceptCommitted(identity))return;
+   setError(errText(e));setStatus('resume');
+  }finally{setBusy(false);}
  }
  async function cancelStaged(){
   if(!oldKey||busy)return;
