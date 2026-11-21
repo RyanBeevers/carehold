@@ -66,6 +66,8 @@ export default function App(){
  const [page,setPage]=useState<Page>('today'),[selected,setSelected]=useState(''),[meds,setMeds]=useState<Medication[]>([]),[history,setHistory]=useState<DoseEvent[]>([]);
  const [wordsPrompt,setWordsPrompt]=useState<WordsPromptSelection|null>(null);
  const wordsPromptSequence=useRef(0);
+ useEffect(()=>{if(page!=='words')setWordsPrompt(null);},[page]);
+ useEffect(()=>{setWordsPrompt(null);},[hid]);
  const [date,setDate]=useState(''),[error,setError]=useState('');
  const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'invite'|'remove'|'link'|null>(null),[pending,setPending]=useState<Pending>({});
  const [saving,setSaving]=useState(false),[accessCode,setAccessCode]=useState(''),[inviteInput,setInviteInput]=useState('');

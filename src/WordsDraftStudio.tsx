@@ -97,11 +97,14 @@ export function WordsDraftStudio({
        <p><strong>Choose individual recipients for a preview.</strong> This does not send an invitation, notification, or message.</p>
        {recipientLoading?<p role="status">Loading eligible accounts…</p>:recipientError?<p role="alert">{recipientError}</p>:recipients.length===0?<p>No eligible accounts are available in this circle yet.</p>:<div className="words-recipient-list">
          {recipients.map(person=><label key={person.id} className="words-recipient-option">
-           <input type="checkbox" checked={recipientIds.includes(person.id)} onChange={e=>setRecipientIds(ids=>e.target.checked?[...ids.filter(id=>id!==person.id),person.id].slice(0,10):ids.filter(id=>id!==person.id))}/>
+           <input type="checkbox" checked={recipientIds.includes(person.id)} disabled={!recipientIds.includes(person.id)&&recipientIds.length>=10} onChange={e=>{
+             const checked=e.currentTarget.checked;
+             setRecipientIds(ids=>checked?[...ids.filter(id=>id!==person.id),person.id].slice(0,10):ids.filter(id=>id!==person.id));
+           }}/>
            <span>{person.name}</span>
            {recipientIds.includes(person.id)&&<Check size={15} aria-hidden="true"/>}
          </label>)}
-       </div>}
+       </div>}{recipients.length>10&&<p>You can preview up to 10 individual recipients at a time.</p>}
      </div>}
      <div className="words-studio-status"><Eye size={17} aria-hidden="true"/><div><strong>{label}</strong><span>{mode==='private'?'The private-by-default option stays selected.':'A recipient would only see content you explicitly chose to send, after secure sharing is implemented.'}</span></div></div>
      <div className="words-studio-footer">
