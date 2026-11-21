@@ -83,6 +83,15 @@ The existing local draft vault remains authoritative when offline. After account
 All encrypted journal and draft sync requests include an expected account identifier; the Worker compares it to the active authenticated session to prevent stale asynchronous requests from one account being applied to another account after switching logins.
 
 
+
+## User custody: save the recovery code before enrolling
+
+Both fresh enrollment and original-browser migration now use `src/RecoveryCodeSaveGuide.tsx`. The 256-bit `CH1-` recovery code is displayed only during the setup session, with an explicit user-initiated copy action, a searchable entry title **Carehold — Encryption Recovery Key**, and iPhone-first steps for creating a **separate** Apple Passwords entry. The same flow describes a trusted password manager on Android, a locked backed-up note, or a safe offline copy. The user must affirm that storage was completed and the code is retrievable before the app enables enrollment; merely copying it is not confirmation.
+
+The app cannot make an arbitrary iPhone Safari/PWA page create an entry in Apple Passwords through a supported web API, so it must not show a button that falsely implies "Saved to Passwords." The clipboard may retain a copy; do not transmit the code to analytics, logs, account metadata, drafts, shared threads or the recovery endpoint. The app sends only the client-encrypted recovery envelope to the server. The recovery secret remains distinct from passkey login.
+
+On a new browser, restore and migration-resume screens tell users to search Apple Passwords or their trusted vault for the same title. **Never overwrite a person's actual Carehold login credential with the recovery code.** An account with a lost legacy browser key and no saved recovery key still cannot reconstruct its history.
+
 ## Required verification before staging promotion
 
 Run \`npm run verify:pre-e2e\` locally. This includes Node tests, Python database tests, TypeScript, and Vite build. Do not claim this has passed until executed. Apply the additive migration only to a backed-up fictional-data **local** database first; then to a reviewed staging database with a tested restore point. Do not apply to production without separate approval.
