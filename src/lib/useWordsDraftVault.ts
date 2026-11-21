@@ -178,6 +178,54 @@ export function useWordsDraftVault(userId:string,householdId:string){
   };
  },[ready,enabled,flush]);
 
+ // A recovery key may be enrolled while Words is already open. Attach
+ // encrypted sync without rehydrating over any in-progress local writing.
+ useEffect(()=>{
+  const onRecovered=(event:Event)=>{
+   if(!(event instanceof CustomEvent)||event.detail?.userId!==userId)return;
+   const expectedGeneration=generation.current;
+   void (async()=>{
+    try{
+     await flush();
+     await queue.current.catch(()=>{});
+     if(!alive.current||generation.current!==expectedGeneration)return;
+     const identity=await storedMessageIdentity(userId);
+     if(!identity?.journalKey)return;
+     const remote=await readSyncedDraft(userId,householdId,identity.journalKey);
+     if(!alive.current||generation.current!==expectedGeneration)return;
+     remoteKey.current=identity.journalKey;remoteRevision.current=remote.revision;
+     setSyncEnabled(true);
+     const local={...current.current};
+     const hasLocal=!!(local.text.trim()||local.title?.trim()||local.prompt);
+     if(remote.document){
+      if(JSON.stringify(remote.document)===JSON.stringify(local)){
+       remoteBlocked.current=false;setRemoteConflict(false);setSynced(true);
+      }else{
+       remoteBlocked.current=true;conflicted.current=true;
+       setRemoteConflict(true);setSynced(false);
+       setStatus('conflict');
+       setError('This browser and the recovered account contain different drafts. Select the version to keep.');
+      }
+     }else if(remote.deleted&&hasLocal){
+      remoteBlocked.current=true;conflicted.current=true;setRemoteConflict(true);
+      setStatus('conflict');setError('This draft was deleted on another device. Choose whether to restore this local version.');
+     }else if(hasLocal){
+      const saved=await saveSyncedDraft(userId,householdId,identity.journalKey,local,remote.revision);
+      remoteRevision.current=saved.revision;setSynced(true);setStatus('saved');setError('');
+     }else{
+      setSynced(true);setStatus('ready');setError('');
+     }
+    }catch(e){
+     if(!alive.current||generation.current!==expectedGeneration)return;
+     setSynced(false);setStatus('error');
+     setError('Local draft retained; recovery sync needs attention: '+(e instanceof Error?e.message:'Unable to sync.'));
+    }
+   })();
+  };
+  window.addEventListener('carehold:recovery-ready',onRecovered);
+  return()=>window.removeEventListener('carehold:recovery-ready',onRecovered);
+ },[userId,householdId,flush]);
+
  const enable=useCallback(async()=>{
   setError('');setStatus('loading');
   try{
