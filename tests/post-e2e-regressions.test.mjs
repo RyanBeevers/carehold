@@ -75,7 +75,8 @@ test('journal titles, filters and pagination stay in encrypted device storage',(
  assert.match(hub,/journalFrom/);
  assert.match(hub,/journalTo/);
  assert.match(hub,/visibleJournal/);
- assert.match(hub,/Page \{journalPage\+1\}/);
+ assert.match(hub,/Page \{safeJournalPage\+1\}/);
+ assert.match(hub,/draft\.title!==\(entry\.title\?\?''\)/);
 });
 
 test('editing on mobile refreshes idle timers while server session stays checked',()=>{
