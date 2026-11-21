@@ -22,7 +22,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
  const [error,setError]=useState('');
  const current=useRef<DraftDocument>({...INITIAL});
  const revision=useRef(0),editNo=useRef(0),lastQueued=useRef(-1);
- const dirty=useRef(false),isEnabled=useRef(false),conflicted=useRef(false);
+ const dirty=useRef(false),isEnabled=useRef(false),conflicted=useRef(false),discarding=useRef(false);
  const queue=useRef<Promise<void>>(Promise.resolve());
  const alive=useRef(false),generation=useRef(0),isReady=useRef(false);
 
@@ -53,7 +53,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
  },[userId,householdId]);
 
  function editField(next:DraftDocument){
-  if(!isReady.current)return;
+  if(!isReady.current||discarding.current)return;
   current.current=next;
   setTextState(next.text);setPromptState(next.prompt);
   dirty.current=true;editNo.current+=1;
@@ -63,7 +63,7 @@ export function useWordsDraftVault(userId:string,householdId:string){
  const setPrompt=useCallback((value:string|null)=>editField({...current.current,prompt:value}),[]);
 
  const flush=useCallback((force=false):Promise<void>=>{
-  if(!isEnabled.current||!isReady.current||!dirty.current||conflicted.current&&!force)return queue.current;
+  if(discarding.current||!isEnabled.current||!isReady.current||!dirty.current||conflicted.current&&!force)return queue.current;
   const edit=editNo.current,snapshot={...current.current};
   if(!force&&lastQueued.current>=edit)return queue.current;
   lastQueued.current=edit;
@@ -167,6 +167,8 @@ export function useWordsDraftVault(userId:string,householdId:string){
  },[flush]);
 
  const discard=useCallback(async()=>{
+  if(discarding.current)return false;
+  discarding.current=true; // Stop late debounce/background writes before deletion.
   try{
    // Finish any outstanding encrypted save before deleting it, so a pending
    // write cannot resurrect an intentionally discarded draft.
@@ -184,6 +186,8 @@ export function useWordsDraftVault(userId:string,householdId:string){
     setError(e instanceof Error?e.message:'Could not discard the encrypted draft.');
    }
    return false;
+  }finally{
+   discarding.current=false;
   }
  },[userId,householdId]);
 
