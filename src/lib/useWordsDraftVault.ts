@@ -299,11 +299,26 @@ export function useWordsDraftVault(userId:string,householdId:string){
  },[userId,householdId]);
 
  const overwriteStored=useCallback(async()=>{
-  conflicted.current=false;
+  if(!alive.current)return;
+  // This choice is explicitly initiated by the author. Read the newest
+  // server revision before replacing its ciphertext; the subsequent PUT
+  // still uses compare-and-swap, so another edit cannot be lost silently.
+  if(remoteKey.current&&remoteBlocked.current){
+   try{
+    const remote=await readSyncedDraft(userId,householdId,remoteKey.current);
+    if(!alive.current)return;
+    remoteRevision.current=remote.revision;
+   }catch(e){
+    setStatus('conflict');
+    setError('Could not review the other device revision: '+(e instanceof Error?e.message:'Unknown error'));
+    return;
+   }
+  }
+  conflicted.current=false;remoteBlocked.current=false;
   dirty.current=true;editNo.current++;lastQueued.current=-1;
   setError('');
   await flush(true);
- },[flush]);
+ },[userId,householdId,flush]);
 
  const retrySync=useCallback(async()=>{
   if(!remoteKey.current)return;
