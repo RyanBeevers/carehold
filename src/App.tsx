@@ -1,8 +1,9 @@
-import {useCallback,useEffect,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {ArrowUpRight,Bell,BellOff,BookOpen,CalendarDays,Check,ChevronLeft,ChevronRight,Copy,HeartHandshake,KeyRound,Menu,Minus,Plus,Settings2,ShieldCheck,Sun,Moon,Monitor,Users,Wind,X} from 'lucide-react';
 import {api,type Household,type Person,type Medication,type Entry,type DoseEvent} from './lib/api';
 import {authClient} from './lib/auth-client';
-import {prompts} from './lib/prompts';
+import {promptsForAudience} from './lib/prompts';
+import type {Audience} from '../shared/audience';
 import {localDate} from '../shared/schedule';
 
 type Page='today'|'people'|'words'|'circle'|'settings';
@@ -29,6 +30,10 @@ function AppearanceSwitch({theme,setTheme,compact=false}:{theme:Mode,setTheme:(v
   {APPEARANCE_OPTIONS.map(({mode,label,Icon})=><button key={mode} type="button" className={`appearance-option${theme===mode?' is-active':''}`} aria-label={`${label} theme`} aria-pressed={theme===mode} title={`${label} theme`} onClick={()=>setTheme(mode)}><Icon aria-hidden="true" size={16} strokeWidth={1.9}/><span className="appearance-name">{label}</span></button>)}
  </div>;
 }
+const AUDIENCE_LABELS:Record<Audience,string>={parent:'Parent / caregiver',child:'Child',teen:'Teen'};
+function AudienceField({value,onChange}:{value:Audience,onChange:(next:Audience)=>void}){
+ return <label>I'm joining as<select value={value} onChange={e=>onChange(e.target.value as Audience)}><option value="parent">Parent / caregiver</option><option value="child">Child</option><option value="teen">Teen</option></select></label>;
+}
 function Header({theme,setTheme,user,logout}:{theme:Mode,setTheme:(v:Mode)=>void,user:{name:string},logout:()=>void}){
  return <header className="masthead"><div className="masthead-inner"><div className="brand"><Mark size={47}/><span>carehold<span className="brand-dot">.</span></span></div><span className="masthead-note">THE LITTLE THINGS WE HOLD TOGETHER</span><div className="masthead-actions"><AppearanceSwitch theme={theme} setTheme={setTheme} compact/><div className="user-tag" title={user.name}>{initials(user.name)}</div><button className="quiet small" onClick={logout}>Sign out</button></div></div></header>;
 }
@@ -51,7 +56,11 @@ export default function App(){
  const [date,setDate]=useState(''),[error,setError]=useState(''),[success,setSuccess]=useState('');
  const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'invite'|'remove'|null>(null),[pending,setPending]=useState<Pending>({});
  const [saving,setSaving]=useState(false),[accessCode,setAccessCode]=useState(''),[inviteInput,setInviteInput]=useState('');
- const [inviteCreated,setInviteCreated]=useState(''),[promptMode,setPromptMode]=useState<'all'|'parent-to-child'|'child-to-parent'>('all');
+ const [inviteCreated,setInviteCreated]=useState('');
+ const [audience,setAudience]=useState<Audience|null>(null),[signupAudience,setSignupAudience]=useState<Audience>('parent');
+ const [pendingInvitation,setPendingInvitation]=useState(false),[invitationBusy,setInvitationBusy]=useState(false);
+ const triedAutoInvite=useRef(new Set<string>());
+ const [copyFeedback,setCopyFeedback]=useState<{key:string,success:boolean,message:string}|null>(null);
  const [pushEnabled,setPushEnabled]=useState(false),[installEvent,setInstallEvent]=useState<any>(null);
  const [authMode,setAuthMode]=useState<'signup'|'signin'>('signup'),[authName,setAuthName]=useState(''),[email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [personName,setPersonName]=useState(''),[personKind,setPersonKind]=useState<Person['kind']>('adult');
@@ -66,8 +75,9 @@ export default function App(){
    update();const media=window.matchMedia('(prefers-color-scheme: dark)');media.addEventListener('change',update);try{localStorage.setItem('carehold-theme',theme);}catch{}return()=>media.removeEventListener('change',update);
  },[theme]);
  useEffect(()=>{const cb=(e:Event)=>{e.preventDefault();setInstallEvent(e);};window.addEventListener('beforeinstallprompt',cb);return()=>window.removeEventListener('beforeinstallprompt',cb);},[]);
+ useEffect(()=>{if(!copyFeedback)return;const timeout=window.setTimeout(()=>setCopyFeedback(null),3200);return()=>window.clearTimeout(timeout);},[copyFeedback]);
  const refreshIdentity=useCallback(async()=>{
-   try{const result=await api<{user:{id:string,name:string,email:string},hasPasskey:boolean}>('/me');setUser(result.user);setHasPasskey(result.hasPasskey);}catch{setUser(null);setHasPasskey(false);}finally{setLoading(false);}
+   try{const result=await api<{user:{id:string,name:string,email:string},hasPasskey:boolean,audience:Audience|null,pendingInvitation:boolean}>('/me');setUser(result.user);setHasPasskey(result.hasPasskey);setAudience(result.audience);setPendingInvitation(result.pendingInvitation);}catch{setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);}finally{setLoading(false);}
  },[]);
  useEffect(()=>{void refreshIdentity();},[refreshIdentity]);
  const refreshHouseholds=useCallback(async()=>{
@@ -111,7 +121,7 @@ export default function App(){
   await refreshIdentity();
  }catch(e){fail(e);}finally{setSaving(false);}}
  async function addPasskey(){setSaving(true);setError('');try{const r=await authClient.passkey.addPasskey({name:'My device'});if(r.error)throw new Error(r.error.message||'Could not add passkey.');await refreshIdentity();notice('Your passkey is ready.');}catch(e){fail(e);}finally{setSaving(false);}}
- async function logout(){await authClient.signOut();setUser(null);setHasPasskey(false);setHouseholds([]);setHid('');}
+ async function logout(){await authClient.signOut();setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);setHouseholds([]);setHid('');}
  async function createHousehold(e:FormEvent){e.preventDefault();const form=new FormData(e.currentTarget as HTMLFormElement);setSaving(true);try{const r=await api<{id:string}>('/households','POST',{name:String(form.get('name')),timezone:String(form.get('timezone'))});setHid(r.id);await refreshHouseholds();notice('Your care circle is ready. Add the people you care for.');}catch(e){fail(e);}finally{setSaving(false);}}
  async function joinHousehold(e:FormEvent){e.preventDefault();setSaving(true);try{await api('/invitations/accept','POST',{code:inviteInput.trim()});setInviteInput('');await refreshHouseholds();notice('Invitation accepted. Welcome to your circle.');}catch(e){fail(e);}finally{setSaving(false);}}
  async function saveProfile(e:FormEvent){e.preventDefault();setSaving(true);try{await api('/profiles','POST',{householdId:hid,name:personName.trim(),kind:personKind});setModal(null);setPersonName('');await refreshProfiles();notice('Person added to your care circle.');}catch(e){fail(e);}finally{setSaving(false);}}
