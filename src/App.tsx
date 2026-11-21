@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {useIdleSecurity} from './lib/useIdleSecurity';
 import {ArrowUpRight,Bell,BellOff,BookOpen,CalendarDays,Check,ChevronLeft,ChevronRight,Copy,HeartHandshake,KeyRound,Menu,Minus,Plus,Settings2,ShieldCheck,Sun,Moon,Monitor,LockKeyhole,Users,Wind,X} from 'lucide-react';
-import {api,type Household,type Person,type Medication,type Entry,type DoseEvent} from './lib/api';
+import {api,invalidatePendingApiResponses,StaleSessionRequest,type Household,type Person,type Medication,type Entry,type DoseEvent} from './lib/api';
 import {authClient} from './lib/auth-client';
 import {promptsForAudience} from './lib/prompts';
 import type {Audience} from '../shared/audience';
@@ -82,8 +82,9 @@ export default function App(){
  const [inviteRole,setInviteRole]=useState<'caregiver'|'member'>('caregiver'),[inviteProfiles,setInviteProfiles]=useState<string[]>([]);
  const active=households.find(h=>h.id===hid),owner=active?.role==='owner';
  const showToast=(kind:'success'|'error'|'info',message:string)=>setToast({id:++toastSequence.current,kind,message});
- const notice=(message:string)=>{showToast('success',message);setError('');};
+ const notice=(message:string)=>{if(lockingRef.current)return;showToast('success',message);setError('');};
  const fail=(e:unknown)=>{
+   if(lockingRef.current||e instanceof StaleSessionRequest)return;
    const message=e instanceof Error?e.message:String(e);
    if(!user||!hasPasskey||locked)setError(message);
    else showToast('error',message);
@@ -100,6 +101,7 @@ export default function App(){
  useEffect(()=>{const cb=(e:Event)=>{e.preventDefault();setInstallEvent(e);};window.addEventListener('beforeinstallprompt',cb);return()=>window.removeEventListener('beforeinstallprompt',cb);},[]);
  useEffect(()=>{if(!copyFeedback)return;const timeout=window.setTimeout(()=>setCopyFeedback(null),3200);return()=>window.clearTimeout(timeout);},[copyFeedback]);
  const clearSensitive=useCallback(()=>{
+   invalidatePendingApiResponses();
    setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);
    setHouseholds([]);setHid('');setProfiles([]);setEntries([]);setMeds([]);setHistory([]);setMembers([]);
    setSelected('');setModal(null);setPending({});setInviteCreated('');setPassword('');setEmail('');
