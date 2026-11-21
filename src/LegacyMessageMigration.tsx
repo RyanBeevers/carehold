@@ -3,6 +3,7 @@ import {api,StaleSessionRequest} from './lib/api';
 import {samePublicKey,seal,unseal,storedLegacyMessageIdentity,storeRecoveredMessageIdentity,type Envelope,type Identity,type PublicKey} from './lib/message-crypto';
 import {sealWord,unsealWord} from './lib/words-space-crypto';
 import {createMessageRecoveryIdentity,openMessageRecoveryIdentity,type MessageRecoveryEnvelope,type NewRecoveryIdentity} from './lib/message-recovery';
+import {RecoveryCodeSaveGuide,RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 
 type Status='checking'|'legacy'|'show-code'|'resume'|'running'|'done'|'blocked';
 type Stage={state:'none'|'staged'|'complete',envelope:MessageRecoveryEnvelope|null,publicKey:PublicKey|null};
@@ -158,11 +159,10 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    <p className="fine-print">A temporarily paused conversation cannot receive new messages while the upgrade is staged. If you close this page, resume later with your saved code on the original browser.</p>
    <button type="button" className="button primary" disabled={busy} onClick={()=>void generate()}>Prepare non-destructive migration</button></>}
   {status==='show-code'&&pending&&<><p>Save this recovery code securely before converting anything. It is shown only now, cannot be reconstructed, and is required if the migration is interrupted.</p>
-   <code className="recovery-secret">{pending.recoveryCode}</code>
-   <button type="button" className="button outline small" onClick={()=>void navigator.clipboard.writeText(pending.recoveryCode)}>Copy recovery code</button>
-   <label className="recovery-confirm"><input type="checkbox" checked={savedCode} onChange={e=>setSavedCode(e.target.checked)}/>I stored this code separately from this browser.</label>
+   <RecoveryCodeSaveGuide code={pending.recoveryCode} saved={savedCode} onSavedChange={setSavedCode}/>
    <button type="button" className="button primary" disabled={!savedCode||busy} onClick={()=>void start()}>{busy?'Converting…':'Encrypt and verify all my older messages'}</button></>}
   {status==='resume'&&<><p>A migration is already staged. Do not generate a replacement key. On the original browser, enter the recovery code saved when you started.</p><label>Saved recovery code<input type="password" autoComplete="off" spellCheck={false} value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value)} placeholder="CH1-…"/></label>
+   <p className="muted tiny">Search your Passwords app or safe notes for <strong>{RECOVERY_SEARCH_LABEL}</strong> to resume. Do not regenerate a key unless the staged migration is safely cancelled.</p>
    <button type="button" className="button primary" disabled={busy||!recoveryCode.trim()} onClick={()=>void resume()}>{busy?'Resuming…':'Resume verified migration'}</button>
    <button type="button" className="button outline small" disabled={busy} onClick={()=>void cancelStaged()}>Safely cancel with original browser key</button>
    <p className="fine-print">Cancellation discards only uncommitted replacement copies. The original account key, messages, and other participants’ copies remain intact.</p></>}
