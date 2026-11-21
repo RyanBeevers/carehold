@@ -300,3 +300,41 @@
 .words-backup-form input[type=file]{font-size:12px;white-space:normal}
 .words-backup-form .words-response-actions{margin-top:3px}
 @media(max-width:720px){.words-backup-form{padding:16px 14px}}
+
+
+/* Medication catalog: accessible, responsive in-flow combobox.
+   No floating portal so it works inside the existing scrollable modal. */
+.med-catalog{display:grid;gap:9px;min-width:0}
+.med-catalog label{font-size:13px;font-weight:650}
+.med-catalog-input{position:relative;display:flex;align-items:center}
+.med-catalog-input>svg{position:absolute;left:14px;color:var(--muted);pointer-events:none}
+.med-catalog-input input{padding-left:42px;padding-right:44px;margin:0}
+.med-catalog-clear{position:absolute;right:6px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--muted);border-radius:8px}
+.med-catalog-results{margin:0 0 4px;padding:10px 12px;border:1px solid var(--line);background:var(--white);box-shadow:var(--shadow);border-radius:10px}
+.med-catalog-heading{font-size:11px;color:var(--muted);line-height:1.4;margin:0 0 7px}
+.med-catalog-options{display:grid;max-height:225px;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid var(--line)}
+.med-catalog-options button{display:grid;gap:3px;min-height:44px;padding:12px 8px;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;color:var(--ink)}
+.med-catalog-options button:hover,.med-catalog-options button.active{background:var(--panel)}
+.med-catalog-options strong{font-size:13px;font-weight:650;line-height:1.4}
+.med-catalog-options small{font-size:11px;line-height:1.4;color:var(--muted)}
+.med-catalog-manual{min-height:44px;display:block;width:100%;padding:10px 5px;text-align:left;color:var(--ink);font-size:12px;font-weight:650;border:0;background:transparent;text-decoration:underline;text-decoration-color:var(--coral);text-underline-offset:4px;white-space:normal;overflow-wrap:anywhere}
+.med-catalog-error{font-size:11px;line-height:1.5;color:var(--coral);margin:8px 0 0}
+.med-catalog-selection{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-left:3px solid var(--green);background:var(--panel);padding:10px 12px;margin-top:2px}
+.med-catalog-selection span{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:750}
+.med-catalog-selection small{color:var(--muted);font-size:10px}
+.med-catalog-selection .quiet{margin-left:auto}
+.med-catalog-strength{display:grid;gap:7px;padding:7px 0}
+.med-catalog-strength label{font-weight:650}
+.med-catalog-strength select{margin:0}
+.med-catalog-existing{border-bottom:1px solid var(--line);padding:10px 0}
+.med-catalog-existing strong{font-size:13px}
+.med-catalog-existing p{margin:5px 0 0}
+.med-catalog-hint,.med-catalog-pet,.med-catalog-manual-state{font-size:11px;line-height:1.55;margin:0;color:var(--muted)}
+.med-catalog-pet{padding:10px 12px;border-left:3px solid var(--coral);background:var(--panel);color:var(--ink)}
+.med-catalog-manual-state{display:flex;gap:7px;align-items:flex-start}
+.med-catalog-manual-state svg{flex-shrink:0;color:var(--green)}
+@media(max-width:720px){
+ .med-catalog-results{padding:8px 10px}
+ .med-catalog-options{max-height:200px}
+ .med-catalog-selection .quiet{margin-left:0}
+}
