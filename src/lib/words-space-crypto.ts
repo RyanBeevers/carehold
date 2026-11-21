@@ -1,4 +1,4 @@
-import {seal,unseal,type Envelope,type PublicKey} from './message-crypto';
+import {seal,unseal,type Envelope,type PublicKey} from './message-crypto.ts';
 
 /** Journal content travels only inside encrypted per-participant envelopes.
  * This is still an unreviewed single-device, TOFU fictional-data prototype.
