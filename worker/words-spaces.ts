@@ -151,10 +151,20 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const keys=await db.prepare(`SELECT COUNT(*) n FROM message_device_keys WHERE user_id IN (${placeholders})`)
    .bind(...selected).first<{n:number}>();
   if(keys?.n!==selected.length)fail(409,'Each participant must first open Words or Messages on their own device.');
-  const exists=await db.prepare('SELECT id FROM shared_word_spaces WHERE id=?').bind(sid).first();
-  if(exists)fail(409,'This shared space has already been created. Refresh before trying again.');
-  const time=new Date().toISOString();
   const hash=await digest(sid+':'+user.id+':'+kind+':'+JSON.stringify(selected.map(uid=>[uid,copies[uid]])));
+  // A successful request may lose its HTTP response. Retry with identical
+  // ciphertext/IDs rather than silently creating a duplicate shared space.
+  const exists=await db.prepare(`SELECT s.household_id,s.created_by,s.initial_kind,
+   p.id post_id,p.body_hash FROM shared_word_spaces s
+   JOIN shared_word_posts p ON p.space_id=s.id AND p.kind=s.initial_kind
+   WHERE s.id=?`).bind(sid)
+   .first<{household_id:string,created_by:string,initial_kind:string,post_id:string,body_hash:string}>();
+  if(exists){
+   if(exists.household_id===hid&&exists.created_by===user.id&&exists.initial_kind===kind&&exists.post_id===postId&&exists.body_hash===hash)
+    return respond({id:sid,created:true,replayed:true});
+   fail(409,'This identifier belongs to another shared space.');
+  }
+  const time=new Date().toISOString();
   try{await db.batch([
    db.prepare('INSERT INTO shared_word_spaces(id,household_id,created_by,initial_kind,created_at) VALUES(?,?,?,?,?)').bind(sid,hid,user.id,kind,time),
    ...selected.map(uid=>db.prepare('INSERT INTO shared_word_participants(space_id,user_id,joined_at) VALUES(?,?,?)').bind(sid,uid,time)),
