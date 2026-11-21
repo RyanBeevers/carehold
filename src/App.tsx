@@ -8,7 +8,7 @@ import {WordsDraftStudio,type WordsPromptSelection} from './WordsDraftStudio';
 import type {Audience} from '../shared/audience';
 import {EMAIL_INPUT_PATTERN,normalizeEmailInput,isValidEmailInput} from '../shared/email';
 import {localDate} from '../shared/schedule';
-import {pageFromPath,pagePath,canonicalPagePath,shouldHandlePageClick,type AppPage} from './lib/routes';
+import {pageFromPath,pagePath,shouldHandlePageClick,restorePage,rememberPage,LAST_PAGE_KEY,type AppPage} from './lib/routes';
 
 type Page=AppPage;
 type Mode='system'|'light'|'dark';
@@ -64,13 +64,20 @@ export default function App(){
  const [myProfile,setMyProfile]=useState<LinkedSelfProfile|null>(null);
  const myProfileRequest=useRef(0);
  const [members,setMembers]=useState<Member[]>([]),[memberToRemove,setMemberToRemove]=useState<Member|null>(null);
- const [page,setPage]=useState<Page>(()=>pageFromPath(window.location.pathname)),[selected,setSelected]=useState(''),[meds,setMeds]=useState<Medication[]>([]),[history,setHistory]=useState<DoseEvent[]>([]);
+ const [page,setPage]=useState<Page>(()=>restorePage(window.location.pathname,()=>window.localStorage.getItem(LAST_PAGE_KEY))),[selected,setSelected]=useState(''),[meds,setMeds]=useState<Medication[]>([]),[history,setHistory]=useState<DoseEvent[]>([]);
  // Public navigation remains in the URL through reloads, sign-out, the passkey
  // gate and idle locks. No care records or private text are encoded in paths.
  useEffect(()=>{
-   const canonical=canonicalPagePath(window.location.pathname);
+   // On an installed PWA icon launch, "/" can be a new navigation; recover
+   // only the harmless last page label. Explicit deep links always win.
+   const canonical=pagePath(page);
    if(window.location.pathname!==canonical)window.history.replaceState(window.history.state,'',canonical);
-   const onPopState=()=>setPage(pageFromPath(window.location.pathname));
+   rememberPage(page,(key,value)=>window.localStorage.setItem(key,value));
+   const onPopState=()=>{
+     const next=pageFromPath(window.location.pathname);
+     setPage(next);
+     rememberPage(next,(key,value)=>window.localStorage.setItem(key,value));
+   };
    window.addEventListener('popstate',onPopState);
    return()=>window.removeEventListener('popstate',onPopState);
  },[]);
@@ -78,6 +85,7 @@ export default function App(){
    const path=pagePath(next);
    if(window.location.pathname!==path)window.history.pushState(null,'',path);
    setPage(next);
+   rememberPage(next,(key,value)=>window.localStorage.setItem(key,value));
  }
  function followPageLink(event:MouseEvent<HTMLAnchorElement>,next:Page){
    if(!shouldHandlePageClick(event))return;

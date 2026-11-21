@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {APP_PATHS,pagePath,pageFromPath,canonicalPagePath,shouldHandlePageClick} from '../src/lib/routes.ts';
+import {APP_PATHS,pagePath,pageFromPath,canonicalPagePath,shouldHandlePageClick,restorePage,rememberPage,LAST_PAGE_KEY} from '../src/lib/routes.ts';
 import {readFileSync} from 'node:fs';
 const wrangler=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
 
@@ -33,4 +33,19 @@ test('only normal link clicks are handled by client navigation',()=>{
 test('Cloudflare serves direct page reloads as SPA, API still routes to Worker',()=>{
  assert.equal(wrangler.assets.not_found_handling,'single-page-application');
  assert.ok(wrangler.assets.run_worker_first.includes('/api/*'));
+});
+
+test('fresh installed PWA launch at root restores only a recognized page label',()=>{
+ assert.equal(restorePage('/',()=> 'words'),'words');
+ assert.equal(restorePage('/',()=> 'settings'),'settings');
+ assert.equal(restorePage('/people',()=> 'words'),'people');
+ assert.equal(restorePage('/words/',()=> 'today'),'words');
+ assert.equal(restorePage('/',()=> 'secret-token'),'today');
+ assert.equal(restorePage('/',()=> {throw new Error('storage disabled');}),'today');
+});
+test('navigation preference writes only the allowed page label and tolerates blocked storage',()=>{
+ const records=[];
+ rememberPage('circle',(k,v)=>records.push([k,v]));
+ assert.deepEqual(records,[[LAST_PAGE_KEY,'circle']]);
+ assert.doesNotThrow(()=>rememberPage('today',()=>{throw new Error('storage disabled');}));
 });
