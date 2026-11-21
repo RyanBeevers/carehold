@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
+import {useIdleSecurity} from './lib/useIdleSecurity';
 import {ArrowUpRight,Bell,BellOff,BookOpen,CalendarDays,Check,ChevronLeft,ChevronRight,Copy,HeartHandshake,KeyRound,Menu,Minus,Plus,Settings2,ShieldCheck,Sun,Moon,Monitor,Users,Wind,X} from 'lucide-react';
 import {api,type Household,type Person,type Medication,type Entry,type DoseEvent} from './lib/api';
 import {authClient} from './lib/auth-client';
@@ -50,12 +51,17 @@ export default function App(){
  const emailInputRef=useRef<HTMLInputElement|null>(null);
  const [user,setUser]=useState<{id:string,email:string,name:string}|null>(null);
  const [hasPasskey,setHasPasskey]=useState(false);
+ const [locked,setLocked]=useState(false),[lockError,setLockError]=useState('');
+ const lockingRef=useRef(false),authEpochRef=useRef(0);
+ const logoutInFlight=useRef<Promise<unknown>|null>(null);
+ const [toast,setToast]=useState<{id:number,kind:'success'|'error'|'info',message:string}|null>(null);
+ const toastSequence=useRef(0);
  const [loading,setLoading]=useState(true);
  const [households,setHouseholds]=useState<Household[]>([]),[hid,setHid]=useState('');
  const [profiles,setProfiles]=useState<Person[]>([]),[entries,setEntries]=useState<Entry[]>([]);
  const [members,setMembers]=useState<Member[]>([]),[memberToRemove,setMemberToRemove]=useState<Member|null>(null);
  const [page,setPage]=useState<Page>('today'),[selected,setSelected]=useState(''),[meds,setMeds]=useState<Medication[]>([]),[history,setHistory]=useState<DoseEvent[]>([]);
- const [date,setDate]=useState(''),[error,setError]=useState(''),[success,setSuccess]=useState('');
+ const [date,setDate]=useState(''),[error,setError]=useState('');
  const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'invite'|'remove'|'link'|null>(null),[pending,setPending]=useState<Pending>({});
  const [saving,setSaving]=useState(false),[accessCode,setAccessCode]=useState(''),[inviteInput,setInviteInput]=useState('');
  const [inviteCreated,setInviteCreated]=useState('');
@@ -75,17 +81,76 @@ export default function App(){
  const [correctionReason,setCorrectionReason]=useState('');
  const [inviteRole,setInviteRole]=useState<'caregiver'|'member'>('caregiver'),[inviteProfiles,setInviteProfiles]=useState<string[]>([]);
  const active=households.find(h=>h.id===hid),owner=active?.role==='owner';
- const notice=(msg:string)=>{setSuccess(msg);setError('');},fail=(e:unknown)=>{setError(e instanceof Error?e.message:String(e));setSuccess('');};
+ const showToast=(kind:'success'|'error'|'info',message:string)=>setToast({id:++toastSequence.current,kind,message});
+ const notice=(message:string)=>{showToast('success',message);setError('');};
+ const fail=(e:unknown)=>{
+   const message=e instanceof Error?e.message:String(e);
+   if(modal||!user||!hasPasskey||locked)setError(message);
+   else showToast('error',message);
+ };
+ useEffect(()=>{
+   if(!toast)return;
+   const timeout=window.setTimeout(()=>setToast(current=>current?.id===toast.id?null:current),5000);
+   return()=>window.clearTimeout(timeout);
+ },[toast?.id]);
  useEffect(()=>{
    const update=()=>{const dark=theme==='dark'||(theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('meta[name="theme-color"]')?.setAttribute('content',dark?'#191b1a':'#f4f1e9');};
    update();const media=window.matchMedia('(prefers-color-scheme: dark)');media.addEventListener('change',update);try{localStorage.setItem('carehold-theme',theme);}catch{}return()=>media.removeEventListener('change',update);
  },[theme]);
  useEffect(()=>{const cb=(e:Event)=>{e.preventDefault();setInstallEvent(e);};window.addEventListener('beforeinstallprompt',cb);return()=>window.removeEventListener('beforeinstallprompt',cb);},[]);
  useEffect(()=>{if(!copyFeedback)return;const timeout=window.setTimeout(()=>setCopyFeedback(null),3200);return()=>window.clearTimeout(timeout);},[copyFeedback]);
+ const clearSensitive=useCallback(()=>{
+   setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);
+   setHouseholds([]);setHid('');setProfiles([]);setEntries([]);setMeds([]);setHistory([]);setMembers([]);
+   setSelected('');setModal(null);setPending({});setInviteCreated('');setPassword('');setEmail('');
+   setMedForm(blankMed());setDoseNote('');setCorrectionReason('');setPersonName('');
+   setPushEnabled(false);setPushConfig(null);setPushFeedback(null);setPushSubscriptionCount(0);
+   setError('');setToast(null);setAuthMode('signin');
+ },[]);
+ const lockNow=useCallback(()=>{
+   if(lockingRef.current)return;
+   lockingRef.current=true;authEpochRef.current+=1;
+   setLocked(true);setLockError('');
+   clearSensitive();
+   logoutInFlight.current=authClient.signOut().catch(()=>{
+     setLockError('Unable to contact the server. Reconnect before unlocking.');
+   });
+ },[clearSensitive]);
  const refreshIdentity=useCallback(async()=>{
-   try{const result=await api<{user:{id:string,name:string,email:string},hasPasskey:boolean,audience:Audience|null,pendingInvitation:boolean}>('/me');setUser(result.user);setHasPasskey(result.hasPasskey);setAudience(result.audience);setPendingInvitation(result.pendingInvitation);}catch{setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);}finally{setLoading(false);}
+   const epoch=authEpochRef.current;
+   try{
+     const result=await api<{user:{id:string,name:string,email:string},hasPasskey:boolean,audience:Audience|null,pendingInvitation:boolean}>('/me');
+     if(epoch!==authEpochRef.current||lockingRef.current)return;
+     setUser(result.user);setHasPasskey(result.hasPasskey);setAudience(result.audience);setPendingInvitation(result.pendingInvitation);
+   }catch{
+     if(epoch!==authEpochRef.current||lockingRef.current)return;
+     setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);
+   }finally{setLoading(false);}
  },[]);
  useEffect(()=>{void refreshIdentity();},[refreshIdentity]);
+ async function unlockWithPasskey(){
+   setSaving(true);setLockError('');
+   try{
+     await logoutInFlight.current;
+     const result=await authClient.signIn.passkey();
+     if(result.error)throw new Error(result.error.message||'Passkey authentication did not complete.');
+     authEpochRef.current+=1;lockingRef.current=false;
+     await refreshIdentity();
+     setLocked(false);
+   }catch(e){
+     lockingRef.current=true;setLockError(e instanceof Error?e.message:'Could not unlock. Try again.');
+   }finally{setSaving(false);}
+ }
+ async function showPasswordSignin(){
+   await logoutInFlight.current;
+   lockingRef.current=false;setLocked(false);setAuthMode('signin');setLockError('');
+ }
+ useIdleSecurity(Boolean(user&&hasPasskey&&!locked&&!loading),lockNow,()=>{
+   const epoch=authEpochRef.current;
+   void authClient.getSession().then(result=>{
+     if(epoch===authEpochRef.current&&!result.data?.user)lockNow();
+   }).catch(()=>{});
+ });
  const refreshHouseholds=useCallback(async()=>{
    if(!user||!hasPasskey)return;
    try{const r=await api<{households:Household[]}>('/households');setHouseholds(r.households);setHid(old=>r.households.some(x=>x.id===old)?old:(r.households[0]?.id||''));}catch(e){fail(e);}
@@ -154,7 +219,10 @@ export default function App(){
   await refreshIdentity();
  }catch(e){fail(e);}finally{setSaving(false);}}
  async function addPasskey(){setSaving(true);setError('');try{const r=await authClient.passkey.addPasskey({name:'My device'});if(r.error)throw new Error(r.error.message||'Could not add passkey.');await refreshIdentity();notice('Your passkey is ready.');}catch(e){fail(e);}finally{setSaving(false);}}
- async function logout(){await authClient.signOut();setUser(null);setHasPasskey(false);setAudience(null);setPendingInvitation(false);setHouseholds([]);setHid('');}
+ async function logout(){
+   authEpochRef.current+=1;clearSensitive();setLocked(false);lockingRef.current=false;
+   try{await authClient.signOut();}catch{showToast('error','Could not contact the server. Your session will expire shortly.');}
+ }
  async function createHousehold(e:FormEvent){e.preventDefault();const form=new FormData(e.currentTarget as HTMLFormElement);setSaving(true);try{const r=await api<{id:string}>('/households','POST',{name:String(form.get('name')),timezone:String(form.get('timezone'))});setHid(r.id);await refreshHouseholds();notice('Your care circle is ready. Add the people you care for.');}catch(e){fail(e);}finally{setSaving(false);}}
  async function joinHousehold(e:FormEvent){e.preventDefault();setSaving(true);try{await api('/invitations/accept','POST',{code:inviteInput.trim()});setInviteInput('');await refreshHouseholds();notice('Invitation accepted. Welcome to your circle.');}catch(e){fail(e);}finally{setSaving(false);}}
  function beginLink(profile:Person) {
@@ -251,21 +319,27 @@ export default function App(){
    catch(e){fail(e);}finally{setSaving(false);}
  }
  const person=profiles.find(x=>x.id===selected);
+ const toastView=toast&&<div className={`app-toast ${toast.kind}`} role={toast.kind==='error'?'alert':'status'} aria-live={toast.kind==='error'?'assertive':'polite'} aria-atomic="true">
+   <span className="toast-icon">{toast.kind==='success'?<Check size={18}/>:toast.kind==='error'?<X size={18}/>:<ShieldCheck size={18}/>}</span>
+   <p>{toast.message}</p>
+   <button type="button" aria-label="Dismiss message" onClick={()=>setToast(null)}><X size={17}/></button>
+ </div>;
 
+ if(locked)return <div className="gate-shell lock-screen"><div className="lock-mark"><Mark size={67}/></div><div className="form-index">YOUR CIRCLE IS PROTECTED</div><h1>Carehold is<br/><em>locked.</em></h1><p>We lock after three minutes without activity, or one minute away from Carehold. Unlock with your passkey to continue.</p>{lockError&&<Banner kind="error" text={lockError} close={()=>setLockError('')}/>}<button className="button primary big" type="button" disabled={saving} onClick={()=>void unlockWithPasskey()}><KeyRound size={19}/>{saving?'Verifying…':'Unlock with passkey'}</button><button className="text-link" type="button" disabled={saving} onClick={()=>void showPasswordSignin()}>Use email and password instead</button><p className="fine-print">Your care data stays hidden until you authenticate again.</p></div>;
  if(loading)return <div className="loading"><Mark size={70}/><p>Finding your place…</p></div>;
- if(!user)return <div className="entry-shell"><div className="entry-aside"><Mark size={76}/><div className="entry-tag">NOTHING GETS LOST IN THE SHUFFLE</div><h1>Care, held<br/><em>together.</em></h1><div className="hand-drawn-rule"/><p>The small everyday moments matter. One gentle place to keep track of them.</p><div className="entry-foot">PRIVATE HOUSEHOLD PILOT <span>✳</span> BUILT WITH CARE</div></div><div className="entry-panel"><div className="entry-toolbar"><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><div className="form-index">01 / WELCOME IN</div><h2>{authMode==='signup'?'Make room for care.':'Welcome back.'}</h2><p>{authMode==='signup'?'Create your account, then secure it with a passkey. You’ll need a pilot or household invitation code.':'Your circle is waiting.'}</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<form onSubmit={authSubmit} className="form-stack" noValidate>
+ if(!user)return <>{toastView}<div className="entry-shell"><div className="entry-aside"><Mark size={76}/><div className="entry-tag">NOTHING GETS LOST IN THE SHUFFLE</div><h1>Care, held<br/><em>together.</em></h1><div className="hand-drawn-rule"/><p>The small everyday moments matter. One gentle place to keep track of them.</p><div className="entry-foot">PRIVATE HOUSEHOLD PILOT <span>✳</span> BUILT WITH CARE</div></div><div className="entry-panel"><div className="entry-toolbar"><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><div className="form-index">01 / WELCOME IN</div><h2>{authMode==='signup'?'Make room for care.':'Welcome back.'}</h2><p>{authMode==='signup'?'Create your account, then secure it with a passkey. You’ll need a pilot or household invitation code.':'Your circle is waiting.'}</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<form onSubmit={authSubmit} className="form-stack" noValidate>
  {authMode==='signup'&&<><label>Your name<input required autoComplete="name" value={authName} onChange={e=>setAuthName(e.target.value)} placeholder="What should we call you?"/></label><AudienceField value={signupAudience} onChange={setSignupAudience}/><p className="fine-print">This chooses age-appropriate conversation starters, not medication access. Professional accounts come later. We do not collect children's birth dates in this pilot.</p></>}
  <label>Email address<input ref={emailInputRef} type="text" inputMode="email" required autoComplete="email" autoCapitalize="none" spellCheck={false} pattern={EMAIL_INPUT_PATTERN} value={email} onChange={e=>{e.currentTarget.setCustomValidity('');setEmail(e.target.value);}} onBlur={e=>setEmail(normalizeEmailInput(e.currentTarget.value))} placeholder="you@example.com"/></label>
  <label>Password<input type="password" required minLength={10} autoComplete={authMode==='signup'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 10 characters"/></label>
  {authMode==='signup'&&<label>Pilot / invitation code<input required autoComplete="off" value={accessCode} onChange={e=>setAccessCode(e.target.value)} placeholder="Enter once — a household invitation follows you through setup"/></label>}
- <button className="button primary big" disabled={saving} type="submit">{saving?'One moment…':authMode==='signup'?'Create my account':'Sign in'} <ArrowUpRight size={18}/></button></form>{authMode==='signin'&&<button className="button outline" disabled={saving} onClick={signInWithPasskey}><KeyRound size={17}/> Sign in with a passkey</button>}<button className="text-link" onClick={()=>{setAuthMode(authMode==='signup'?'signin':'signup');setError('');}}>{authMode==='signup'?'Already have an account? Sign in':'New to Carehold? Create an account'}</button><div className="entry-notice"><ShieldCheck size={17}/>Your medication data stays in a permission-controlled care circle. Private writing is not enabled until encryption is ready.</div></div></div>;
- if(!hasPasskey)return <div className="gate-shell"><div className="appearance-corner"><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><Mark size={70}/><div className="form-index">02 / SECURE YOUR PLACE</div><h1>One more layer<br/><em>of care.</em></h1><p>A passkey protects access to your household’s information using your device’s unlock method. It’s required before you begin.</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<button className="button primary big" disabled={saving} onClick={addPasskey}><KeyRound size={18}/> {saving?'Setting up…':'Add my passkey'}</button><button className="text-link" onClick={logout}>Sign out instead</button><div className="fine-print">If your device cannot create a passkey, use a supported browser or device. Passkeys do not encrypt future private journal content.</div></div>;
- if(!audience)return <div className="onboard-shell"><header className="onboard-top"><Mark/><span className="brand-text">carehold.</span><div className="onboard-top-actions"><AppearanceSwitch theme={theme} setTheme={setTheme} compact/><button className="quiet" onClick={logout}>Sign out</button></div></header><div className="onboard-main audience-onboarding"><div className="eyebrow"><span className="signal"/>03 / YOUR SPACE</div><h1>Words for<br/><em>you.</em></h1><p>Choose the prompts that feel right. This choice does not change your care permissions.</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<form className="lined-form" onSubmit={e=>{e.preventDefault();void saveAudience(signupAudience);}}><AudienceField value={signupAudience} onChange={setSignupAudience}/><button disabled={saving} className="button primary big">Continue <ArrowUpRight size={18}/></button><p className="fine-print">Different prompts for parents, children and teens. Doctor accounts and birth-date collection are not enabled yet.</p></form></div></div>;
- if(!households.length)return <div className="onboard-shell"><header className="onboard-top"><Mark/><span className="brand-text">carehold.</span><div className="onboard-top-actions"><AppearanceSwitch theme={theme} setTheme={setTheme} compact/><button className="quiet" onClick={logout}>Sign out</button></div></header><div className="onboard-main"><div className="eyebrow"><span className="signal"/>03 / THE FIRST CIRCLE</div><h1>Every circle<br/>starts <em>somewhere.</em></h1><p>{audience==='parent'?'Build a space for the people and pets you care for, or join an existing circle by invitation.':'A trusted adult can invite you into your care circle.'}</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>} {success&&<Banner kind="success" text={success} close={()=>setSuccess('')}/>}{pendingInvitation&&<div className="invitation-in-progress" role="status"><span>{invitationBusy?'Joining your invited care circle…':'Your invitation is saved for this account.'}</span><button className="button outline small" disabled={invitationBusy} onClick={()=>void acceptStagedInvitation()}>{invitationBusy?'Joining…':'Finish joining'}</button></div>}<div className="onboard-choices">{audience==='parent'&&<form onSubmit={createHousehold} className="lined-form"><h2>Start a care circle</h2><label>What do you call your household?<input name="name" required maxLength={80} placeholder="Our household"/></label><label>Your timezone<select name="timezone" defaultValue={Intl.DateTimeFormat().resolvedOptions().timeZone||'America/New_York'}><option value="America/New_York">Eastern</option><option value="America/Chicago">Central</option><option value="America/Denver">Mountain</option><option value="America/Los_Angeles">Pacific</option><option value="America/Phoenix">Arizona</option><option value="Pacific/Honolulu">Hawaii</option></select></label><button disabled={saving} type="submit" className="button primary">Create my circle <ArrowUpRight size={18}/></button></form>}{!pendingInvitation&&<form className="lined-form" onSubmit={joinHousehold}><h2>Join a care circle</h2><label>Invitation code<input required autoComplete="off" value={inviteInput} onChange={e=>setInviteInput(e.target.value)} placeholder="Paste the one-time code"/></label><button disabled={saving} type="submit" className="button outline">Join with invitation</button></form>}</div></div></div>;
- return <><div className="app-shell"><Header theme={theme} setTheme={setTheme} user={user} logout={logout}/>
+ <button className="button primary big" disabled={saving} type="submit">{saving?'One moment…':authMode==='signup'?'Create my account':'Sign in'} <ArrowUpRight size={18}/></button></form>{authMode==='signin'&&<button className="button outline" disabled={saving} onClick={signInWithPasskey}><KeyRound size={17}/> Sign in with a passkey</button>}<button className="text-link" onClick={()=>{setAuthMode(authMode==='signup'?'signin':'signup');setError('');}}>{authMode==='signup'?'Already have an account? Sign in':'New to Carehold? Create an account'}</button><div className="entry-notice"><ShieldCheck size={17}/>Your medication data stays in a permission-controlled care circle. Private writing is not enabled until encryption is ready.</div></div></div></>;
+ if(!hasPasskey)return <>{toastView}<div className="gate-shell"><div className="appearance-corner"><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><Mark size={70}/><div className="form-index">02 / SECURE YOUR PLACE</div><h1>One more layer<br/><em>of care.</em></h1><p>A passkey protects access to your household’s information using your device’s unlock method. It’s required before you begin.</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<button className="button primary big" disabled={saving} onClick={addPasskey}><KeyRound size={18}/> {saving?'Setting up…':'Add my passkey'}</button><button className="text-link" onClick={logout}>Sign out instead</button><div className="fine-print">If your device cannot create a passkey, use a supported browser or device. Passkeys do not encrypt future private journal content.</div></div></>;
+ if(!audience)return <>{toastView}<div className="onboard-shell"><header className="onboard-top"><Mark/><span className="brand-text">carehold.</span><div className="onboard-top-actions"><AppearanceSwitch theme={theme} setTheme={setTheme} compact/><button className="quiet" onClick={logout}>Sign out</button></div></header><div className="onboard-main audience-onboarding"><div className="eyebrow"><span className="signal"/>03 / YOUR SPACE</div><h1>Words for<br/><em>you.</em></h1><p>Choose the prompts that feel right. This choice does not change your care permissions.</p>{error&&<Banner kind="error" text={error} close={()=>setError('')}/>}<form className="lined-form" onSubmit={e=>{e.preventDefault();void saveAudience(signupAudience);}}><AudienceField value={signupAudience} onChange={setSignupAudience}/><button disabled={saving} className="button primary big">Continue <ArrowUpRight size={18}/></button><p className="fine-print">Different prompts for parents, children and teens. Doctor accounts and birth-date collection are not enabled yet.</p></form></div></div></>;
+ if(!households.length)return <>{toastView}<div className="onboard-shell"><header className="onboard-top"><Mark/><span className="brand-text">carehold.</span><div className="onboard-top-actions"><AppearanceSwitch theme={theme} setTheme={setTheme} compact/><button className="quiet" onClick={logout}>Sign out</button></div></header><div className="onboard-main"><div className="eyebrow"><span className="signal"/>03 / THE FIRST CIRCLE</div><h1>Every circle<br/>starts <em>somewhere.</em></h1><p>{audience==='parent'?'Build a space for the people and pets you care for, or join an existing circle by invitation.':'A trusted adult can invite you into your care circle.'}</p>{pendingInvitation&&<div className="invitation-in-progress" role="status"><span>{invitationBusy?'Joining your invited care circle…':'Your invitation is saved for this account.'}</span><button className="button outline small" disabled={invitationBusy} onClick={()=>void acceptStagedInvitation()}>{invitationBusy?'Joining…':'Finish joining'}</button></div>}<div className="onboard-choices">{audience==='parent'&&<form onSubmit={createHousehold} className="lined-form"><h2>Start a care circle</h2><label>What do you call your household?<input name="name" required maxLength={80} placeholder="Our household"/></label><label>Your timezone<select name="timezone" defaultValue={Intl.DateTimeFormat().resolvedOptions().timeZone||'America/New_York'}><option value="America/New_York">Eastern</option><option value="America/Chicago">Central</option><option value="America/Denver">Mountain</option><option value="America/Los_Angeles">Pacific</option><option value="America/Phoenix">Arizona</option><option value="Pacific/Honolulu">Hawaii</option></select></label><button disabled={saving} type="submit" className="button primary">Create my circle <ArrowUpRight size={18}/></button></form>}{!pendingInvitation&&<form className="lined-form" onSubmit={joinHousehold}><h2>Join a care circle</h2><label>Invitation code<input required autoComplete="off" value={inviteInput} onChange={e=>setInviteInput(e.target.value)} placeholder="Paste the one-time code"/></label><button disabled={saving} type="submit" className="button outline">Join with invitation</button></form>}</div></div></div></>;
+ return <>{toastView}<div className="app-shell"><Header theme={theme} setTheme={setTheme} user={user} logout={logout}/>
  <div className="workspace"><aside className="sidebar"><div className="sidebar-label">YOUR SPACE <span>01 — 05</span></div><nav aria-label="Main navigation" className="main-nav">{NAV_ITEMS.map(([id,label,Icon])=><button key={id as string} className={page===id?'nav-item active':'nav-item'} onClick={()=>setPage(id as Page)}><Icon size={19}/><span>{label as string}</span>{page===id&&<span className="nav-mark">↗</span>}</button>)}</nav><div className="sidebar-footer"><span className="soft-asterisk">✳</span><p>Good care is made<br/>of little things.</p><div>carehold. / 2026</div></div></aside>
  <main className="main-content"><div className="topline"><label className="household-select">CARE CIRCLE <select value={hid} onChange={e=>{setHid(e.target.value);setPage('today');}}>{households.map(h=><option value={h.id} key={h.id}>{h.name}</option>)}</select></label><div className="topline-right"><span className="private-label"><ShieldCheck size={15}/> INVITE ONLY</span><span className="date-label">{new Date().toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</span></div></div>
- {error&&<Banner kind="error" text={error} close={()=>setError('')}/>} {success&&<Banner kind="success" text={success} close={()=>setSuccess('')}/>}
+ 
  {page==='today'&&<><PageTitle eyebrow="THE DAILY LEDGER" title="A little care, today" subtitle="A clear place for the moments you’re looking after. No guesswork, no automatic checkmarks."/>
   <div className="day-toolbar"><div className="day-nav"><button aria-label="Previous day" onClick={()=>setDate(changeDay(date,-1))}><ChevronLeft size={20}/></button><label><span className="sr-only">Date</span><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button aria-label="Next day" onClick={()=>setDate(changeDay(date,1))}><ChevronRight size={20}/></button></div><div className="day-name">{date?shortDate(date):''}</div><button className="quiet small" onClick={()=>setDate(localDate(new Date(),active!.timezone))}>Jump to today</button></div>
   <div className="summary-strip"><div><span className="mono kicker">ON THE LEDGER</span><strong>{entries.length.toString().padStart(2,'0')}</strong><span>scheduled moments</span></div><div><span className="mono kicker">RECORDED</span><strong>{entries.filter(x=>x.event).length.toString().padStart(2,'0')}</strong><span>with a status</span></div><div className="summary-phrase">A record is a record.<br/><em>Not a reminder to guess.</em></div></div>
