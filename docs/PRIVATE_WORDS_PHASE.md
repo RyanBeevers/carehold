@@ -1,6 +1,6 @@
 # Carehold — next release design gate: private words and selective sharing
 
-**Status:** **local-only, nonpersistent prototype implemented** (Words → Try writing). No journal/message storage, encryption key exchange or send API is enabled. The pilot is not authorized to hold real sensitive personal writing.
+**Status:** **experimental, opt-in encrypted device-local draft autosave prototype** (Words → Try writing). No journal/message API, server-stored content, recipient encryption or send capability is enabled. The pilot remains unauthorized to hold real sensitive personal writing.
 
 ## Product boundaries
 

@@ -9,9 +9,10 @@ export type WordsPromptSelection={id:string,text:string,audience:Audience,sequen
 type RecipientResult={recipients:RecipientOption[]};
 
 /**
- * This is only a UX prototype. No text is sent in requests, saved to browser
- * storage, queued for sync, attached to a profile, or written to the server.
- * The component unmounts (destroying the draft state) outside Words.
+ * This is an EXPERIMENTAL prototype: no text is sent to an API or recipient.
+ * Opt-in browser-local AES-GCM autosave is available, but it is not E2EE,
+ * independently audited, cross-device or safe for real private writing.
+ * Unmount destroys plaintext React state, not an opted-in encrypted local copy.
  */
 export function WordsDraftStudio({
  audience,householdId,userId,selectedPrompt,

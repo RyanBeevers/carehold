@@ -14,6 +14,6 @@ export function previewRecipients(
  return available.filter(r=>chosen.has(r.id)).slice(0,10);
 }
 export function previewDisclosureLabel(mode:PreviewMode,selectedCount:number):string{
- if(mode==='private')return 'Only me — not saved';
+ if(mode==='private')return 'Just me — sharing off';
  return selectedCount===0?'Recipient preview — nobody selected':`Recipient preview — ${selectedCount} selected (not sent)`;
 }

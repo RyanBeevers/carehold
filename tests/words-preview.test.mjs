@@ -7,14 +7,14 @@ const options=[{id:'a',name:'Parent'},{id:'b',name:'Teen'}];
 
 test('preview is private by default regardless of previously selected IDs',()=>{
  assert.deepEqual(previewRecipients('private',options,['a']),[]);
- assert.equal(previewDisclosureLabel('private',1),'Only me — not saved');
+ assert.equal(previewDisclosureLabel('private',1),'Just me — sharing off');
 });
 test('recipient preview includes only explicitly selected eligible users',()=>{
  assert.deepEqual(previewRecipients('recipients',options,['b','missing','b']),[{id:'b',name:'Teen'}]);
  assert.deepEqual(previewRecipients('recipients',options,[]),[]);
  assert.match(previewDisclosureLabel('recipients',1),/not sent/);
 });
-test('preview UX never offers persistent sending or a storage API',()=>{
+test('recipient preview never offers sending or plaintext browser storage',()=>{
  const source=readFileSync(new URL('../src/WordsDraftStudio.tsx',import.meta.url),'utf8');
  assert.match(source,/Actual message sending/);
  assert.match(source,/Enable encrypted device autosave/);
