@@ -208,11 +208,17 @@ export default function App(){
    lockingRef.current=true;authEpochRef.current+=1;
    setLocked(true);setLockError(reason);
    clearSensitive();
-   // If another tab switched the shared browser cookie to a different user,
-   // do not accidentally sign out *that other user's* session.
-   logoutInFlight.current=revokeSession?authClient.signOut().catch(()=>{
-     setLockError('Unable to contact the server. Reconnect before unlocking.');
-   }):Promise.resolve();
+   // Validate the current browser session before revoking it. Another tab
+   // may have switched the shared cookie to a different household account.
+   const expectedUserId=user?.id;
+   logoutInFlight.current=revokeSession&&expectedUserId?
+     fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store',
+       headers:{Accept:'application/json'}}).then(async response=>{
+        if(!response.ok)return;
+        const session=await response.json() as {user?:{id:string}|null}|null;
+        if(session?.user?.id===expectedUserId)await authClient.signOut();
+       }).catch(()=>{setLockError('Unable to verify or revoke this session. Reconnect before unlocking.');}):
+     Promise.resolve();
  };
  const refreshIdentity=useCallback(async()=>{
    const epoch=authEpochRef.current;
@@ -251,7 +257,12 @@ export default function App(){
    void fetch('/api/auth/get-session',{credentials:'same-origin',cache:'no-store',
      headers:{Accept:'application/json'}})
     .then(async response=>{
-     if(!response.ok||epoch!==authEpochRef.current||!expectedUserId)return;
+     if(epoch!==authEpochRef.current||!expectedUserId)return;
+     if(response.status===401||response.status===403){
+       lockNow('Your authenticated session is no longer valid. An unfinished correction is retained only in this tab for the same account.',false);
+       return;
+     }
+     if(!response.ok)return;
      const result=await response.json() as {user?:{id:string}|null}|null;
      if(epoch!==authEpochRef.current)return;
      if(result?.user?.id!==expectedUserId)
