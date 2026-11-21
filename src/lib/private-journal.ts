@@ -4,7 +4,7 @@
  * not reviewed E2EE, not synced or recoverable after clearing browser data.
  */
 export type JournalEntry={id:string,prompt:string|null,text:string,title?:string,sharedAt?:number|null,spaceId?:string|null,createdAt:number,updatedAt:number,revision:number};
-export type JournalDraft=Pick<JournalEntry,'id'|'text'|'prompt'>;
+export type JournalDraft=Pick<JournalEntry,'id'|'text'|'prompt'>&Partial<Pick<JournalEntry,'title'|'sharedAt'|'spaceId'>>;
 export class JournalConflict extends Error{
  constructor(){super('Another tab updated this journal entry. Reopen it before overwriting.');}
 }
