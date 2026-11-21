@@ -368,7 +368,9 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
       const times=await db.prepare('SELECT hhmm FROM medication_times WHERE medication_id=? ORDER BY hhmm').bind(m.id).all<{hhmm:string}>();
       for(const x of times.results||[]) {
         const key=occurrenceKey(m.id,date,x.hhmm);
-        const event=await db.prepare(`SELECT e.id,e.event_type,e.occurred_at,e.recorded_at,e.actor_user_id,e.note,e.supersedes_event_id FROM dose_events e
+        const event=await db.prepare(`SELECT e.id,e.event_type,e.occurred_at,e.recorded_at,e.actor_user_id,e.note,e.supersedes_event_id,
+           e.correction_kind,e.med_name_snapshot,e.dose_snapshot,e.occurrence_key,e.scheduled_date,e.scheduled_time
+           FROM dose_events e
           WHERE e.occurrence_key=? AND NOT EXISTS(SELECT 1 FROM dose_events n WHERE n.supersedes_event_id=e.id) LIMIT 1`).bind(key).first();
         const due=localToInstant(date,x.hhmm,household!.timezone);
         entries.push({key,date,time:x.hhmm,timezone:household!.timezone,dueAt:due?.toISOString()??null,
@@ -404,7 +406,8 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   }
   if(path==='/api/history'&&req.method==='GET') {
     const pid=required(url.searchParams.get('profileId'));await profileAccess(db,pid,user.id,'view_history');
-    const results=await db.prepare(`SELECT e.id,e.medication_id,e.med_name_snapshot,e.dose_snapshot,e.occurrence_key,e.scheduled_date,e.scheduled_time,e.schedule_timezone,e.event_type,e.occurred_at,e.recorded_at,e.actor_user_id,u.name actor_name,e.note,e.supersedes_event_id
+    const results=await db.prepare(`SELECT e.id,e.medication_id,e.med_name_snapshot,e.dose_snapshot,e.occurrence_key,e.scheduled_date,e.scheduled_time,e.schedule_timezone,e.event_type,e.occurred_at,e.recorded_at,e.actor_user_id,u.name actor_name,e.note,e.supersedes_event_id,e.correction_kind,
+       CASE WHEN EXISTS(SELECT 1 FROM dose_events next WHERE next.supersedes_event_id=e.id) THEN 0 ELSE 1 END is_current
       FROM dose_events e JOIN user u ON u.id=e.actor_user_id WHERE e.profile_id=? ORDER BY e.recorded_at DESC LIMIT 200`).bind(pid).all();
     return json({events:results.results});
   }
@@ -414,11 +417,15 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     if(!prev)bad(404,'Record not found.');
     await profileAccess(db,prev.profile_id,user.id,'record_dose');await profileAccess(db,prev.profile_id,user.id,'view_history');
     const b=await jsonBody(req),reason=required(b.reason,500),status=b.eventType;
+    const correctionKind=b.correctionKind===null||b.correctionKind===undefined?null:b.correctionKind;
+    if(correctionKind!==null&&correctionKind!=='not_administered')bad(400,'Invalid correction classification.');
+    if(correctionKind==='not_administered'&&status!=='skipped')
+      bad(400,'A not-administered correction must have the skipped status.');
     if(!['given','skipped','refused','uncertain','missed'].includes(String(status)))bad(400,'Choose a corrected status.');
     const id=uuid(),ts=now();
     try {
-      await db.prepare(`INSERT INTO dose_events(id,household_id,profile_id,medication_id,occurrence_key,scheduled_date,scheduled_time,schedule_timezone,event_type,med_name_snapshot,dose_snapshot,occurred_at,recorded_at,actor_user_id,note,supersedes_event_id,idempotency_key)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,prev.household_id,prev.profile_id,prev.medication_id,prev.occurrence_key,prev.scheduled_date,prev.scheduled_time,prev.schedule_timezone,status,prev.med_name_snapshot,prev.dose_snapshot,b.occurredAt?stamp(b.occurredAt):prev.occurred_at,ts,user.id,reason,prev.id,required(b.idempotencyKey,120)).run();
+      await db.prepare(`INSERT INTO dose_events(id,household_id,profile_id,medication_id,occurrence_key,scheduled_date,scheduled_time,schedule_timezone,event_type,med_name_snapshot,dose_snapshot,occurred_at,recorded_at,actor_user_id,note,supersedes_event_id,idempotency_key,correction_kind)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,prev.household_id,prev.profile_id,prev.medication_id,prev.occurrence_key,prev.scheduled_date,prev.scheduled_time,prev.schedule_timezone,status,prev.med_name_snapshot,prev.dose_snapshot,b.occurredAt?stamp(b.occurredAt):prev.occurred_at,ts,user.id,reason,prev.id,required(b.idempotencyKey,120),correctionKind).run();
     } catch(err) {
       const replay=await db.prepare('SELECT id FROM dose_events WHERE idempotency_key=? AND actor_user_id=?').bind(b.idempotencyKey,user.id).first<{id:string}>();
       if(replay)return json({id:replay.id,replayed:true});
