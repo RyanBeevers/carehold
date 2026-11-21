@@ -103,3 +103,7 @@ This check only rejects obvious wrong targets; it cannot verify live secrets, Cl
 - **NO-GO:** any unexpected access, plaintext journal API traffic, automatic sharing of a draft, duplicate administration, incorrect dose status, lost private data or failed passkey behavior.
 
 Record failures with the specific step, account role, relevant HTTP response/status and sanitized screenshot. Never paste real medicine, journal, invitation token or authentication secrets into an issue report.
+
+## Post-E2E correction regression
+
+The initial local household E2E checklist was reported passing. Subsequent usability feedback led to new features and migrations **not included in that first pass**. **Before deployment**, follow the full focused verification in [POST_E2E_FEEDBACK.md](./POST_E2E_FEEDBACK.md): mistaken/refused/not-administered dose corrections and later observations; automatic draft autosave; draft clearing on share/new prompt; titled searchable/paginated journal; unified discussion and device-only private notes; adult-to-adult prompt filtering; 3-minute active session; medication/profile archive-and-restore, historical conversations, RxTerms form deduplication and role/permission isolation.
