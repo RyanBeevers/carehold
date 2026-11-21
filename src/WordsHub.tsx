@@ -28,7 +28,10 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  }),[topic,setTopic]=useState('All topics'),[relationship,setRelationship]=useState<Relationship|'all'>('all'),[search,setSearch]=useState('');
  const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
  const [identity,setIdentity]=useState<Identity|null>(null),[people,setPeople]=useState<WordContact[]>([]),[keyError,setKeyError]=useState('');
- const [entries,setEntries]=useState<JournalEntry[]>([]),[editing,setEditing]=useState<{id:string,revision:number}|null>(null);
+ const [entries,setEntries]=useState<JournalEntry[]>([]),[editing,setEditing]=useState<{id:string,revision:number,sharedAt?:number|null,spaceId?:string|null}|null>(null);
+ const [pendingPrompt,setPendingPrompt]=useState<Prompt|null>(null),[pendingNew,setPendingNew]=useState(false);
+ const [journalQuery,setJournalQuery]=useState(''),[journalVisibility,setJournalVisibility]=useState<'all'|'shared'|'private'>('all');
+ const [journalFrom,setJournalFrom]=useState(''),[journalTo,setJournalTo]=useState(''),[journalPage,setJournalPage]=useState(0);
  const [loadingJournal,setLoadingJournal]=useState(true),[journalError,setJournalError]=useState(''),[journalBusy,setJournalBusy]=useState(false),[pendingLoad,setPendingLoad]=useState<JournalEntry|null>(null),[confirmDelete,setConfirmDelete]=useState<string|null>(null);
  const [seed,setSeed]=useState<ShareSeed|null>(null),[openSpaceId,setOpenSpaceId]=useState<string|null>(null);
  const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushPublicKey,setPushPublicKey]=useState<string|null>(null),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
@@ -98,18 +101,33 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     void reloadActivity().catch(()=>{});},15000);
   return()=>{live=false;window.clearInterval(timer);document.removeEventListener('pointerdown',onInput);document.removeEventListener('keydown',onInput);window.removeEventListener('carehold:activity-changed',onActivity);};
  },[userId,householdId]);
+ async function beginFresh(prompt:string|null=null){
+  const cleared=await draft.discard();
+  if(!cleared){setJournalError('Could not reset the previous draft. Your writing was not replaced.');return;}
+  setEditing(null);setPendingLoad(null);setPendingNew(false);setPendingPrompt(null);
+  if(prompt)draft.setPrompt(prompt);
+  selectTab('write');setFeedback(prompt?'New prompt selected; previous writing cleared.':'Started a new private entry.');
+ }
  function takePrompt(p:Prompt){
-  draft.setPrompt(p.text);setFeedback('Prompt selected. Your existing writing is preserved.');
-  selectTab('write');
+  if(draft.text.trim()&&(draft.prompt!==p.text||!!draft.title.trim())){setPendingPrompt(p);setPendingNew(false);selectTab('write');return;}
+  void beginFresh(p.text);
  }
  function shuffle(){
   const next=rotatePrompt(filtered,seen,suggested?.id||null);
   setSeen(next.seen);setSuggested(next.prompt);
  }
  function startSharing(next:ShareSeed){setSeed(next);setFeedback('');}
+ const filteredJournal=entries.filter(entry=>{
+  const haystack=[entry.title??'',entry.prompt??'',entry.text].join(' ').toLowerCase();
+  const date=new Date(entry.createdAt).toISOString().slice(0,10);
+  return (!journalQuery.trim()||haystack.includes(journalQuery.trim().toLowerCase()))&&
+   (journalVisibility==='all'||(journalVisibility==='shared')===Boolean(entry.sharedAt))&&
+   (!journalFrom||date>=journalFrom)&&(!journalTo||date<=journalTo);
+ });
+ const visibleJournal=filteredJournal.slice(journalPage*10,journalPage*10+10);
  function startJournal(entry:JournalEntry){
-  draft.setText(entry.text);draft.setPrompt(entry.prompt);
-  setEditing({id:entry.id,revision:entry.revision});setPendingLoad(null);selectTab('write');setFeedback('Entry loaded for editing.');
+  draft.setText(entry.text);draft.setPrompt(entry.prompt);draft.setTitle(entry.title??'');
+  setEditing({id:entry.id,revision:entry.revision,sharedAt:entry.sharedAt,spaceId:entry.spaceId});setPendingLoad(null);selectTab('write');setFeedback('Entry loaded for editing.');
  }
  function loadJournal(entry:JournalEntry){
   if(draft.text.trim()&&(draft.text!==entry.text||draft.prompt!==entry.prompt)){setPendingLoad(entry);return;}
@@ -119,7 +137,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   e.preventDefault();if(!draft.ready||!draft.text.trim()||journalBusy)return;
   setJournalBusy(true);setJournalError('');setFeedback('');
   try{
-   await savePrivateJournal(userId,householdId,{id:editing?.id||crypto.randomUUID(),prompt:draft.prompt,text:draft.text},editing?.revision??0);
+   await savePrivateJournal(userId,householdId,{id:editing?.id||crypto.randomUUID(),prompt:draft.prompt,text:draft.text,title:draft.title.trim(),sharedAt:editing?.sharedAt??null,spaceId:editing?.spaceId??null},editing?.revision??0);
    await reloadJournal();const cleared=await draft.discard();
    setEditing(null);selectTab('journal');setFeedback(cleared?'Saved privately to this device. No one else can see it.':'Entry saved, but a draft copy remains. Discard it manually.');
   }catch(e){setJournalError(errorText(e));}
@@ -221,7 +239,19 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   {feedback&&<p className="words-status" role="status"><Check size={15}/>{feedback}</p>}
   {keyError&&<p className="messages-error" role="alert">Sharing or notification setup: {keyError}. Private journaling remains available.</p>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} people={people}
-    onCreated={sid=>{setSeed(null);setOpenSpaceId(sid);selectTab('shared');setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));}}
+    onCreated={sid=>{
+    const current=seed;setSeed(null);setOpenSpaceId(sid);selectTab('shared');
+    if(current?.kind==='journal'){
+     if(current.sourceEntryId){
+      const entry=entries.find(e=>e.id===current.sourceEntryId);
+      if(entry)void savePrivateJournal(userId,householdId,{id:entry.id,prompt:entry.prompt,text:entry.text,title:entry.title??'',sharedAt:Date.now(),spaceId:entry.spaceId??null},entry.revision)
+       .then(()=>reloadJournal()).catch(e=>setJournalError(errorText(e)));
+     }else if(draft.text===current.text&&draft.prompt===current.prompt){
+      void draft.discard().then(cleared=>{if(cleared)setEditing(null);else setJournalError('Shared, but the old device draft could not be cleared.');});
+     }
+    }
+    setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));
+   }}
     onCancel={()=>setSeed(null)} onRefreshPeople={()=>void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`).then(r=>setPeople(r.people)).catch(e=>setKeyError(errorText(e)))}/>:
   tab==='explore'?<section className="words-explore" aria-label="Prompt library">
    <div className="words-hub-section-top"><div><span className="mono kicker">A GENTLE PLACE TO BEGIN</span><h2>Find the right words.</h2><p className="muted">Browse 100+ thoughtful prompts. Share one as an invitation, or use it as inspiration for your own entry.</p></div></div>
