@@ -46,6 +46,16 @@ Use fictional medication names and harmless doses, not actual instructions.
 - [ ] B with a grant can record permitted profiles but cannot manage a medication or see unrelated profiles. C without grants cannot access their records.
 - [ ] Verify scheduled reminder permission and generic payload if device subscription is configured. A push is best-effort, **not** a guaranteed medication alarm.
 
+## 2a — RxTerms medication lookup (new before feature freeze)
+
+- [ ] Search `adderall` in the **Add medication** editor; choose an actual RxTerms result and strength/form. Verify the **prescribed dose, instructions and schedule are never autofilled or altered**.
+- [ ] Save a scheduled medicine and a PRN medicine from catalog selections. Edit and reopen them: RxCUI, exact chosen name and product strength remain intact, with all original dosing/scheduling information.
+- [ ] Enter an OTC preparation, a supplement, and a veterinary medication using **Use custom medication name**. Verify manual entry remains usable even if the API is available.
+- [ ] Simulate RxTerms timeout/unavailability and empty results. Saving a custom medication must still work, without losing entered form, dose or schedule.
+- [ ] Rapidly type different medication names and verify stale responses cannot replace the new search. Arrow keys, Enter, Escape, narrow phone width and dark mode work.
+- [ ] A member without `manage_medication` cannot search for a restricted profile or save its medication. An authorized caregiver can.
+- [ ] Verify old medications with null catalog fields, administration snapshots and historical schedules survive migration `0009`.
+
 ## 3 — Private Words, saved journals and recovery
 
 - [ ] Explore prompts by category, relationship and search; shuffle and attach a prompt to an unsent entry.
