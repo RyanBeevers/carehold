@@ -3,7 +3,7 @@
  * Nonexportable AES-GCM CryptoKey and ciphertext live on the SAME origin,
  * not reviewed E2EE, not synced or recoverable after clearing browser data.
  */
-export type JournalEntry={id:string,prompt:string|null,text:string,createdAt:number,updatedAt:number,revision:number};
+export type JournalEntry={id:string,prompt:string|null,text:string,title?:string,sharedAt?:number|null,spaceId?:string|null,createdAt:number,updatedAt:number,revision:number};
 export type JournalDraft=Pick<JournalEntry,'id'|'text'|'prompt'>;
 export class JournalConflict extends Error{
  constructor(){super('Another tab updated this journal entry. Reopen it before overwriting.');}
@@ -73,9 +73,14 @@ async function decrypt(row:CipherRow,key:CryptoKey,scope:string):Promise<Journal
  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(row.iv),additionalData:aad(scope,row.id)},key,row.ciphertext);
  const parsed:unknown=JSON.parse(dec.decode(plain));
  if(!parsed||typeof parsed!=='object')throw new Error('Invalid journal entry.');
- const value=parsed as {text?:unknown,prompt?:unknown};
- if(typeof value.text!=='string'||value.text.length>3000||!(value.prompt===null||typeof value.prompt==='string'))throw new Error('Invalid decrypted journal.');
- return {id:row.id,text:value.text,prompt:value.prompt as string|null,createdAt:row.createdAt,updatedAt:row.updatedAt,revision:row.revision};
+ const value=parsed as {text?:unknown,prompt?:unknown,title?:unknown,sharedAt?:unknown,spaceId?:unknown};
+ if(typeof value.text!=='string'||value.text.length>3000||!(value.prompt===null||typeof value.prompt==='string')||
+  !(value.title===undefined||typeof value.title==='string'&&value.title.length<=120)||
+  !(value.sharedAt===undefined||value.sharedAt===null||typeof value.sharedAt==='number'&&Number.isFinite(value.sharedAt))||
+  !(value.spaceId===undefined||value.spaceId===null||typeof value.spaceId==='string'&&/^[0-9a-f-]{36}$/i.test(value.spaceId)))throw new Error('Invalid decrypted journal.');
+ return {id:row.id,text:value.text,prompt:value.prompt as string|null,title:value.title as string|undefined,
+   sharedAt:value.sharedAt as number|null|undefined,spaceId:value.spaceId as string|null|undefined,
+   createdAt:row.createdAt,updatedAt:row.updatedAt,revision:row.revision};
 }
 export async function listPrivateJournal(userId:string,householdId:string):Promise<JournalEntry[]>{
  const scope=scopeFor(userId,householdId),db=await open();
@@ -92,7 +97,10 @@ export async function listPrivateJournal(userId:string,householdId:string):Promi
 export async function savePrivateJournal(userId:string,householdId:string,entry:JournalDraft,revision=0):Promise<JournalEntry>{
  const scope=scopeFor(userId,householdId);
  if(!/^[0-9a-f-]{36}$/i.test(entry.id)||!entry.text.trim()||entry.text.length>3000||
-   (entry.prompt!==null&&(typeof entry.prompt!=='string'||entry.prompt.length>600)))
+   (entry.prompt!==null&&(typeof entry.prompt!=='string'||entry.prompt.length>600))||
+    (entry.title!==undefined&&(typeof entry.title!=='string'||entry.title.length>120))||
+    (entry.sharedAt!==undefined&&entry.sharedAt!==null&&(!Number.isFinite(entry.sharedAt)||entry.sharedAt<0))||
+    (entry.spaceId!==undefined&&entry.spaceId!==null&&!/^[0-9a-f-]{36}$/i.test(entry.spaceId)))
   throw new Error('Write a journal entry of up to 3,000 characters.');
  const db=await open();
  try{
@@ -100,7 +108,7 @@ export async function savePrivateJournal(userId:string,householdId:string,entry:
   if(!cryptoKey)throw new Error('Cannot create journal encryption key.');
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad(scope,entry.id)},
-   cryptoKey,enc.encode(JSON.stringify({text:entry.text,prompt:entry.prompt})));
+   cryptoKey,enc.encode(JSON.stringify({text:entry.text,prompt:entry.prompt,title:entry.title??'',sharedAt:entry.sharedAt??null,spaceId:entry.spaceId??null})));
   const rowKey=scope+':'+entry.id;
   return await new Promise((resolve,reject)=>{
    const tx=db.transaction('entries','readwrite'),store=tx.objectStore('entries');
