@@ -118,3 +118,11 @@ The `GET /api/me/linked-profile?householdId=...` endpoint returns at most one **
 Regression: invite a fictional teen user into the household **without any grants** and link them to a profile. They should see the identity association but **no medication details**. After an owner explicitly invites/grants the view capability, confirm the medication view is accessible. Revoke membership and verify the association is cleaned up. Do not test with real health or minor data.
 
 This lays the identity foundation for private communication but does not enable new storage, encryption keys, journals, clinical referrals or messages.
+
+## Words drafting prototype (local-only)
+
+The existing Words prompts now have **Write with this**. In **Words → Try writing**, make a fictional draft and preview individual recipient selection; default is **Just me**. This feature **cannot save, send, encrypt or recover writing** and must not be tested with real confidential content. An intentional Clear draft flow uses inline Keep/Discard. Leave Words, lock, sign out or switch accounts: the draft disappears. Only a small, authenticated recipient-name lookup uses the Worker; typed content never enters a request. For child/teen viewers, recipient preview shows only care-circle owners.
+
+Regression: parent / teen / child prompt audiences, no cross-audience prompts, in-progress draft preserved when selecting another prompt, no recipient retained after returning to Just me, unauthorized household recipient lookup denied, and no health data or plaintext writing in network requests.
+
+Mac push still requires real native delivery validation, and phone push should be tested **only after a staged HTTPS deployment**, compatible installed PWA setup and notification permissions. Do not treat upstream acceptance as delivered.

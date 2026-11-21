@@ -48,3 +48,9 @@ A one-time database migration explicitly revokes long-lived sessions minted befo
 Push diagnostics report three distinct states: upstream gateway acceptance, service-worker push event receipt and browser's `showNotification()` completion. None proves macOS displayed a banner. Service-worker messages carry only a random test ID and an enum state; never medical data or endpoints.
 
 Self-link lookup is scoped to the authenticated user and household membership. It exposes limited self-profile identity and per-capability flags, **not** actual records. Any medication/history endpoint retains its independent grant checks. Linking identity is not permission or implied consent to future communication.
+
+## Nonpersistent Words UX prototype
+
+The Words draft editor is currently **React memory only** and intentionally includes no save/send action. It is unmounted when navigating away from Words or locking Carehold; content is not placed in localStorage, IndexedDB, D1, push payloads, URL parameters, analytics or log output. Recipient preview requests contain only householdId and return scoped account IDs/names after membership and role checks; no journal content is transmitted.
+
+This remains a **privacy UX prototype, not an encryption/privacy-control implementation**. An in-memory browser field is not proof of end-to-end confidentiality. No minor, medical or clinical writing should be entered before approved persistence, key management, consent, recovery, deletion and security review.

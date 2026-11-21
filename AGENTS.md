@@ -71,3 +71,8 @@ Household-only use does **not** waive baseline security. Stop new sensitive-data
 - Linked self-profile metadata may help users recognize their profile but MUST NOT be used as implicit permission for medication records or future private messages.
 - Future journaling/messaging requires an independently reviewed client-side E2EE design; do not store readable private content in D1, introduce tracking/read receipts, or grant a parent/professional automatic access to private words.
 - Distinguish push gateway acceptance, service worker receipt, and notification display request. None proves the OS showed the alert; confirm natively. No sensitive data in diagnostics or lockscreens.
+
+## Words prototype implementation constraints
+- `src/WordsDraftStudio.tsx` intentionally keeps fictional draft text only in mounted React state. Never add autosave, telemetry, background sync, WebSocket, server POST, copy-to-clipboard, browser storage, or a "send" control without the E2EE/consent release gate.
+- Sharing selection is a **preview only**, defaults to "Just me," clears selections when returning to private, and must not infer access rights from household membership. `GET /api/words/recipient-options` is names/IDs only, permission-scoped; it is not a message-recipient authorization token.
+- The prototype should unmount and discard drafts on page change and banking-style lock. Don't make it look like a production confidential journal.
