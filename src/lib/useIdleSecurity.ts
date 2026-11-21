@@ -24,7 +24,14 @@ export function useIdleSecurity(enabled:boolean,onLock:()=>void,onHeartbeat:()=>
    };
    const noteActivity=()=>{
      if(document.visibilityState!=='visible'||attemptLock())return;
-     lastInteraction=Date.now();
+     const now=Date.now();
+     lastInteraction=now;
+     // Refresh the server-backed session while a person is actually interacting.
+     // Doing this from the input event avoids timer-throttling during long edits.
+     if(now-lastHeartbeat>=HEARTBEAT_INTERVAL_MS){
+       lastHeartbeat=now;
+       heartbeatRef.current();
+     }
    };
    const onVisibility=()=>{
      if(document.visibilityState==='hidden'){hiddenAt=Date.now();return;}
