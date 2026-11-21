@@ -107,3 +107,28 @@ Record failures with the specific step, account role, relevant HTTP response/sta
 ## Post-E2E correction regression
 
 The initial local household E2E checklist was reported passing. Subsequent usability feedback led to new features and migrations **not included in that first pass**. **Before deployment**, follow the full focused verification in [POST_E2E_FEEDBACK.md](./POST_E2E_FEEDBACK.md): mistaken/refused/not-administered dose corrections and later observations; automatic draft autosave; draft clearing on share/new prompt; titled searchable/paginated journal; unified discussion and device-only private notes; adult-to-adult prompt filtering; 3-minute active session; medication/profile archive-and-restore, historical conversations, RxTerms form deduplication and role/permission isolation.
+
+
+## Recovery-first re-test after migration 0011 (fictional test accounts ONLY)
+
+This section is **not yet passed**. A new household with existing accounts does not reset account-scoped encryption keys; use new fictional user accounts for fresh-enrollment testing. Do not delete the old Sara/browser-test keys or D1 ciphertext to make a test pass.
+
+- [ ] Back up and verify restore of the local/staging fictional D1 database; apply additive migration 0011 only to the reviewed environment.
+- [ ] Create fresh account A and fresh account B, each with a passkey; create a new household and join B explicitly.
+- [ ] Open Words/Messages as A; generate a unique recovery code, record it securely outside the browser, confirm storage and complete enrollment.
+- [ ] Complete equivalent enrollment as B; verify two distinct public keys and ciphertext-only recovery rows.
+- [ ] Send fictional direct message and shared Words reply A↔B; verify actual plaintext can decrypt on intended accounts.
+- [ ] Sign A into a different browser/profile and enter the saved code; verify BOTH old direct and Words history decrypt there.
+- [ ] Sign out and clear site storage on the second browser; repeat restoration with valid code.
+- [ ] Invalid recovery code, modified ciphertext and code for the wrong account must fail without altering backend keys.
+- [ ] Confirm that someone who can log in but does not know the recovery secret cannot decrypt on a new device.
+- [ ] Confirm household Owner who was never included in a conversation gets 404, not plaintext or envelope.
+- [ ] Confirm a session switch between A and B does not cross-expose keys, journals, messages, or care data.
+- [ ] Simulate interrupted enrollment (network failure after POST, browser reload before local IndexedDB save) and recover using the displayed saved code.
+- [ ] Test two tabs enrolling at once; only one identity must win and old ciphertext must remain intact.
+- [ ] Confirm the existing legacy account with lost Incognito key is blocked with an actionable warning and is NEVER silently rotated.
+- [ ] Verify the Today summary strip in light/dark themes and on phone.
+- [ ] Confirm private journals **do not falsely claim automatic recovery/sync**. Full encrypted journal persistence and legacy migration remain release blockers.
+- [ ] Execute all automated tests, TypeScript check and build using \`npm run verify:pre-e2e\`; record actual results and unresolved failures.
+
+**Not a production sign-off.** Distinct device keys, secure revocation, legacy data migration, journal sync, classification/permissions and independent security review must be completed separately.
