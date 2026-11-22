@@ -11,8 +11,10 @@ export function makeAuth(env:CareEnv) {
     baseURL: env.APP_ORIGIN,
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [env.APP_ORIGIN],
-    // The database-backed Better Auth session also expires after inactivity.
-    // Keep cookie caching off so API requests validate revocation/expiry.
+    // A separate 30-minute sliding backend grace period avoids mid-edit cookie
+    // expiry when the browser throttles activity heartbeats. The frontend still
+    // masks after 3 minutes inactive / 1 minute away, requiring reauthentication.
+    // Keep cookie caching off so every API call validates revocation/expiry.
     session: {expiresIn:SESSION_IDLE_SECONDS,updateAge:SESSION_REFRESH_SECONDS,cookieCache:{enabled:false}},
     emailAndPassword: { enabled:true, minPasswordLength:10 },
     plugins: [passkey({ rpID:origin.hostname, rpName:'carehold.', authenticatorSelection:{userVerification:'required'} })],
