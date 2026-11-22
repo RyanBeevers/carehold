@@ -128,7 +128,7 @@ export default function App(){
  useEffect(()=>{setMessageHandoff(null);},[hid]);
  const [unread,setUnread]=useState({words:0,direct:0});
  useEffect(()=>{
-   if(!user||!hid||!hasPasskey||locked){setUnread({words:0,direct:0});return;}
+   if(!user||!hid||!hasPasskey||recoveryCompletedUser!==user.id||locked){setUnread({words:0,direct:0});return;}
    let live=true,lastInput=Date.now();
    const refresh=async()=>{
      try{
@@ -144,7 +144,7 @@ export default function App(){
    document.addEventListener('visibilitychange',updated);
    const timer=window.setInterval(()=>{if(document.visibilityState==='visible'&&Date.now()-lastInput<90_000)void refresh();},15000);
    return()=>{live=false;window.clearInterval(timer);document.removeEventListener('pointerdown',input);document.removeEventListener('keydown',input);window.removeEventListener('carehold:activity-changed',updated);document.removeEventListener('visibilitychange',updated);};
- },[user?.id,hid,hasPasskey,locked]);
+ },[user?.id,hid,hasPasskey,recoveryCompletedUser,locked]);
  const pageUnread=(id:Page)=>id==='words'?unread.words:id==='messages'?unread.direct:0;
 
  const [date,setDate]=useState(''),[error,setError]=useState('');
@@ -306,9 +306,9 @@ export default function App(){
    })().catch(()=>{/* Connectivity or parse errors must not force sign-out. */});
  });
  const refreshHouseholds=useCallback(async()=>{
-   if(!user||!hasPasskey)return;
+   if(!user||!hasPasskey||recoveryCompletedUser!==user.id)return;
    try{const r=await api<{households:Household[]}>('/households');setHouseholds(r.households);setHid(old=>r.households.some(x=>x.id===old)?old:(r.households[0]?.id||''));}catch(e){fail(e);}
- },[user,hasPasskey]);
+ },[user,hasPasskey,recoveryCompletedUser]);
  useEffect(()=>{void refreshHouseholds();},[refreshHouseholds]);
  async function acceptStagedInvitation(){
    if(invitationBusy)return;
@@ -317,10 +317,10 @@ export default function App(){
    catch(e){fail(e);}finally{setInvitationBusy(false);}
  }
  useEffect(()=>{
-   if(!user?.id||!hasPasskey||!pendingInvitation||triedAutoInvite.current.has(user.id))return;
+   if(!user?.id||!hasPasskey||recoveryCompletedUser!==user.id||!pendingInvitation||triedAutoInvite.current.has(user.id))return;
    triedAutoInvite.current.add(user.id);
    void acceptStagedInvitation();
- },[user?.id,hasPasskey,pendingInvitation]);
+ },[user?.id,hasPasskey,recoveryCompletedUser,pendingInvitation]);
  const refreshMembers=useCallback(async()=>{
    if(!hid||!owner)return;
    try{const result=await api<{members:Member[]}>(`/members?householdId=${encodeURIComponent(hid)}`);setMembers(result.members);}catch(e){fail(e);}
