@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent,type MouseEvent} from 'react';
 import {useIdleSecurity} from './lib/useIdleSecurity';
-import {ArrowUpRight,Bell,BellOff,BookOpen,MessageCircle,CalendarDays,Check,ChevronLeft,ChevronRight,Copy,HeartHandshake,KeyRound,Menu,Minus,Plus,Settings2,ShieldCheck,Sun,Moon,Monitor,LockKeyhole,Users,Wind,X} from 'lucide-react';
+import {ArrowUpRight,Bell,BellOff,BookOpen,MessageCircle,CalendarDays,Check,ChevronLeft,ChevronRight,Copy,HeartHandshake,KeyRound,Menu,Minus,Plus,Settings2,ShieldCheck,Sun,Moon,Monitor,LockKeyhole,Link2,Users,Wind,X} from 'lucide-react';
 import {api,invalidatePendingApiResponses,StaleSessionRequest,type Household,type Person,type LinkedSelfProfile,type Medication,type Entry,type DoseEvent} from './lib/api';
 import {authClient} from './lib/auth-client';
 import {WordsHub} from './WordsHub';
@@ -600,7 +600,7 @@ export default function App(){
   </div>}</div>
   {profiles.filter(p=>!p.archived_at).length===0&&!showArchivedProfiles?<div className="empty-state"><span className="empty-star">✺</span><h2>Who are we looking after?</h2><p>Add an adult, child, or pet to start the medication ledger.</p>{owner&&<button className="button primary" onClick={()=>setModal('profile')}>Add the first profile</button>}</div>:<div className="person-layout"><div className="person-list" aria-label="Choose a profile">{visibleProfiles.map(p=><button key={p.id} className={p.id===selected?'person-list-item selected':'person-list-item'} onClick={()=>setSelected(p.id)}><IconLabel kind={p.kind}/><span>{p.display_name}<small>{p.archived_at?'Archived · ':''}{p.kind}</small></span><ArrowUpRight size={18}/></button>)}</div><section className="person-detail">{person&&<><div className="detail-intro"><span className="form-index">PROFILE / {person.kind.toUpperCase()}</span><h2>{person.display_name}<span>.</span></h2><div className="detail-actions">
    {!person.archived_at&&<button className="button dark" onClick={()=>newMed(person.id)}><Plus size={17}/> Add medication</button>}
-   {owner&&!person.archived_at&&person.kind!=='pet'&&<button className="button outline" onClick={()=>beginLink(person)}>{person.linked_user_id?'Change linked account':'Link an account'}</button>}
+   {owner&&!person.archived_at&&person.kind!=='pet'&&<button className="button dark" onClick={()=>beginLink(person)}><Link2 size={17}/>{person.linked_user_id?'Change linked account':'Link an account'}</button>}
    {owner&&(person.archived_at?
     <button type="button" className="button outline" disabled={saving} onClick={()=>void restoreProfile(person)}>Restore profile</button>:
     <button type="button" className="quiet small" onClick={()=>{setPending({profile:person});setModal('archive-profile');}}>Archive profile</button>)}
