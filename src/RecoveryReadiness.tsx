@@ -5,6 +5,7 @@ import {MessageRecoveryGate} from './MessageRecoveryGate';
 import {RecoveryCodeRotation} from './RecoveryCodeRotation';
 import {RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 import {samePublicKey,storedMessageIdentity,type Identity,type PublicKey} from './lib/message-crypto';
+import {fingerprintPublicKey,readableFingerprint} from './lib/recipient-key-continuity';
 
 type Status='checking'|'configured'|'restore'|'legacy'|'setup'|'mismatch'|'error';
 export function RecoveryReadiness({userId}:{userId:string}){
@@ -12,8 +13,9 @@ export function RecoveryReadiness({userId}:{userId:string}){
  const [retry,setRetry]=useState(0);
  const [missingCodeHelp,setMissingCodeHelp]=useState(false);
  const [replacementComplete,setReplacementComplete]=useState(false);
+ const [ownCode,setOwnCode]=useState('');
  useEffect(()=>{
-  let live=true;setStatus('checking');setError('');
+  let live=true;setStatus('checking');setError('');setOwnCode('');
   void (async()=>{
    try{
     const [registered,recovery,local]=await Promise.all([
@@ -22,6 +24,10 @@ export function RecoveryReadiness({userId}:{userId:string}){
      storedMessageIdentity(userId)
     ]);
     if(!live)return;
+    if(registered.publicKey&&local&&samePublicKey(registered.publicKey,local.publicKey)){
+     try{const digest=await fingerprintPublicKey(registered.publicKey);if(live)setOwnCode(readableFingerprint(digest));}
+     catch{/* Key status and recovery access remain authoritative. */}
+    }
     if(registered.publicKey&&local&&!samePublicKey(registered.publicKey,local.publicKey)){
      setStatus('mismatch');
     }else if(recovery.configured&&registered.publicKey&&local){
@@ -58,7 +64,12 @@ export function RecoveryReadiness({userId}:{userId:string}){
     <p>The enrolled key should still open your encrypted data on this browser. Without the old CH1- code, another device cannot recover that old key. You can now use <strong>Replace lost recovery code</strong> below on this original browser: the experimental flow creates a new recoverable key, verifies migrated ciphertext, and refuses to finalize if anything is missing. Do not reset keys, clear browser storage, delete the account, or retry legacy migration. Complete local tests before relying on the replacement for real information.</p>
     <p>If you have private journal entries, use the separate encrypted journal export where available and store its passphrase safely. That export does not back up Messages or shared Words.</p>
    </div>}
-   <p className="fine-print">Passkey sign-in alone does not restore encryption keys. This pilot has not completed device-revocation or confidentiality review; use fictional writing only.</p>
+   <p className="fine-print">Passkey sign-in alone does not restore encryption keys. This household pilot has account-level recovery; it cannot independently revoke a previously authorized device's existing decryption key or retract copies already received.</p>
+   {ownCode&&status==='configured'&&<details className="key-self-verification">
+    <summary>My encryption verification code</summary>
+    <p>Share this public code directly with someone who is verifying your encryption key before sending. Compare the complete code. It is not your secret CH1 recovery code and cannot be used to sign in.</p>
+    <code>{ownCode}</code>
+   </details>}
   </div>
    {status==='error'&&<button type="button" className="button outline" onClick={()=>setRetry(n=>n+1)}>Retry recovery check</button>}
   </div>
