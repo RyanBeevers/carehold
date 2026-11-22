@@ -10,6 +10,7 @@ import {handleMessages} from './messages';
 import {handlePrivateJournal} from './private-journal';
 import {handlePrivateDrafts} from './private-drafts';
 import {handleRecoveryMigration} from './recovery-migration';
+import {handleRecoveryRotation} from './recovery-rotation';
 import {handleWordSpaces} from './words-spaces';
 import {CatalogError,normalizeMedicationSearch,searchCatalog,enforceCatalogRateLimit,parseMedicationCatalog,type MedicationCatalogMetadata} from './medication-catalog';
 
@@ -205,6 +206,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     return json({audience:b.audience,pendingInvitation:!!invitationId});
   }
   await requirePasskey(db,user.id);
+   if(path.startsWith('/api/recovery-rotation/'))return handleRecoveryRotation(req,env,user);
    if(path.startsWith('/api/messages/recovery/migration'))return handleRecoveryMigration(req,env,user);
    if(path.startsWith('/api/messages/'))return handleMessages(req,env,user,ctx);
    if(path==='/api/private-journal'||path.startsWith('/api/private-journal/'))return handlePrivateJournal(req,env,user);
