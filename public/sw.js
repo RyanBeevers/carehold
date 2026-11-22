@@ -16,7 +16,7 @@ self.addEventListener('push',event=>{
     try{
       await self.registration.showNotification('A moment for care',{
         body:testId?'Your Carehold notification test arrived.':'Open Carehold to check your care schedule.',
-        icon:'/icon-192.png',badge:'/badge-96.png',tag,
+        icon:'/branding/carehold/pwa/carehold-any-light-192.png',badge:'/branding/carehold/pwa/carehold-notification-badge-96.png',tag,
         data:{url:'/'},
       });
       await reportTest(testId,'display-requested').catch(()=>{});
