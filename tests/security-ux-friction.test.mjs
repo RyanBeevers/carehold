@@ -18,7 +18,9 @@ test('unexpected key changes stay blocking and technical codes are behind an int
  const review=read('src/RecipientKeyReview.tsx');
  assert.match(review,/role="alert"/);
  assert.match(review,/Carehold paused sharing rather than automatically trusting/);
- assert.match(review,/<details className="key-change-instructions">/);
+ assert.match(review,/<details className="key-change-instructions"/);
+ assert.match(review,/onToggle=\{event=>setReviewing\(event\.currentTarget\.open\)\}/);
+ assert.match(review,/disabled=\{busy\|\|!reviewing\}/);
  assert.match(review,/How to verify this change/);
  assert.match(review,/readableFingerprint\(item.current\)/);
  assert.match(review,/onClick=\{onApprove\}/);
