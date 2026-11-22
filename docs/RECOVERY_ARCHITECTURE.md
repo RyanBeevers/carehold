@@ -1,3 +1,5 @@
+> **Phase 2 development branch (not release-approved):** Trusted-device approval and encrypted recovery-credential transfer are prototyped in [TRUSTED_DEVICE_RECOVERY.md](TRUSTED_DEVICE_RECOVERY.md), including a short-lived account-scoped encrypted relay, current-key proof and on-device encrypted CH1 escrow. This is **not** device-unique E2EE or standalone cryptographic revocation. Browser/phone tests and a reviewed key-epoch design remain release gates. Passkey PRF is investigated but not active: Better Auth must verify assertions and update counters before a PRF-derived recovery flow can be enabled.
+
 # Carehold encrypted account recovery — staged implementation
 
 **Status (2026-11-21): experimental, UNREVIEWED and not ready for real family data.**

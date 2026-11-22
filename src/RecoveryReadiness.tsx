@@ -3,6 +3,7 @@ import {api} from './lib/api';
 import {LegacyMessageMigration} from './LegacyMessageMigration';
 import {MessageRecoveryGate} from './MessageRecoveryGate';
 import {RecoveryCodeRotation} from './RecoveryCodeRotation';
+import {TrustedDevices} from './TrustedDevices';
 import {RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 import {samePublicKey,storedMessageIdentity,type Identity,type PublicKey} from './lib/message-crypto';
 import {fingerprintPublicKey,readableFingerprint} from './lib/recipient-key-continuity';
@@ -14,6 +15,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
  const [missingCodeHelp,setMissingCodeHelp]=useState(false);
  const [replacementComplete,setReplacementComplete]=useState(false);
  const [ownCode,setOwnCode]=useState('');
+ const [advancedOpen,setAdvancedOpen]=useState(false);
  useEffect(()=>{
   let live=true;setStatus('checking');setError('');setOwnCode('');
   void (async()=>{
@@ -45,6 +47,11 @@ export function RecoveryReadiness({userId}:{userId:string}){
  },[userId,retry]);
  const onReady=useCallback((_identity:Identity)=>{setStatus('configured');setError('');setRetry(n=>n+1);},[]);
  const onError=useCallback((message:string)=>setError(message),[]);
+ const reviewRotation=useCallback(()=>{
+  setAdvancedOpen(true);
+  const section=document.getElementById('carehold-advanced-recovery') as HTMLDetailsElement|null;
+  if(section){section.open=true;section.scrollIntoView({behavior:'smooth',block:'start'});}
+ },[]);
  const info:Record<Status,string>={
   checking:'Checking your encrypted account recovery…',
   configured:'Encrypted writing is ready on this device.',
@@ -59,7 +66,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
    <div>
     <h2>Encrypted writing</h2>
     <p role={status==='error'||status==='mismatch'?'alert':'status'}>{info[status]}</p>
-    {status==='configured'&&<details className="recovery-advanced-settings">
+    {status==='configured'&&<details id="carehold-advanced-recovery" className="recovery-advanced-settings" open={advancedOpen} onToggle={e=>setAdvancedOpen(e.currentTarget.open)}>
      <summary>Recovery &amp; advanced security</summary>
      <p className="fine-print">This browser has an enrolled encryption key. That confirms local access — not that the one-time recovery code was saved elsewhere. Without your saved CH1- code, a different device cannot recover this key. Search your secure vault for <strong>{RECOVERY_SEARCH_LABEL}</strong> if you need it.</p>
      <p className="fine-print">Passkey sign-in alone does not restore encryption keys. This household pilot has account-level recovery; it cannot independently revoke a previously authorized device's existing decryption key or retract copies already received.</p>
@@ -81,6 +88,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
    {status==='error'&&<button type="button" className="button outline" onClick={()=>setRetry(n=>n+1)}>Retry recovery check</button>}
   </div>
   {(status==='setup'||status==='restore')&&<MessageRecoveryGate key={userId+':'+status} userId={userId} onReady={onReady} onError={onError}/>}
+  {status==='configured'&&<TrustedDevices userId={userId} onReviewRotation={reviewRotation}/>}
   {status==='configured'&&replacementComplete&&<p role="status" className="recovery-replaced-status"><strong>New recovery code enrolled successfully.</strong> Keep the externally saved code. Verify access from a separate browser profile before relying on it.</p>}
   {status==='legacy'&&<LegacyMessageMigration userId={userId}/>}
   {status==='mismatch'&&<><p role="alert" className="messages-error">This browser has an older encryption key. If you intentionally replaced your recovery code on another trusted device, enter the new saved CH1- code below. Carehold will retain the old browser key in local history instead of deleting it.</p>

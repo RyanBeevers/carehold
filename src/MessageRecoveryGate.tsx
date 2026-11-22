@@ -3,6 +3,9 @@ import {api,StaleSessionRequest} from './lib/api';
 import {samePublicKey,storedMessageIdentity,storeRecoveredMessageIdentity,storeRotatedMessageIdentity,storedPendingRecoveryEnvelope,storePendingRecoveryEnvelope,clearPendingRecoveryEnvelope,type Identity,type PublicKey} from './lib/message-crypto';
 import {createMessageRecoveryIdentity,openMessageRecoveryIdentity,type MessageRecoveryEnvelope,type NewRecoveryIdentity} from './lib/message-recovery';
 import {RecoveryCodeSaveGuide,RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
+import {NewDeviceApproval} from './NewDeviceApproval';
+import {saveTrustedRecoveryCode} from './lib/trusted-device-vault';
+import {enrollLocalTrustedDevice} from './lib/trusted-device-client';
 
 type Remote={publicKey:PublicKey|null};
 type RecoveryStatus={configured:boolean,envelope:MessageRecoveryEnvelope|null};
@@ -77,8 +80,13 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    await api('/messages/recovery','POST',{envelope:pending.envelope});
    await storeRecoveredMessageIdentity(userId,pending.identity);
    await clearPendingRecoveryEnvelope(userId,'fresh').catch(()=>{});
+   let trusted=true;
+   try{
+    await saveTrustedRecoveryCode(userId,pending.recoveryCode,pending.envelope);
+    await enrollLocalTrustedDevice(userId,pending.identity);
+   }catch{trusted=false;}
    onReady(pending.identity);announceRecovery();setMode('ready');
-   setCode('');setPending(null);setNotice('Encryption recovery configured. Keep your recovery code offline.');
+   setCode('');setPending(null);setNotice(trusted?'Backup configured. You can approve your next phone from this browser.':'Backup configured. Enable trusted-device approvals later in Settings.');
   }catch(e){
    try{
     const existing=await api<RecoveryStatus>('/messages/recovery');
@@ -86,6 +94,10 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
      if(pending&&samePublicKey(existing.envelope.publicKey,pending.identity.publicKey)&&JSON.stringify(existing.envelope)===JSON.stringify(pending.envelope)){
       await storeRecoveredMessageIdentity(userId,pending.identity);
       await clearPendingRecoveryEnvelope(userId,'fresh').catch(()=>{});
+      try{
+       await saveTrustedRecoveryCode(userId,pending.recoveryCode,pending.envelope);
+       await enrollLocalTrustedDevice(userId,pending.identity);
+      }catch{/* Existing CH1 backup still works. */}
       onReady(pending.identity);announceRecovery();setMode('ready');setPending(null);
       setNotice('Enrollment was already completed; this browser recovered the saved identity.');
       return;
@@ -112,8 +124,14 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
     await storeRotatedMessageIdentity(userId,previous,identity);
    else await storeRecoveredMessageIdentity(userId,identity);
    await clearPendingRecoveryEnvelope(userId,'fresh').catch(()=>{});
+   let trusted=true;
+   try{
+    await saveTrustedRecoveryCode(userId,code.trim(),server.envelope);
+    await enrollLocalTrustedDevice(userId,identity);
+   }catch{trusted=false;}
    setCode('');
-   onReady(identity);announceRecovery();setMode('ready');setNotice('Message key restored on this device.');
+   onReady(identity);announceRecovery();setMode('ready');
+   setNotice(trusted?'Writing restored. This device can approve your next phone.':'Writing restored. You can enable approvals in Settings.');
   }catch(e){setError(errorText(e));}
   finally{setBusy(false);}
  }
@@ -139,6 +157,10 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    }
    await storeRecoveredMessageIdentity(userId,identity);
    await clearPendingRecoveryEnvelope(userId,'fresh').catch(()=>{});
+   try{
+    await saveTrustedRecoveryCode(userId,code.trim(),pendingResume);
+    await enrollLocalTrustedDevice(userId,identity);
+   }catch{/* Separate saved CH1 still restores the account. */}
    setCode('');setPendingResume(null);setMode('ready');
    onReady(identity);announceRecovery();
    setNotice('Your saved code restored this unfinished setup and enrollment completed.');
@@ -180,10 +202,18 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    <p className="fine-print">This code will not be shown again after setup. Keep your saved copy so you can restore on another device if needed.</p>
    <button type="button" className="button primary" disabled={!saved||busy} onClick={()=>void completeEnrollment()}>{busy?'Enrolling…':'Finish secure setup'}</button>
    <p className="muted tiny">Do not navigate away until enrollment succeeds. The recovery code is never sent to the server.</p></>}
-  {mode==='restore'&&<form onSubmit={e=>void restore(e)}><p>You're on a new device. Enter the backup code saved during your first setup to restore your private writing and messages.</p>
-   <label>Recovery code<input name="recovery-code" type="password" autoComplete="off" spellCheck={false} value={code} onChange={e=>setCode(e.target.value)} placeholder="CH1-…" required/></label>
-   <button className="button primary" disabled={busy||!code.trim()}>{busy?'Recovering…':'Restore my writing'}</button>
-   <p className="muted tiny">Look for <strong>{RECOVERY_SEARCH_LABEL}</strong> in Apple Passwords or another trusted password manager. If you cannot find it, preserve your original device rather than resetting keys.</p></form>}
+  {mode==='restore'&&<>
+   <NewDeviceApproval userId={userId} onReady={identity=>{onReady(identity);announceRecovery();setMode('ready');setNotice('Trusted-device approval restored your writing.');}}/>
+   <details className="recovery-storage-alternatives">
+    <summary>Use my saved backup code instead</summary>
+    <form onSubmit={e=>void restore(e)}>
+     <p>Enter the backup code saved during your first setup to restore your private writing and messages.</p>
+     <label>Recovery code<input name="recovery-code" type="password" autoComplete="off" spellCheck={false} value={code} onChange={e=>setCode(e.target.value)} placeholder="CH1-…" required/></label>
+     <button className="button primary" disabled={busy||!code.trim()}>{busy?'Recovering…':'Restore my writing'}</button>
+     <p className="muted tiny">Look for <strong>{RECOVERY_SEARCH_LABEL}</strong> in Apple Passwords or another trusted password manager. If you cannot find it, preserve your original device rather than resetting keys.</p>
+    </form>
+   </details>
+  </>}
   {notice&&<p role="status">{notice}</p>}
   {error&&<p role="alert" className="messages-error">{error}</p>}
  </section>;

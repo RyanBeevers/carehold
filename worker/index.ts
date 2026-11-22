@@ -7,6 +7,7 @@ import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
 import {handleMessages} from './messages';
+import {handleTrustedDevices,purgeExpiredDeviceTransfers} from './trusted-devices';
 import {handlePrivateJournal} from './private-journal';
 import {handlePrivateDrafts} from './private-drafts';
 import {handleRecoveryMigration} from './recovery-migration';
@@ -163,7 +164,10 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
         db.prepare('SELECT 1 FROM account_key_migrations LIMIT 1').first(),
         db.prepare('SELECT 1 FROM account_recovery_rotations LIMIT 1').first(),
         db.prepare('SELECT 1 FROM account_recovery_rotation_journals LIMIT 1').first(),
-        db.prepare('SELECT 1 FROM account_recovery_rotation_drafts LIMIT 1').first()
+        db.prepare('SELECT 1 FROM account_recovery_rotation_drafts LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM trusted_devices LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM trusted_device_requests LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM trusted_device_challenges LIMIT 1').first()
       ]);
       return json({ok:true,product:'carehold'});
     }catch{
@@ -220,6 +224,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   await requirePasskey(db,user.id);
    if(path.startsWith('/api/recovery-rotation/'))return handleRecoveryRotation(req,env,user);
    if(path.startsWith('/api/messages/recovery/migration'))return handleRecoveryMigration(req,env,user);
+   if(path.startsWith('/api/trusted-devices'))return handleTrustedDevices(req,env,user);
    if(path.startsWith('/api/messages/'))return handleMessages(req,env,user,ctx);
    if(path==='/api/private-journal'||path.startsWith('/api/private-journal/'))return handlePrivateJournal(req,env,user);
    if(path.startsWith('/api/private-drafts/'))return handlePrivateDrafts(req,env,user);
@@ -792,5 +797,6 @@ export default {
   },
   async scheduled(_event:ScheduledEvent,env:CareEnv,ctx:ExecutionContext) {
     ctx.waitUntil(reminders(env).catch(()=>console.error('Reminder cycle failed')));
+   ctx.waitUntil(purgeExpiredDeviceTransfers(env).catch(()=>console.error('Trusted-device expiry cleanup failed')));
   },
 };

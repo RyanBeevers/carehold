@@ -4,6 +4,8 @@ import {samePublicKey,seal,unseal,storedLegacyMessageIdentity,storeRecoveredMess
 import {sealWord,unsealWord} from './lib/words-space-crypto';
 import {createMessageRecoveryIdentity,openMessageRecoveryIdentity,type MessageRecoveryEnvelope,type NewRecoveryIdentity} from './lib/message-recovery';
 import {RecoveryCodeSaveGuide,RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
+import {saveTrustedRecoveryCode} from './lib/trusted-device-vault';
+import {enrollLocalTrustedDevice} from './lib/trusted-device-client';
 
 type Status='checking'|'legacy'|'show-code'|'resume-prestage'|'resume'|'running'|'done'|'blocked';
 type Stage={state:'none'|'staged'|'complete',envelope:MessageRecoveryEnvelope|null,publicKey:PublicKey|null};
@@ -197,6 +199,16 @@ export function LegacyMessageMigration({userId,onComplete}:{userId:string,onComp
   await api('/messages/recovery/migration/finalize','POST',{confirm:true});
   await storeRecoveredMessageIdentity(userId,next);
   await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
+  const recoveredCode=pending?.recoveryCode??recoveryCode.trim();
+  if(recoveredCode){
+   try{
+    const recovery=await api<{configured:boolean,envelope:MessageRecoveryEnvelope|null}>('/messages/recovery');
+    if(recovery.envelope){
+     await saveTrustedRecoveryCode(userId,recoveredCode,recovery.envelope);
+     await enrollLocalTrustedDevice(userId,next);
+    }
+   }catch{/* Safe migration is complete; manual CH1 still works. */}
+  }
   setStatus('done');setPending(null);
   onComplete?.();
  }

@@ -39,6 +39,16 @@ Carehold is an invite-only household care pilot, built to grow into a subscripti
 4. **Professional:** Referrals are invitation/onboarding actions **without implicit access**. Therapist/psychiatrist accounts, consent, clinically relevant records, and optional paid workspaces are deferred.
 5. **Commercial:** Subscription entitlements, monthly/annual billing, complimentary accounts, beta/founder lifetime access, staff entitlement admin are future work. Billing roles never imply care-content access.
 
+## Phase 2 — Trusted Devices & Seamless Recovery (DRAFT)
+
+Read [docs/TRUSTED_DEVICE_RECOVERY.md](docs/TRUSTED_DEVICE_RECOVERY.md) **before modifying encryption, recovery, device storage or device APIs**. This single PR adds a separate, device-local, non-exportable AES-GCM-wrapped CH1 escrow after a verified recovery enrollment, a short-lived ECDH/HKDF/AES-GCM approved-device transfer, and an account-key proof that an active browser can decrypt the currently enrolled account encryption key. **Additionally, each browser has a unique non-exportable ECDSA signing private key.** The server verifies the corresponding enrolled device's public signing key for every enrollment/approval/completion/revocation action, bound to a single-use challenge ID and action/target. A revoked browser holding an old shared account ECDH key cannot impersonate the signing identity of another trusted device. The server never receives CH1 plaintext, journal keys, or private message keys.
+
+**Never bypass recovery for convenience.** Existing non-exportable keys are not exportable to other devices. Without CH1 escrow or a saved code, original-browser migration/rotation is needed. Do not silently create a fresh key or reset a user's account to solve setup issues. Account/household privacy, encryption before transmission and signed-in passkey requirements remain intact.
+
+**Device removal is NOT independent cryptographic revocation** in v2. It blocks approval privileges but cannot erase a previously imported shared account private key or previously received ciphertext. Verified account-key rotation is needed for future secrecy, and full v3 per-device keys/key epochs and independent trust verification remain unresolved. WebAuthn PRF is **not enabled**; if added, require verified Better Auth assertions, proper authenticator counter updates, opt-in fallback and cross-device support testing. Do not ship an unverified navigator.credentials.get PRF call.
+
+Preserve the existing single final E2E gate: `npm run verify:pre-e2e`, isolated two-browser testing (including iOS PWA, expired requests, wrong-account and tampering), migration 0019 backup/restore, and independent security review before staging/production changes. Never claim this draft or device enrollment proves secure clinical/minor confidentiality.
+
 ## Household pilot security UX (November 2026)
 
 See [docs/HOUSEHOLD_PILOT_SECURITY.md](docs/HOUSEHOLD_PILOT_SECURITY.md). The owner is testing this privately with invited household accounts. Everyday Words/Messages surfaces should **not** show a permanent fictional-writing banner; do show actionable errors for authentication, encryption, recipient-key mismatches, recovery and failed sync. Settings exposes the remaining privacy and recovery limitations.
