@@ -36,7 +36,7 @@ async function spaceFor(db:D1Database,spaceId:string,uid:string){
  const row=await db.prepare(`SELECT s.id,s.household_id,s.initial_kind,s.created_by FROM shared_word_spaces s
  JOIN shared_word_participants p ON p.space_id=s.id AND p.user_id=?
  JOIN household_members h ON h.household_id=s.household_id AND h.user_id=?
- WHERE s.id=?`).bind(uid,uid,spaceId).first<{id:string,household_id:string,initial_kind:'prompt'|'journal',created_by:string}>();
+ WHERE s.id=? AND s.deleted_at IS NULL AND p.left_at IS NULL`).bind(uid,uid,spaceId).first<{id:string,household_id:string,initial_kind:'prompt'|'journal',created_by:string}>();
  if(!row)fail(404,'Shared space unavailable.');
  return row!;
 }
@@ -46,7 +46,7 @@ async function participants(db:D1Database,spaceId:string){
  JOIN shared_word_spaces s ON s.id=p.space_id
  JOIN household_members h ON h.household_id=s.household_id AND h.user_id=p.user_id
  LEFT JOIN message_device_keys k ON k.user_id=p.user_id
- WHERE p.space_id=? ORDER BY p.joined_at,p.user_id`).bind(spaceId).all<{id:string,name:string,public_jwk:string|null}>();
+ WHERE p.space_id=? AND p.left_at IS NULL ORDER BY p.joined_at,p.user_id`).bind(spaceId).all<{id:string,name:string,public_jwk:string|null}>();
  return (result.results||[]).map(p=>({id:p.id,name:p.name,publicKey:p.public_jwk?JSON.parse(p.public_jwk):null}));
 }
 async function digest(value:string){
@@ -66,10 +66,10 @@ function postStatements(db:D1Database,postId:string,spaceId:string,uid:string,ki
   ...people.map(person=>db.prepare('INSERT INTO shared_word_copies(post_id,recipient_id,envelope_json) VALUES(?,?,?)').bind(postId,person,JSON.stringify(copies[person])))
  ];
 }
-function activityStatements(db:D1Database,people:string[],sender:string,hid:string,sourceId:string,kind:'shared'|'reply',time:string){
+function activityStatements(db:D1Database,people:string[],sender:string,hid:string,sourceId:string,postId:string,kind:'shared'|'reply',time:string){
  return people.filter(uid=>uid!==sender).map(uid=>db.prepare(`INSERT INTO private_word_activity
-  (id,user_id,household_id,source_kind,source_id,event_kind,created_at) VALUES(?,?,?,'words',?,?,?)`)
-  .bind(crypto.randomUUID(),uid,hid,sourceId,kind,time));
+  (id,user_id,household_id,source_kind,source_id,post_id,event_kind,created_at) VALUES(?,?,?,'words',?,?,?,?)`)
+  .bind(crypto.randomUUID(),uid,hid,sourceId,postId,kind,time));
 }
 
 /** Generic opt-in push only. Neither journal text nor person/prompt names leave the server. */
@@ -86,9 +86,10 @@ export function notifyPrivateRecipients(env:CareEnv,ctx:ExecutionContext,hid:str
     const devices=await env.DB.prepare('SELECT endpoint,p256dh,auth_secret FROM push_subscriptions WHERE user_id=? LIMIT 10')
      .bind(uid).all<{endpoint:string,p256dh:string,auth_secret:string}>();
     for(const sub of devices.results||[]){
-     try{await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
+     try{const accepted=await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
       {title:'A moment for care',body:'Something new is waiting in Carehold.',url:'/words',tag:'carehold-private-activity'},
       {publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!,subject:env.VAPID_SUBJECT!});
+      if(!accepted)await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint=? AND user_id=?').bind(sub.endpoint,uid).run();
      }catch{/* Push is best-effort; the private activity inbox remains authoritative. */}
     }
    }catch{/* Never let a push failure leak into or roll back a successful send. */}
@@ -112,6 +113,35 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    return respond({enabled:b?.enabled===true});
   }
  }
+ if(path==='/api/words/push/test'&&req.method==='POST'){
+  const b=await body(req),hid=householdId(b.householdId);await member(db,hid,user.id);
+  if(!pushConfigured(env))fail(503,'Words device notifications are not configured on this server.');
+  const preference=await db.prepare('SELECT enabled FROM private_word_push_preferences WHERE user_id=? AND household_id=?')
+   .bind(user.id,hid).first<{enabled:number}>();
+  if(preference?.enabled!==1)fail(409,'Enable Words notifications before testing.');
+  const devices=await db.prepare('SELECT id,endpoint,p256dh,auth_secret FROM push_subscriptions WHERE user_id=? LIMIT 10')
+   .bind(user.id).all<{id:string,endpoint:string,p256dh:string,auth_secret:string}>();
+  if(!devices.results.length)fail(409,'No registered notification device. Enable notifications on this device first.');
+  const cutoff=new Date(Date.now()-60_000).toISOString();
+  const claim=await db.prepare(`INSERT INTO push_test_rate_limits(user_id,last_sent_at) VALUES(?,?)
+    ON CONFLICT(user_id) DO UPDATE SET last_sent_at=excluded.last_sent_at
+    WHERE push_test_rate_limits.last_sent_at<? RETURNING last_sent_at`)
+   .bind(user.id,new Date().toISOString(),cutoff).first();
+  if(!claim)fail(429,'Wait one minute before sending another notification test.');
+  let accepted=0;
+  const testId=crypto.randomUUID();
+  for(const sub of devices.results){
+   try{
+    const sent=await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
+     {title:'A moment for care',body:'Your Carehold Words notification test arrived.',url:'/words',tag:'carehold-words-test-'+testId},
+     {publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!,subject:env.VAPID_SUBJECT!});
+    if(sent)accepted++;
+    else await db.prepare('DELETE FROM push_subscriptions WHERE id=? AND user_id=?').bind(sub.id,user.id).run();
+   }catch{/* Push service details remain private. */}
+  }
+  if(!accepted)fail(502,'The push service rejected the test. Re-enable notifications on this device and try again.');
+  return respond({accepted,attempted:devices.results.length});
+ }
  if(path==='/api/words/people'&&req.method==='GET'){
   const hid=householdId(url.searchParams.get('householdId'));await member(db,hid,user.id);
   const result=await db.prepare(`SELECT u.id,u.name,k.public_jwk FROM household_members hm
@@ -127,14 +157,14 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const hid=householdId(url.searchParams.get('householdId'));await member(db,hid,user.id);
   const result=await db.prepare(`SELECT s.id,s.initial_kind,s.created_by,s.created_at,u.name creator_name,
    p.id initial_post_id,COALESCE(rc.envelope_json,mc.envelope_json,c.envelope_json) envelope_json FROM shared_word_spaces s
-   JOIN shared_word_participants own ON own.space_id=s.id AND own.user_id=?
+   JOIN shared_word_participants own ON own.space_id=s.id AND own.user_id=? AND own.left_at IS NULL
    JOIN user u ON u.id=s.created_by
-   JOIN shared_word_posts p ON p.space_id=s.id AND p.kind IN ('prompt','journal')
+   JOIN shared_word_posts p ON p.space_id=s.id AND p.kind IN ('prompt','journal') AND p.deleted_at IS NULL
    JOIN shared_word_copies c ON c.post_id=p.id AND c.recipient_id=?
    LEFT JOIN account_migrated_copies mc ON mc.source_kind='words' AND mc.source_id=p.id AND mc.user_id=c.recipient_id AND EXISTS(SELECT 1 FROM account_key_migrations mig WHERE mig.user_id=c.recipient_id AND mig.state='complete')
     LEFT JOIN account_recovery_rotation_copies rc ON rc.source_kind='words' AND rc.source_id=p.id
      AND rc.rotation_id=(SELECT rotation_id FROM account_recovery_rotations WHERE user_id=c.recipient_id AND state='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 1)
-   WHERE s.household_id=? ORDER BY s.created_at DESC LIMIT 100`)
+   WHERE s.household_id=? AND s.deleted_at IS NULL ORDER BY s.created_at DESC LIMIT 100`)
    .bind(user.id,user.id,hid).all<{id:string,initial_kind:string,created_by:string,created_at:string,creator_name:string,initial_post_id:string,envelope_json:string}>();
   return respond({spaces:(result.results||[]).map(r=>({id:r.id,kind:r.initial_kind,createdBy:r.created_by,createdAt:r.created_at,creatorName:r.creator_name,
    initialPostId:r.initial_post_id,initialEnvelope:JSON.parse(r.envelope_json)}))});
@@ -168,12 +198,13 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const hash=await digest(sid+':'+user.id+':'+kind+':'+JSON.stringify(selected.map(uid=>[uid,copies[uid]])));
   // A successful request may lose its HTTP response. Retry with identical
   // ciphertext/IDs rather than silently creating a duplicate shared space.
-  const exists=await db.prepare(`SELECT s.household_id,s.created_by,s.initial_kind,
+  const exists=await db.prepare(`SELECT s.household_id,s.created_by,s.initial_kind,s.deleted_at,
    p.id post_id,p.body_hash FROM shared_word_spaces s
    JOIN shared_word_posts p ON p.space_id=s.id AND p.kind=s.initial_kind
    WHERE s.id=?`).bind(sid)
-   .first<{household_id:string,created_by:string,initial_kind:string,post_id:string,body_hash:string}>();
+   .first<{household_id:string,created_by:string,initial_kind:string,deleted_at:string|null,post_id:string,body_hash:string}>();
   if(exists){
+   if(exists.deleted_at)fail(409,'This shared space was removed and cannot be recreated with the same identifier.');
    if(exists.household_id===hid&&exists.created_by===user.id&&exists.initial_kind===kind&&exists.post_id===postId&&exists.body_hash===hash)
     return respond({id:sid,created:true,replayed:true});
    fail(409,'This identifier belongs to another shared space.');
@@ -183,14 +214,57 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    db.prepare('INSERT INTO shared_word_spaces(id,household_id,created_by,initial_kind,created_at) VALUES(?,?,?,?,?)').bind(sid,hid,user.id,kind,time),
    ...selected.map(uid=>db.prepare('INSERT INTO shared_word_participants(space_id,user_id,joined_at) VALUES(?,?,?)').bind(sid,uid,time)),
    ...postStatements(db,postId,sid,user.id,kind,copies,selected,time,hash),
-   ...activityStatements(db,selected,user.id,hid,sid,'shared',time)
+   ...activityStatements(db,selected,user.id,hid,sid,postId,'shared',time)
   ]);}catch{fail(409,'Could not create shared space. Refresh and retry.');}
   notifyPrivateRecipients(env,ctx,hid,selected.filter(uid=>uid!==user.id));
   return respond({id:sid,created:true},201);
  }
+ // Completed encrypted recovery history is intentionally immutable.
+ // A removed post is inaccessible in live Words, not cryptographically erased.
+ const deletePost=path.match(/^\/api\/words\/spaces\/([0-9a-f-]{36})\/posts\/([0-9a-f-]{36})$/i);
+ if(deletePost&&req.method==='DELETE'){
+  const sid=id(deletePost[1]),pid=id(deletePost[2]);
+  await spaceFor(db,sid,user.id);
+  const post=await db.prepare('SELECT author_id,kind,deleted_at FROM shared_word_posts WHERE space_id=? AND id=?')
+   .bind(sid,pid).first<{author_id:string,kind:string,deleted_at:string|null}>();
+  if(!post||post.deleted_at)fail(404,'Shared reply unavailable.');
+  if(post.author_id!==user.id)fail(403,'Only the author can remove their reply.');
+  if(post.kind!=='reflection'&&post.kind!=='discussion')fail(403,'Remove the original shared entry by removing its entire space.');
+  const when=new Date().toISOString();
+  await db.batch([
+   db.prepare('UPDATE shared_word_posts SET deleted_at=? WHERE id=? AND deleted_at IS NULL').bind(when,pid),
+   db.prepare("DELETE FROM private_word_activity WHERE source_kind='words' AND source_id=? AND post_id=?").bind(sid,pid)
+  ]);
+  return respond({removed:true,retainedEncryptedHistory:true});
+ }
+ const leave=path.match(/^\/api\/words\/spaces\/([0-9a-f-]{36})\/leave$/i);
+ if(leave&&req.method==='POST'){
+  const sid=id(leave[1]),space=await spaceFor(db,sid,user.id);
+  if(space.created_by===user.id)fail(403,'Creators must remove their shared space for everyone.');
+  const when=new Date().toISOString();
+  await db.batch([
+   db.prepare('UPDATE shared_word_participants SET left_at=? WHERE space_id=? AND user_id=? AND left_at IS NULL').bind(when,sid,user.id),
+   db.prepare("DELETE FROM private_word_activity WHERE user_id=? AND household_id=? AND source_kind='words' AND source_id=?")
+    .bind(user.id,space.household_id,sid)
+  ]);
+  return respond({left:true,retainedEncryptedHistory:true});
+ }
  const match=path.match(/^\/api\/words\/spaces\/([0-9a-f-]{36})(?:\/posts)?$/i);
  if(match){
-  const sid=id(match[1]),space=await spaceFor(db,sid,user.id),people=await participants(db,sid),ids=people.map(p=>p.id).sort();
+  const sid=id(match[1]),space=await spaceFor(db,sid,user.id);
+  if(!path.endsWith('/posts')&&req.method==='DELETE'){
+   if(space.created_by!==user.id)fail(403,'Only the creator can remove this space for everyone. You can leave it instead.');
+   const b=await body(req);
+   if(b.confirmation!=='DELETE SHARED SPACE')fail(400,'Confirm removal of the shared space.');
+   const when=new Date().toISOString();
+   await db.batch([
+    db.prepare('UPDATE shared_word_spaces SET deleted_at=? WHERE id=? AND deleted_at IS NULL').bind(when,sid),
+    db.prepare("DELETE FROM private_word_activity WHERE household_id=? AND source_kind='words' AND source_id=?")
+     .bind(space.household_id,sid)
+   ]);
+   return respond({removed:true,retainedEncryptedHistory:true});
+  }
+  const people=await participants(db,sid),ids=people.map(p=>p.id).sort();
   if(path.endsWith('/posts')&&req.method==='POST'){
    const b=await body(req),postId=id(b.id),kind=b.kind;
    if(kind!=='reflection'&&kind!=='discussion')fail(400,'Choose a journal response or discussion reply.');
@@ -202,16 +276,17 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
     fail(409,'A participant key changed. Refresh this shared space before replying.');
    const copies=checkCopies(b.copies,ids);
    const hash=await digest(sid+':'+user.id+':'+kind+':'+JSON.stringify(ids.map(uid=>[uid,copies[uid]])));
-   const prior=await db.prepare('SELECT space_id,author_id,kind,body_hash FROM shared_word_posts WHERE id=?')
-    .bind(postId).first<{space_id:string,author_id:string,kind:string,body_hash:string}>();
+   const prior=await db.prepare('SELECT space_id,author_id,kind,body_hash,deleted_at FROM shared_word_posts WHERE id=?')
+    .bind(postId).first<{space_id:string,author_id:string,kind:string,body_hash:string,deleted_at:string|null}>();
    if(prior){
+    if(prior.deleted_at)fail(409,'This reply was removed and cannot be reposted.');
     if(prior.space_id!==sid||prior.author_id!==user.id||prior.kind!==kind||prior.body_hash!==hash)fail(409,'Entry identifier belongs to another submission.');
     return respond({id:postId,accepted:true,replayed:true});
    }
    const time=new Date().toISOString();
    try{await db.batch([
     ...postStatements(db,postId,sid,user.id,kind,copies,ids,time,hash),
-    ...activityStatements(db,ids,user.id,space.household_id,sid,'reply',time)
+    ...activityStatements(db,ids,user.id,space.household_id,sid,postId,'reply',time)
    ]);}catch{fail(409,'Could not post to this space. Refresh before retrying.');}
    notifyPrivateRecipients(env,ctx,space.household_id,ids.filter(uid=>uid!==user.id));
    return respond({id:postId,accepted:true},201);
@@ -222,7 +297,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
     LEFT JOIN account_migrated_copies mc ON mc.source_kind='words' AND mc.source_id=p.id AND mc.user_id=c.recipient_id AND EXISTS(SELECT 1 FROM account_key_migrations mig WHERE mig.user_id=c.recipient_id AND mig.state='complete')
     LEFT JOIN account_recovery_rotation_copies rc ON rc.source_kind='words' AND rc.source_id=p.id
      AND rc.rotation_id=(SELECT rotation_id FROM account_recovery_rotations WHERE user_id=c.recipient_id AND state='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 1)
-    WHERE p.space_id=? ORDER BY p.created_at,p.id LIMIT 300`).bind(user.id,sid)
+    WHERE p.space_id=? AND p.deleted_at IS NULL ORDER BY p.created_at,p.id LIMIT 300`).bind(user.id,sid)
     .all<{id:string,author_id:string,kind:string,created_at:string,envelope_json:string}>();
    return respond({id:sid,kind:space.initial_kind,createdBy:space.created_by,participants:people,
     posts:(result.results||[]).map(p=>({id:p.id,authorId:p.author_id,kind:p.kind,createdAt:p.created_at,envelope:JSON.parse(p.envelope_json)}))});

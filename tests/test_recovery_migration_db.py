@@ -25,10 +25,10 @@ class RecoveryMigrationDatabase(unittest.TestCase):
         self.db.execute("INSERT INTO encrypted_messages VALUES('m','t','a','hash','now')")
         self.db.execute("INSERT INTO encrypted_message_copies VALUES('m','a','legacy-a')")
         self.db.execute("INSERT INTO encrypted_message_copies VALUES('m','b','legacy-b')")
-        self.db.execute("INSERT INTO shared_word_spaces VALUES('s','h','a','prompt','now')")
+        self.db.execute("INSERT INTO shared_word_spaces(id,household_id,created_by,initial_kind,created_at) VALUES('s','h','a','prompt','now')")
         for uid in ('a','b'):
-            self.db.execute("INSERT INTO shared_word_participants VALUES('s',?,'now')",(uid,))
-        self.db.execute("INSERT INTO shared_word_posts VALUES('p','s','a','prompt','digest','now')")
+            self.db.execute("INSERT INTO shared_word_participants(space_id,user_id,joined_at) VALUES('s',?,'now')",(uid,))
+        self.db.execute("INSERT INTO shared_word_posts(id,space_id,author_id,kind,body_hash,created_at) VALUES('p','s','a','prompt','digest','now')")
         self.db.execute("INSERT INTO shared_word_copies VALUES('p','a','old-word-a')")
         self.db.execute("INSERT INTO shared_word_copies VALUES('p','b','old-word-b')")
     def tearDown(self):

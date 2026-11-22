@@ -37,7 +37,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  const [loadingJournal,setLoadingJournal]=useState(true),[journalError,setJournalError]=useState(''),[journalBusy,setJournalBusy]=useState(false),[pendingLoad,setPendingLoad]=useState<JournalEntry|null>(null),[confirmDelete,setConfirmDelete]=useState<string|null>(null);
  const [seed,setSeed]=useState<ShareSeed|null>(null),[openSpaceId,setOpenSpaceId]=useState<string|null>(null);
  const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushPublicKey,setPushPublicKey]=useState<string|null>(null),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
- const [feedback,setFeedback]=useState('');
+ const [feedback,setFeedback]=useState(''),[pushNotice,setPushNotice]=useState('');
  const [backupMode,setBackupMode]=useState<'export'|'import'|null>(null);
  const [legacyCount,setLegacyCount]=useState(0),[migratingJournal,setMigratingJournal]=useState(false);
  const [backupPassphrase,setBackupPassphrase]=useState(''),[backupFile,setBackupFile]=useState<File|null>(null);
@@ -116,7 +116,15 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   void api<{enabled:boolean}>(`/words/push-preference?householdId=${encodeURIComponent(householdId)}`)
    .then(r=>{if(live)setPushEnabled(r.enabled);}).catch(()=>{});
   void api<{configured:boolean,subscriptionCount:number}>(`/push/status?householdId=${encodeURIComponent(householdId)}`)
-   .then(r=>{if(live)setPushReady(r.subscriptionCount>0);}).catch(()=>{});
+   .then(async r=>{
+    let thisDevice=false;
+    if(r.configured&&r.subscriptionCount>0&&'serviceWorker' in navigator&&'PushManager' in window&&
+       'Notification' in window&&Notification.permission==='granted'){
+     try{const reg=await navigator.serviceWorker.getRegistration();
+      thisDevice=!!(await reg?.pushManager.getSubscription());}catch{/* Keep device setup available. */}
+    }
+    if(live)setPushReady(thisDevice);
+   }).catch(()=>{});
   void api<{configured:boolean,publicKey:string|null}>('/push/config')
    .then(r=>{if(live)setPushPublicKey(r.configured?r.publicKey:null);}).catch(()=>{});
   void reloadActivity().catch(()=>{});
@@ -261,6 +269,16 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    await api('/push/subscribe','POST',{subscription:subscription.toJSON()});
    const pref=await api<{enabled:boolean}>('/words/push-preference','POST',{householdId,enabled:true});
    setPushReady(true);setPushEnabled(pref.enabled);
+   setPushNotice('Words notifications enabled here. Send a test to check delivery.');
+  }catch(e){setPushError(errorText(e));}
+  finally{setPushBusy(false);}
+ }
+ async function testWordsNotification(){
+  if(!pushReady||!pushEnabled)return;
+  setPushBusy(true);setPushError('');setPushNotice('');
+  try{
+   const result=await api<{accepted:number,attempted:number}>('/words/push/test','POST',{householdId});
+   setPushNotice(`The push service accepted ${result.accepted} of ${result.attempted} notification requests. If none arrives, check Carehold notification permissions and Focus on your device.`);
   }catch(e){setPushError(errorText(e));}
   finally{setPushBusy(false);}
  }
@@ -271,6 +289,38 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    setPushEnabled(r.enabled);
   }catch(e){setPushError(errorText(e));}
   finally{setPushBusy(false);}
+ }
+ async function finishSharing(spaceId:string){
+  const shared=seed;
+  let notice='Shared with your selected participants.';
+  if(shared?.kind==='journal'){
+   try{
+    if(shared.sourceEntryId){
+     const original=entries.find(item=>item.id===shared.sourceEntryId);
+     if(!original)throw new Error('Private journal entry not found. The shared space was created, but the journal label was not updated.');
+     await saveJournalEntry({id:original.id,prompt:original.prompt,text:original.text,title:original.title??'',
+      sharedAt:Date.now(),spaceId},original.revision);
+    }else{
+     // Sharing from Write creates a separate shared snapshot AND saves the
+     // author's private journal entry. Never discard an unsaved draft first.
+     await saveJournalEntry({id:editing?.id??crypto.randomUUID(),prompt:shared.prompt,text:shared.text,
+      title:shared.title?.trim()??'',sharedAt:Date.now(),spaceId},editing?.revision??0);
+     if(draft.text===shared.text&&draft.prompt===shared.prompt&&draft.title.trim()===(shared.title?.trim()??'')){
+      const cleared=await draft.discard();
+      if(cleared)setEditing(null);
+      else notice='Shared and saved privately, but the device draft could not be cleared. Please review it.';
+     }
+    }
+    await reloadJournal();
+    if(notice==='Shared with your selected participants.')notice='Shared snapshot created and your private journal entry preserved.';
+   }catch(e){
+    // Remote sharing succeeded. Never pretend it was rolled back, or
+    // discard the local draft when a private save conflicted or failed.
+    notice='Shared with your selected participants, but the private journal save needs attention: '+errorText(e);
+   }
+  }
+  setSeed(null);setOpenSpaceId(spaceId);selectTab('shared');setFeedback(notice);
+  window.dispatchEvent(new Event('carehold:activity-changed'));
  }
  return <div className="words-hub">
   <details className="words-hub-warning">
@@ -286,19 +336,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable.</strong> {keyError} Your existing local journal is preserved on this device. Never reset your account key to bypass this warning.</p>}
    {identity?.journalKey&&legacyCount>0&&<div className="recovery-gate"><strong>{legacyCount} older journal entries are stored on this device only.</strong><p>Import them into private encrypted sync without deleting the original local copies. This can be safely retried.</p><button type="button" className="button outline" disabled={migratingJournal} onClick={()=>void migrateJournal()}>{migratingJournal?'Migrating…':'Safely migrate local journal'}</button></div>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} keyError={keyError} people={people}
-    onCreated={sid=>{
-    const current=seed;setSeed(null);setOpenSpaceId(sid);selectTab('shared');
-    if(current?.kind==='journal'){
-     if(current.sourceEntryId){
-      const entry=entries.find(e=>e.id===current.sourceEntryId);
-      if(entry)void saveJournalEntry({id:entry.id,prompt:entry.prompt,text:entry.text,title:entry.title??'',sharedAt:Date.now(),spaceId:entry.spaceId??null},entry.revision)
-       .then(()=>reloadJournal()).catch(e=>setJournalError(errorText(e)));
-     }else if(draft.text===current.text&&draft.prompt===current.prompt){
-      void draft.discard().then(cleared=>{if(cleared)setEditing(null);else setJournalError('Shared, but the old device draft could not be cleared.');});
-     }
-    }
-    setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));
-   }}
+    onCreated={finishSharing}
     onCancel={()=>setSeed(null)} onRefreshPeople={()=>void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`).then(r=>{setPeople(r.people);setContactsError('');}).catch(e=>setContactsError(errorText(e)))}/>:
   tab==='explore'?<section className="words-explore" aria-label="Prompt library">
    <div className="words-hub-section-top"><div><span className="mono kicker">A GENTLE PLACE TO BEGIN</span><h2>Find the right words.</h2><p className="muted">Browse 100+ thoughtful prompts. Share one as an invitation, or use it as inspiration for your own entry.</p></div></div>
@@ -343,7 +381,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
      <button type="button" className="button dark small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}
       onClick={()=>startSharing({kind:'journal',prompt:draft.prompt,text:draft.text,title:draft.title})}><Users size={16}/> Share this entry</button>
     </div>
-    <p className="muted tiny">Saving privately creates an encrypted journal entry on this device. Sharing creates a separate encrypted snapshot visible only to explicitly selected participants. No automatic send or silent updates.</p>
+    <p className="muted tiny">Saving privately creates an encrypted journal entry on this device. Sharing also preserves a private journal copy, while sending a separate encrypted snapshot only to the participants you select. No automatic send or silent updates.</p>
    </form>
   </section>:
   tab==='journal'?<section className="words-journal-shelf" aria-label="My private journal">
@@ -412,10 +450,13 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     <strong>{ev.eventKind==='shared'?'Someone shared a prompt or journal entry':'A shared space has a new response'}</strong>
     <span className="muted tiny">Open the shared space at your own pace.</span>
     <ArrowUpRight size={17}/></button>)}</div>
-   <div className="words-push-setting"><div><h3>Quiet device notifications</h3><p className="muted tiny">Optional notifications say only "Something new is waiting in Carehold." They never include names, prompts or writing. Read status is not shared.</p></div>
-    {pushReady?<label className="words-push-choice"><input type="checkbox" checked={pushEnabled} disabled={pushBusy} onChange={e=>void setNotificationPreference(e.target.checked)}/> Notify this account about new shared writing</label>:
+   <div className="words-push-setting"><div><h3>Quiet device notifications</h3><p className="muted tiny">Words notifications are separate from medication reminders and are off until each recipient opts in. Enable on an installed iPhone Home Screen app or another push-capable browser. Alerts never include names or writing. In-app Activity works without push.</p></div>
+    {pushReady?<label className="words-push-choice"><input type="checkbox" checked={pushEnabled} disabled={pushBusy} onChange={e=>void setNotificationPreference(e.target.checked)}/> Notify my account about shared writing</label>:
      pushPublicKey?<button type="button" className="button outline small" disabled={pushBusy} onClick={()=>void registerWordNotifications()}>{pushBusy?'Enabling…':'Enable Words notifications on this device'}</button>:
      <p className="muted tiny">Device push keys are not configured here. In-app activity remains available without device notifications.</p>}
+    {pushReady&&pushEnabled&&<button type="button" className="button outline small" disabled={pushBusy} onClick={()=>void testWordsNotification()}>{pushBusy?'Sending…':'Send a test notification'}</button>}
+    {pushEnabled&&!pushReady&&pushPublicKey&&<p className="muted tiny">Words notifications may be enabled on another device, but this one has no active subscription. Enable them here to receive alerts on this device.</p>}
+    {pushNotice&&<p className="words-status" role="status">{pushNotice}</p>}
     {pushError&&<p className="messages-error" role="alert">{pushError}</p>}
    </div>
   </section>}

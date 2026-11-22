@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {ArrowLeft,ArrowUpRight,Check,MessageCircle,RotateCw,Send,Users} from 'lucide-react';
+import {ArrowLeft,ArrowUpRight,Check,MessageCircle,RotateCw,Send,Trash2,Users} from 'lucide-react';
 import {api,StaleSessionRequest} from './lib/api';
 import {sealWord,unsealWord,type WordPayload} from './lib/words-space-crypto';
 import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
@@ -16,7 +16,7 @@ type VisiblePost=SpacePost&{content:WordPayload|null};
 const message=(e:unknown)=>e instanceof Error?e.message:'Something went wrong.';
 export function ShareComposer({seed,userId,householdId,identity,keyError,people,onCreated,onCancel,onRefreshPeople}:{
  seed:ShareSeed,userId:string,householdId:string,identity:Identity|null,keyError:string,people:WordContact[],
- onCreated:(spaceId:string)=>void,onCancel:()=>void,onRefreshPeople:()=>void
+ onCreated:(spaceId:string)=>Promise<void>|void,onCancel:()=>void,onRefreshPeople:()=>void
 }){
  const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const pending=useRef<{id:string,postId:string,recipients:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
@@ -42,7 +42,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
    }
    await api('/words/spaces','POST',{id:attempt.id,postId:attempt.postId,householdId,kind:seed.kind,recipientIds:selected,copies:attempt.copies,publicKeys:attempt.publicKeys});
    pending.current=null;
-   onCreated(attempt.id);
+   await onCreated(attempt.id);
   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
   finally{setBusy(false);}
  }
@@ -130,8 +130,9 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
  const reflection=useWordsDraftVault(userId,householdId+':reflection:'+spaceId);
  const discussion=useWordsDraftVault(userId,householdId+':discussion:'+spaceId);
  const [detail,setDetail]=useState<(Omit<SpaceDetail,'posts'>&{posts:VisiblePost[]})|null>(null);
- const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]);
+ const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]),[sourceSaved,setSourceSaved]=useState(false);
  const [error,setError]=useState(''),[busy,setBusy]=useState<'reflection'|'discussion'|'save'|null>(null),[status,setStatus]=useState('');
+ const [confirmAction,setConfirmAction]=useState<{kind:'space'|'leave'|'post',id?:string}|null>(null),[removing,setRemoving]=useState(false);
  const retry=useRef<{kind:'reflection'|'discussion',text:string,id:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const lastInteraction=useRef(Date.now());
  async function load(){
@@ -142,10 +143,16 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    catch{return {...p,content:null};}
   }));
   setDetail({...r,posts});
-  try{setPrivateNotes((await (identity.journalKey
-   ?listSyncedPrivateJournal(userId,householdId,identity.journalKey)
-   :listPrivateJournal(userId,householdId))).filter(e=>e.spaceId===spaceId));}
-  catch(e){setError(message(e));}
+  try{
+   const saved=await (identity.journalKey
+    ?listSyncedPrivateJournal(userId,householdId,identity.journalKey)
+    :listPrivateJournal(userId,householdId));
+   const original=posts.find(p=>p.kind==='journal'&&p.authorId===userId)?.content;
+   setSourceSaved(saved.some(e=>(e.spaceId===spaceId&&e.title!=='Private discussion note')||
+    Boolean(original&&e.text===original.text&&e.prompt===original.prompt&&e.title===(original.title??''))));
+   setPrivateNotes(saved.filter(e=>e.spaceId===spaceId&&e.title==='Private discussion note'&&
+    !(original&&e.text===original.text&&e.prompt===original.prompt)));
+  }catch(e){setError(message(e));}
   // A missing or undecipherable entry must not silently clear this recipient's inbox.
   // This acknowledgement remains recipient-private and never reaches the sender.
   if(posts.every(p=>p.content!==null)){
@@ -176,7 +183,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
  const author=(id:string)=>detail?.participants.find(p=>p.id===id)?.name||'Participant';
  async function send(kind:'reflection'|'discussion'){
   const vault=kind==='reflection'?reflection:discussion,text=vault.text;
-  if(!identity||!detail||!vault.ready||!text.trim()||busy)return;
+  if(!identity||!detail||!vault.ready||!text.trim()||busy||removing)return;
   setBusy(kind);setError('');setStatus('');
   try{
    if(detail.participants.some(p=>!p.publicKey))throw new Error('A participant has no registered device key.');
@@ -198,7 +205,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   finally{setBusy(null);}
  }
  async function savePrivateNote(){
-  if(!discussion.ready||!discussion.text.trim()||busy)return;
+  if(!discussion.ready||!discussion.text.trim()||busy||removing)return;
   setBusy('save');setError('');setStatus('');
   try{
    if(!identity)throw new Error('Set up encryption recovery before saving private notes.');
@@ -214,6 +221,50 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   }catch(e){setError(message(e));}
   finally{setBusy(null);}
  }
+  async function restorePrivateJournal(){
+   if(!identity||!first?.content||first.kind!=='journal'||first.authorId!==userId||busy||removing)return;
+   setBusy('save');setError('');setStatus('');
+   try{
+    const saved=await (identity.journalKey
+     ?listSyncedPrivateJournal(userId,householdId,identity.journalKey)
+     :listPrivateJournal(userId,householdId));
+    const original=first.content;
+    if(saved.some(e=>(e.spaceId===spaceId&&e.title!=='Private discussion note')||
+       (e.text===original.text&&e.prompt===original.prompt&&e.title===(original.title??'')))){
+     setSourceSaved(true);setStatus('A private journal copy already exists.');
+     return;
+    }
+    const privateCopy={id:crypto.randomUUID(),prompt:original.prompt,text:original.text,
+     title:original.title??'',sharedAt:Date.now(),spaceId};
+    if(identity.journalKey)await saveSyncedPrivateJournal(userId,householdId,identity.journalKey,privateCopy);
+    else await savePrivateJournal(userId,householdId,privateCopy);
+    setSourceSaved(true);onPrivateSaved();
+    setStatus('Saved a separate private journal copy. The shared snapshot is unchanged.');
+   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
+   finally{setBusy(null);}
+  }
+  async function removeSharedContent(){
+   if(!confirmAction||removing||busy)return;
+   setRemoving(true);setError('');setStatus('');
+   try{
+    if(confirmAction.kind==='post'){
+     if(!confirmAction.id)throw new Error('Select the reply to remove.');
+     await api(`/words/spaces/${encodeURIComponent(spaceId)}/posts/${encodeURIComponent(confirmAction.id)}`,'DELETE');
+     await load();
+     setStatus('Your reply is no longer shown in this discussion. Previously received copies cannot be recalled.');
+    }else if(confirmAction.kind==='space'){
+     await api(`/words/spaces/${encodeURIComponent(spaceId)}`,'DELETE',{confirmation:'DELETE SHARED SPACE'});
+     window.dispatchEvent(new Event('carehold:activity-changed'));
+     onBack();
+    }else{
+     await api(`/words/spaces/${encodeURIComponent(spaceId)}/leave`,'POST');
+     window.dispatchEvent(new Event('carehold:activity-changed'));
+     onBack();
+    }
+    setConfirmAction(null);
+   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
+   finally{setRemoving(false);}
+  }
   return <section className="words-space-detail" aria-label="Shared prompt and discussion">
   <button type="button" className="quiet small" onClick={onBack}><ArrowLeft size={15}/> All shared spaces</button>
   {error&&<p role="alert" className="messages-error">{error}</p>}
@@ -228,6 +279,24 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
     {detail.kind==='journal'&&<div className="words-journal-quote"><span className="mono kicker">{author(first?.authorId||'')} WROTE</span><p>{first?.content?.text||'Unable to decrypt this entry on this device.'}</p></div>}
     <p className="muted tiny">Shared with {detail.participants.map(p=>p.id===userId?'you':p.name).join(', ')}. Everyone here sees posted replies, but not private drafts or whether anyone has viewed this page.</p>
    </header>
+   {detail.kind==='journal'&&first?.authorId===userId&&first.content&&!sourceSaved&&<div className="words-response-actions">
+    <button type="button" className="button outline small" disabled={!!busy||removing} onClick={()=>void restorePrivateJournal()}>
+     Save a private journal copy
+    </button>
+    <span className="muted tiny">Useful for older shares that were never saved to your journal. This does not alter the shared entry.</span>
+   </div>}
+   <div className="words-space-management">
+    <button type="button" className="quiet small" disabled={removing||!!busy} onClick={()=>setConfirmAction({kind:detail.createdBy===userId?'space':'leave'})}>
+     <Trash2 size={15}/>{detail.createdBy===userId?'Remove shared space':'Leave this shared space'}
+    </button>
+    {confirmAction&&(confirmAction.kind==='space'||confirmAction.kind==='leave')&&<div className="words-audience-confirm" role="group" aria-label="Confirm shared space removal">
+     <span>{confirmAction.kind==='space'
+      ?'Remove this shared space and all replies from everyone’s Carehold view? Any private journal entry remains. If the shared snapshot is your only copy, save it privately before removing this space. Past copies on devices and encrypted recovery history may remain.'
+      :'Leave this shared space? It will disappear from your account. Others can keep existing copies and continue without you.'}</span>
+     <button type="button" className="quiet small" disabled={removing} onClick={()=>setConfirmAction(null)}>Keep space</button>
+     <button type="button" className="button dark small" disabled={removing||!!busy} onClick={()=>void removeSharedContent()}>{removing?'Removing…':confirmAction.kind==='space'?'Remove for everyone':'Leave space'}</button>
+    </div>}
+   </div>
    <section className="words-space-discussion">
      <div className="words-hub-section-top"><div><span className="mono kicker">TALK ABOUT IT</span><h3>Discussion</h3></div><MessageCircle size={19}/></div>
      <p className="muted tiny">One place to talk together or keep a private note. Private notes are encrypted for your account and synchronized when recovery is configured; shared replies are visible to all selected participants.</p>
@@ -236,6 +305,14 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
       {board.map(note=><li key={note.id} className={note.private?'words-private-note':''}>
        <span className="mono kicker">{note.private?'PRIVATE NOTE · ONLY YOU':note.kind==='reflection'?'SHARED REFLECTION':'SHARED REPLY'} · {author(note.author)} · {new Date(note.at).toLocaleString()}</span>
        <p>{note.text}</p>
+       {!note.private&&note.author===userId&&<div className="words-response-actions">
+        <button type="button" className="quiet small" disabled={removing||!!busy} onClick={()=>setConfirmAction({kind:'post',id:note.id})}><Trash2 size={14}/> Remove my reply</button>
+       </div>}
+       {confirmAction?.kind==='post'&&confirmAction.id===note.id&&<div className="words-audience-confirm" role="group" aria-label="Confirm reply removal">
+        <span>Remove your reply from this discussion for everyone? This cannot recall content already seen or historical encrypted copies.</span>
+        <button type="button" className="quiet small" disabled={removing} onClick={()=>setConfirmAction(null)}>Keep reply</button>
+        <button type="button" className="button dark small" disabled={removing} onClick={()=>void removeSharedContent()}>{removing?'Removing…':'Remove reply'}</button>
+       </div>}
       </li>)}
      </ol>
      {reflection.ready&&reflection.text.trim()&&<div className="words-audience-confirm">
@@ -244,11 +321,11 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
        onClick={()=>discussion.setText(reflection.text)}>Copy old draft</button>
      </div>}
      <label htmlFor="words-discussion-reply">Write a reply or private note</label>
-     <textarea id="words-discussion-reply" rows={5} maxLength={2600} disabled={!discussion.ready||!!busy}
+     <textarea id="words-discussion-reply" rows={5} maxLength={2600} disabled={!discussion.ready||!!busy||removing}
       value={discussion.text} onChange={e=>{discussion.setText(e.target.value);retry.current=null;}}
       placeholder="Write here first. Decide whether to keep it private or share it below…"/>
      <div className="words-response-actions">
-      <button type="button" className="button outline small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'}
+      <button type="button" className="button outline small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||removing||discussion.status==='conflict'}
        onClick={()=>void savePrivateNote()}>{busy==='save'?'Saving…':'Post private note · only me'}</button>
       <button type="button" className="button dark small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'} onClick={()=>void send('discussion')}>
        <Send size={15}/> {busy==='discussion'?'Posting…':'Post reply · everyone'}</button>
