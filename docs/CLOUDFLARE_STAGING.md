@@ -18,6 +18,8 @@ Both databases and logs must be inspected for unexpected plaintext or access gra
 
 ## 2. Run local end-to-end testing
 
+**New-account setup is now gated in this order:** create account, add passkey, generate a CH1 recovery code, save it externally, retrieve and verify it, then complete prompts/care circle. A fresh account must not reach Today, People, Words or Messages before verifying recovery. A second-browser login requires the saved code; no automatic reset or skipped recovery step is allowed.
+
 Start two terminals:
 
 ```sh
@@ -89,7 +91,7 @@ It will:
 
 A remotely applied migration is not automatically rolled back if the subsequent Worker deployment fails. Retain the database backup and inspect the failure before retrying.
 
-Once the HTTPS origin is live, create **new fictional staging accounts** rather than copying local dev data. Test password/passkey registration, sign-out, other-browser recovery, and cross-household authorization. Verify `/api/health/ready` returns `{"ok":true,"product":"carehold"}` (or stop on HTTP 503).
+Once the HTTPS origin is live, create **new fictional staging accounts** rather than copying local dev data. Confirm mandatory passkey → recovered-key setup before creating/joining a care circle, recovery code save/re-entry, sign-out, restoration on a different real device, and cross-household authorization. Exercise lost-code replacement only in the original trusted browser, preserving local IndexedDB; test migration 0016 with fictional messages, encrypted journals and synced drafts. Verify `/api/health/ready` returns `{"ok":true,"product":"carehold"}` (or stop on HTTP 503).
 
 ## 5. Production is a separate later gate
 
