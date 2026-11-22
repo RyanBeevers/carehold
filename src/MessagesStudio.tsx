@@ -75,7 +75,7 @@ export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHan
  }
  return <section aria-label="Messages" className="messages-studio">
   <details className="messages-warning">
-   <summary><strong>Fictional messages only.</strong> Do not send confidential family, medical, or therapeutic content. <span className="messages-warning-more">Why?</span></summary>
+   <summary><span className="messages-warning-message"><strong>Fictional messages only.</strong> Do not send confidential family, medical, or therapeutic content.</span><span className="messages-warning-more">Why?</span></summary>
    <p>Security and minor/privacy reviews are still pending. Messages are encrypted in the browser, but recipient keys are not independently verified. New-account recovery and staged original-browser migration are experimental. Secure independent device revocation is unfinished.</p>
   </details>
   {!key&&<MessageRecoveryGate userId={userId} onReady={setKey} onError={setError}/>}
