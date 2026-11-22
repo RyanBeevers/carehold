@@ -9,12 +9,12 @@
 ## 0 — Prepare and verify once
 
 ```bash
-git switch feat/carehold-mvp-foundation
-git pull --ff-only
-npm install
-npm run db:local
+git switch main
+git pull --ff-only origin main
+npm install --no-audit --no-fund
 npm run verify:pre-e2e
 npm run db:backup:local
+npm run db:local
 ```
 
 The last two commands verify the source and create a private local D1 SQL export. The export is **not encrypted** and does **not** include the browser's private journal/key vault. It must remain out of Git and public cloud locations. If a command fails, record its terminal output and stop.
@@ -22,6 +22,20 @@ The last two commands verify the source and create a private local D1 SQL export
 Open **two terminals**: run `npm run dev:worker` and `npm run dev`, then browse **http://localhost:5173**. Use the exact origin for all passkey operations. Two local browser profiles (or normal and private windows) can connect to the same local API for local E2E tests, but they have separate per-account device keys and browser storage.
 
 Test with at least **three fictional accounts**: A (owner and journal sender), B (selected recipient), C (household member intentionally *not* selected to one shared journal). Each account must enroll a passkey and open Words once to register its device key. Keep a separate fictional-only care circle for cross-household isolation.
+
+## 0a — Household security readiness (new)
+
+Read [HOUSEHOLD_PILOT_SECURITY.md](HOUSEHOLD_PILOT_SECURITY.md) before the final multi-account acceptance pass.
+
+- [ ] Words and Messages have no persistent fictional-only banner. Actual encryption/recovery errors remain visible and blocking.
+- [ ] Each account opens Settings → Encrypted data recovery and displays its public verification code. Compare the complete code face-to-face before first sharing.
+- [ ] A→B direct and shared-space writing succeeds, and only the intended recipients can decrypt it; no implicit household-owner/caregiver access.
+- [ ] A subsequent unexpected B public-key change fails closed **before** encryption/sending in all three flows: new shared space, reply, direct message. Do not overwrite a live encryption identity for this test: use controlled fixtures and isolated data.
+- [ ] The sender sees both fingerprints and must explicitly approve after comparing with B's Settings code. Cancel does not approve, and a stale previously recorded key cannot be silently overwritten.
+- [ ] Device browser storage disabled: sending fails without creating a shared entry or silently deleting the private draft.
+- [ ] First-use key history is scoped to exact signed-in account, household and recipient; user-switch on a shared browser does not reuse another account's trust pin.
+- [ ] Simulate a legitimate restored or rotated B key, verify explicitly, and then confirm sending works again; previously received ciphertext and existing private drafts are preserved.
+- [ ] Staging static assets expose the existing strict Content Security Policy, no-referrer, nosniff and noindex headers without breaking WebAuthn, icons, app navigation or push notifications.
 
 ## 1 — Authentication, circle and access
 
