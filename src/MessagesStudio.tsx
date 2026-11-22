@@ -74,7 +74,10 @@ export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHan
   finally{setBusy(false);}
  }
  return <section aria-label="Messages" className="messages-studio">
-  <div className="messages-warning"><strong>Fictional messages only — security review pending.</strong><p>Messages are encrypted in the browser, but recipient keys are not independently verified. New-account recovery and staged original-browser migration are experimental. Secure independent device revocation and clinical/minor-specific review are still outstanding. Do not use confidential family, medical, or therapeutic content.</p></div>
+  <details className="messages-warning">
+   <summary><strong>Fictional messages only.</strong> Do not send confidential family, medical, or therapeutic content. <span className="messages-warning-more">Why?</span></summary>
+   <p>Security and minor/privacy reviews are still pending. Messages are encrypted in the browser, but recipient keys are not independently verified. New-account recovery and staged original-browser migration are experimental. Secure independent device revocation is unfinished.</p>
+  </details>
   {!key&&<MessageRecoveryGate userId={userId} onReady={setKey} onError={setError}/>}
   {error&&<p role="alert" className="messages-error">{error}</p>}
   {busy&&!key&&<p role="status">Preparing this device for fictional messaging…</p>}
