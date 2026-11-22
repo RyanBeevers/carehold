@@ -112,6 +112,15 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
   const existing=await db.prepare('SELECT revoked_at FROM trusted_devices WHERE user_id=? AND device_id=?')
    .bind(user.id,deviceId).first<{revoked_at:string|null}>();
   if(existing?.revoked_at)fail(403,'This device was removed. Restore on a different trusted device.');
+  // Possession of the shared account key must not allow a revoked phone to
+  // invent another UUID and silently re-enroll while a trusted device exists.
+  const active=await db.prepare('SELECT COUNT(*) AS n FROM trusted_devices WHERE user_id=? AND revoked_at IS NULL AND account_public_jwk=?')
+   .bind(user.id,current.encoded).first<{n:number}>();
+  if(!existing&&(active?.n??0)>0){
+   const approval=await db.prepare("SELECT id FROM trusted_device_requests WHERE user_id=? AND device_id=? AND state='approved' AND account_public_jwk=? AND expires_at>? LIMIT 1")
+    .bind(user.id,deviceId,current.encoded,now()).first();
+   if(!approval)fail(403,'Approve this device from another trusted device, or rotate your recovery key if those devices were lost.');
+  }
   await verifyProof(db,user.id,deviceId,b.proof);
   await db.prepare(`INSERT INTO trusted_devices(user_id,device_id,label,account_public_jwk,created_at,last_seen_at)
     VALUES(?,?,?,?,?,?)
@@ -124,9 +133,10 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
   const b=await body(req),requestId=id(b.id),deviceId=id(b.deviceId),label=str(b.label,1,60).trim();
   if(!label||!validPublicJwk(b.publicKey))fail(400,'Invalid device approval request.');
   const current=await currentKey(db,user.id),candidate=JSON.stringify(b.publicKey);
-  const removed=await db.prepare('SELECT 1 FROM trusted_devices WHERE user_id=? AND device_id=? AND revoked_at IS NOT NULL')
-   .bind(user.id,deviceId).first();
-  if(removed)fail(403,'A previously removed device cannot silently re-enroll.');
+  const enrolled=await db.prepare('SELECT revoked_at FROM trusted_devices WHERE user_id=? AND device_id=?')
+   .bind(user.id,deviceId).first<{revoked_at:string|null}>();
+  if(enrolled?.revoked_at)fail(403,'A previously removed device cannot silently re-enroll.');
+  if(enrolled)fail(409,'This device is already enrolled; reload your existing Carehold session.');
   const existing=await db.prepare('SELECT * FROM trusted_device_requests WHERE user_id=? AND id=?')
    .bind(user.id,requestId).first<RequestRow>();
   if(existing){
