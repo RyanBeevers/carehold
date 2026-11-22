@@ -55,22 +55,24 @@ async function challenge(db:D1Database,userId:string,deviceId:string){
  const prior=await db.prepare('SELECT revoked_at FROM trusted_devices WHERE user_id=? AND device_id=?')
   .bind(userId,deviceId).first<{revoked_at:string|null}>();
  if(prior?.revoked_at)fail(403,'A removed device cannot rejoin with the same device identity.');
- const proof=rnd();
+ const pending=await db.prepare('SELECT COUNT(*) AS n FROM trusted_device_challenges WHERE user_id=? AND expires_at>?')
+  .bind(userId,now()).first<{n:number}>();
+ if((pending?.n??0)>=20)fail(429,'Too many outstanding device checks. Retry after older checks expire.');
+ const proof=rnd(),challengeId=crypto.randomUUID();
  const ciphertext=await seal({kind:'message',text:proof},current.key,'carehold-trusted-device-register',deviceId,userId);
- await db.prepare(`INSERT INTO trusted_device_challenges(user_id,device_id,proof_hash,expires_at) VALUES(?,?,?,?)
- ON CONFLICT(user_id,device_id) DO UPDATE SET proof_hash=excluded.proof_hash,expires_at=excluded.expires_at`)
-  .bind(userId,deviceId,await sha(proof),now()+120_000).run();
- return {envelope:ciphertext,accountPublicKey:current.key};
+ await db.prepare('INSERT INTO trusted_device_challenges(challenge_id,user_id,device_id,proof_hash,expires_at) VALUES(?,?,?,?,?)')
+  .bind(challengeId,userId,deviceId,await sha(proof),now()+120_000).run();
+ return {envelope:ciphertext,accountPublicKey:current.key,challengeId};
 }
-async function verifyProof(db:D1Database,userId:string,deviceId:string,proof:unknown):Promise<void>{
- if(typeof proof!=='string')return fail(403,'Current-device verification required.');
- if(!/^[A-Za-z0-9_-]{43}$/.test(proof))return fail(403,'Current-device verification required.');
- const row=await db.prepare('SELECT proof_hash,expires_at FROM trusted_device_challenges WHERE user_id=? AND device_id=?')
-  .bind(userId,deviceId).first<{proof_hash:string,expires_at:number}>();
+async function verifyProof(db:D1Database,userId:string,deviceId:string,proof:unknown,challengeId:unknown):Promise<void>{
+ if(typeof proof!=='string'||typeof challengeId!=='string')return fail(403,'Current-device verification required.');
+ if(!/^[A-Za-z0-9_-]{43}$/.test(proof)||!UUID.test(challengeId))return fail(403,'Current-device verification required.');
+ const row=await db.prepare('SELECT proof_hash,expires_at FROM trusted_device_challenges WHERE challenge_id=? AND user_id=? AND device_id=?')
+  .bind(challengeId,userId,deviceId).first<{proof_hash:string,expires_at:number}>();
  if(!row)return fail(403,'Device verification expired or incorrect.');
  if(row.expires_at<now()||row.proof_hash!==await sha(proof))return fail(403,'Device verification expired or incorrect.');
- const consumed=await db.prepare('DELETE FROM trusted_device_challenges WHERE user_id=? AND device_id=? AND proof_hash=? AND expires_at>=?')
-  .bind(userId,deviceId,row.proof_hash,now()).run();
+ const consumed=await db.prepare('DELETE FROM trusted_device_challenges WHERE challenge_id=? AND user_id=? AND device_id=? AND proof_hash=? AND expires_at>=?')
+  .bind(challengeId,userId,deviceId,row.proof_hash,now()).run();
  if(consumed.meta.changes!==1)fail(409,'Device verification was already used.');
 }
 /** Account-key decryption alone is not device authority: a revoked device
@@ -78,11 +80,11 @@ async function verifyProof(db:D1Database,userId:string,deviceId:string,proof:unk
  * ECDSA signature over this challenge and the exact requested action.
  */
 async function signedProof(db:D1Database,userId:string,deviceId:string,proof:unknown,signature:unknown,
- approvalPublic:PublicKey,action:DeviceSignatureAction,targetId:string):Promise<void>{
+ challengeId:unknown,approvalPublic:PublicKey,action:DeviceSignatureAction,targetId:string):Promise<void>{
  if(typeof proof!=='string'||typeof signature!=='string')fail(403,'A trusted-device signature is required.');
  if(!await verifyDeviceAuthorization(approvalPublic,signature,userId,deviceId,proof,action,targetId))
   fail(403,'This device cannot authorize the requested action.');
- await verifyProof(db,userId,deviceId,proof);
+ await verifyProof(db,userId,deviceId,proof,challengeId);
 }
 async function requestRow(db:D1Database,userId:string,requestId:string):Promise<RequestRow>{
  const row=await db.prepare('SELECT * FROM trusted_device_requests WHERE id=? AND user_id=?').bind(requestId,userId).first<RequestRow>();
@@ -137,7 +139,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
     .bind(user.id,deviceId,current.encoded,now()).first();
    if(!approval)fail(403,'Approve this device from another trusted device, or rotate your recovery key if those devices were lost.');
   }
-  await signedProof(db,user.id,deviceId,b.proof,b.signature,approvalPublic,'enroll',deviceId);
+  await signedProof(db,user.id,deviceId,b.proof,b.signature,b.challengeId,approvalPublic,'enroll',deviceId);
   await db.prepare(`INSERT INTO trusted_devices(user_id,device_id,label,account_public_jwk,approval_public_jwk,created_at,last_seen_at)
     VALUES(?,?,?,?,?,?,?)
     ON CONFLICT(user_id,device_id) DO UPDATE SET label=excluded.label,last_seen_at=excluded.last_seen_at,
@@ -187,7 +189,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    if(approver===row.device_id)fail(403,'A new device cannot approve itself.');
    if(row.account_public_jwk!==current.encoded||row.state!=='pending')fail(409,'Request is no longer awaiting approval.');
    if(!validTransferEnvelope(b.envelope))fail(400,'Invalid encrypted device transfer.');
-   await signedProof(db,user.id,approver,b.proof,b.signature,JSON.parse(approverDevice.approval_public_jwk) as PublicKey,'approve',row.id);
+   await signedProof(db,user.id,approver,b.proof,b.signature,b.challengeId,JSON.parse(approverDevice.approval_public_jwk) as PublicKey,'approve',row.id);
    const update=await db.prepare(`UPDATE trusted_device_requests SET state='approved',ciphertext_json=?,approved_by_device_id=?,approved_at=?
     WHERE id=? AND user_id=? AND state='pending' AND expires_at>? AND account_public_jwk=?`)
     .bind(JSON.stringify(b.envelope),approver,iso(),row.id,user.id,now(),current.encoded).run();
@@ -198,7 +200,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    if(row.state!=='approved'||row.device_id!==id(b.deviceId))fail(409,'Device approval has not completed.');
    const current=await currentKey(db,user.id);
    const completingDevice=await activeDevice(db,user.id,row.device_id,current.encoded);
-   await signedProof(db,user.id,row.device_id,b.proof,b.signature,JSON.parse(completingDevice.approval_public_jwk) as PublicKey,'complete',row.id);
+   await signedProof(db,user.id,row.device_id,b.proof,b.signature,b.challengeId,JSON.parse(completingDevice.approval_public_jwk) as PublicKey,'complete',row.id);
    const updated=await db.prepare("UPDATE trusted_device_requests SET state='consumed',consumed_at=?,ciphertext_json=NULL WHERE id=? AND user_id=? AND state='approved'")
     .bind(iso(),row.id,user.id).run();
    if(updated.meta.changes!==1)fail(409,'Approval already completed.');
@@ -219,7 +221,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    .bind(user.id,target).first<{revoked_at:string|null}>();
   if(!existing)return fail(404,'Device unavailable.');
   if(existing.revoked_at)return json({revoked:true,requiresEncryptionRotation:true});
-  await signedProof(db,user.id,currentDevice,b.proof,b.signature,JSON.parse(authorizedDevice.approval_public_jwk) as PublicKey,'revoke',target);
+  await signedProof(db,user.id,currentDevice,b.proof,b.signature,b.challengeId,JSON.parse(authorizedDevice.approval_public_jwk) as PublicKey,'revoke',target);
   await db.batch([
    db.prepare('UPDATE trusted_devices SET revoked_at=? WHERE user_id=? AND device_id=? AND revoked_at IS NULL').bind(iso(),user.id,target),
    db.prepare("UPDATE trusted_device_requests SET state='cancelled',ciphertext_json=NULL WHERE user_id=? AND device_id=? AND state IN ('pending','approved')").bind(user.id,target)
