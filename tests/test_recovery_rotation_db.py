@@ -134,7 +134,7 @@ class RecoveryRotationDatabase(unittest.TestCase):
         self.db.execute("INSERT INTO encrypted_messages VALUES('m2','t','b','digest2','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO encrypted_message_copies VALUES('m2','a','incoming')")
-        self.db.execute("INSERT INTO shared_word_posts VALUES('p2','s','b','reply','digest2','now')")
+        self.db.execute("INSERT INTO shared_word_posts VALUES('p2','s','b','discussion','digest2','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO shared_word_copies VALUES('p2','a','incoming')")
 
