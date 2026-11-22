@@ -130,7 +130,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
  const reflection=useWordsDraftVault(userId,householdId+':reflection:'+spaceId);
  const discussion=useWordsDraftVault(userId,householdId+':discussion:'+spaceId);
  const [detail,setDetail]=useState<(Omit<SpaceDetail,'posts'>&{posts:VisiblePost[]})|null>(null);
- const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]);
+ const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]),[sourceSaved,setSourceSaved]=useState(false);
  const [error,setError]=useState(''),[busy,setBusy]=useState<'reflection'|'discussion'|'save'|null>(null),[status,setStatus]=useState('');
  const [confirmAction,setConfirmAction]=useState<{kind:'space'|'leave'|'post',id?:string}|null>(null),[removing,setRemoving]=useState(false);
  const retry=useRef<{kind:'reflection'|'discussion',text:string,id:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
@@ -143,10 +143,15 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    catch{return {...p,content:null};}
   }));
   setDetail({...r,posts});
-  try{setPrivateNotes((await (identity.journalKey
-   ?listSyncedPrivateJournal(userId,householdId,identity.journalKey)
-   :listPrivateJournal(userId,householdId))).filter(e=>e.spaceId===spaceId));}
-  catch(e){setError(message(e));}
+  try{
+   const saved=await (identity.journalKey
+    ?listSyncedPrivateJournal(userId,householdId,identity.journalKey)
+    :listPrivateJournal(userId,householdId));
+   const original=posts.find(p=>p.kind==='journal'&&p.authorId===userId)?.content;
+   setSourceSaved(saved.some(e=>(e.spaceId===spaceId&&e.title!=='Private discussion note')||
+    Boolean(original&&e.text===original.text&&e.prompt===original.prompt&&e.title===(original.title??''))));
+   setPrivateNotes(saved.filter(e=>e.spaceId===spaceId&&e.title==='Private discussion note'));
+  }catch(e){setError(message(e));}
   // A missing or undecipherable entry must not silently clear this recipient's inbox.
   // This acknowledgement remains recipient-private and never reaches the sender.
   if(posts.every(p=>p.content!==null)){
@@ -215,6 +220,28 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   }catch(e){setError(message(e));}
   finally{setBusy(null);}
  }
+  async function restorePrivateJournal(){
+   if(!identity||!first?.content||first.kind!=='journal'||first.authorId!==userId||busy||removing)return;
+   setBusy('save');setError('');setStatus('');
+   try{
+    const saved=await (identity.journalKey
+     ?listSyncedPrivateJournal(userId,householdId,identity.journalKey)
+     :listPrivateJournal(userId,householdId));
+    const original=first.content;
+    if(saved.some(e=>(e.spaceId===spaceId&&e.title!=='Private discussion note')||
+       (e.text===original.text&&e.prompt===original.prompt&&e.title===(original.title??'')))){
+     setSourceSaved(true);setStatus('A private journal copy already exists.');
+     return;
+    }
+    const privateCopy={id:crypto.randomUUID(),prompt:original.prompt,text:original.text,
+     title:original.title??'',sharedAt:Date.now(),spaceId};
+    if(identity.journalKey)await saveSyncedPrivateJournal(userId,householdId,identity.journalKey,privateCopy);
+    else await savePrivateJournal(userId,householdId,privateCopy);
+    setSourceSaved(true);onPrivateSaved();
+    setStatus('Saved a separate private journal copy. The shared snapshot is unchanged.');
+   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
+   finally{setBusy(null);}
+  }
   async function removeSharedContent(){
    if(!confirmAction||removing||busy)return;
    setRemoving(true);setError('');setStatus('');
@@ -251,6 +278,12 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
     {detail.kind==='journal'&&<div className="words-journal-quote"><span className="mono kicker">{author(first?.authorId||'')} WROTE</span><p>{first?.content?.text||'Unable to decrypt this entry on this device.'}</p></div>}
     <p className="muted tiny">Shared with {detail.participants.map(p=>p.id===userId?'you':p.name).join(', ')}. Everyone here sees posted replies, but not private drafts or whether anyone has viewed this page.</p>
    </header>
+   {detail.kind==='journal'&&first?.authorId===userId&&first.content&&!sourceSaved&&<div className="words-response-actions">
+    <button type="button" className="button outline small" disabled={!!busy||removing} onClick={()=>void restorePrivateJournal()}>
+     Save a private journal copy
+    </button>
+    <span className="muted tiny">Useful for older shares that were never saved to your journal. This does not alter the shared entry.</span>
+   </div>}
    <div className="words-space-management">
     <button type="button" className="quiet small" disabled={removing||!!busy} onClick={()=>setConfirmAction({kind:detail.createdBy===userId?'space':'leave'})}>
      <Trash2 size={15}/>{detail.createdBy===userId?'Remove shared space':'Leave this shared space'}
