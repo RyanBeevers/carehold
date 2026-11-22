@@ -20,11 +20,20 @@ async function keyProof(userId:string,identity:Identity,deviceId:string):Promise
  if(clear.kind!=='message'||!/^[A-Za-z0-9_-]{43}$/.test(clear.text))throw new Error('Invalid device proof.');
  return clear.text;
 }
-export async function enrollLocalTrustedDevice(userId:string,identity:Identity):Promise<void>{
- if(!identity.journalKey)throw new Error('Restore encrypted writing before registering this device.');
- const record=await localTrustedDevice(userId);
- const proof=await keyProof(userId,identity,record.id);
- await api('/trusted-devices/enroll','POST',{deviceId:record.id,label:record.name,proof});
+const enrollmentInFlight=new Map<string,Promise<void>>();
+export function enrollLocalTrustedDevice(userId:string,identity:Identity):Promise<void>{
+ const current=enrollmentInFlight.get(userId);
+ if(current)return current;
+ // StrictMode and multiple mounted Settings views must not invalidate each
+ // other's single-use server proof by generating competing challenges.
+ const task=(async()=>{
+  if(!identity.journalKey)throw new Error('Restore encrypted writing before registering this device.');
+  const record=await localTrustedDevice(userId);
+  const proof=await keyProof(userId,identity,record.id);
+  await api('/trusted-devices/enroll','POST',{deviceId:record.id,label:record.name,proof});
+ })().finally(()=>{enrollmentInFlight.delete(userId);});
+ enrollmentInFlight.set(userId,task);
+ return task;
 }
 export async function getTrustedDeviceDirectory():Promise<DeviceDirectory>{
  return api<DeviceDirectory>('/trusted-devices');
