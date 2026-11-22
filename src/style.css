@@ -547,3 +547,18 @@
  .recovery-onboarding .recovery-gate{padding:16px}
  .recovery-onboarding .recovery-gate .button{max-width:100%;white-space:normal;text-align:center}
 }
+
+
+/* iOS Safari zooms focused controls when their rendered font is below 16px.
+   Keep touch input readable without blocking intentional pinch-to-zoom. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px !important; /* Overrides older component-specific font shorthands. */
+  }
+  button,
+  a {
+    touch-action: manipulation; /* Avoid double-tap zoom; preserve pinch zoom. */
+  }
+}
