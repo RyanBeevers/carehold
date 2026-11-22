@@ -25,6 +25,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
  const db=env.DB,member=await db.prepare('SELECT 1 FROM household_members WHERE household_id=? AND user_id=?')
   .bind(hid,user.id).first();
  if(!member)fail(404,'Draft unavailable.');
+ if(req.method!=='GET'&&await db.prepare("SELECT 1 FROM account_recovery_rotations WHERE user_id=? AND state='staged'").bind(user.id).first())
+  fail(409,'Encryption recovery-code replacement is in progress. The old draft is preserved; finish or cancel rotation before editing.');
  if(req.method==='GET'){
   const row=await db.prepare('SELECT revision,iv,ciphertext,updated_at,deleted_at FROM private_draft_sync WHERE user_id=? AND household_id=? AND scope_id=?')
    .bind(user.id,hid,scope).first<{revision:number,iv:string,ciphertext:string,updated_at:number,deleted_at:number|null}>();
