@@ -89,8 +89,14 @@ test('editing on mobile refreshes idle timers while server session stays checked
 });
 
 test('Today and administration history both allow authorized factual corrections',()=>{
- const today=app.slice(app.indexOf("page==='today'&&"),app.indexOf("page==='people'&&"));
- const people=app.slice(app.indexOf("page==='people'&&"),app.indexOf("page==='words'&&"));
+ // Match the JSX page-rendering boundaries, not earlier page checks in hooks.
+ const todayStart=app.indexOf("{page==='today'&&<><PageTitle");
+ const peopleStart=app.indexOf("{page==='people'&&<><PageTitle");
+ assert.ok(todayStart>=0&&peopleStart>todayStart,'Today and People render blocks must exist in order');
+ const today=app.slice(todayStart,peopleStart);
+ const wordsStart=app.indexOf("{page==='words'&&<><PageTitle");
+ assert.ok(wordsStart>peopleStart,'Words render block must follow People');
+ const people=app.slice(peopleStart,wordsStart);
  assert.match(today,/e\.canRecordDose&&<div className="ledger-record-buttons">/);
  assert.match(today,/onClick=\{\(\)=>beginCorrection\(e\.event!\)\}/);
  assert.match(today,/onClick=\{\(\)=>beginCorrection\(e\.event!,'later'\)\}/);
