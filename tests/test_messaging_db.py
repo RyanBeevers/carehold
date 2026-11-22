@@ -13,7 +13,7 @@ class DirectMessageIntegrity(unittest.TestCase):
             self.db.execute("INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES(?,?,?,0,1,1)",(uid,uid,uid+'@test.invalid'))
         self.db.execute("INSERT INTO households VALUES('h','Test','America/New_York','a','now')")
         for uid,role in [('a','owner'),('b','member')]:
-            self.db.execute("INSERT INTO household_members VALUES('h',?,?, 'now')",(uid,role))
+            self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h',?,?, 'now')",(uid,role))
         for uid in ('a','b'):
             self.db.execute("INSERT INTO message_device_keys VALUES(?,?,'now')",(uid,'{"kty":"EC"}'))
         self.db.execute("INSERT INTO direct_threads VALUES('t','h','a:b','a','now')")
@@ -41,7 +41,7 @@ class DirectMessageIntegrity(unittest.TestCase):
         self.assertEqual(self.db.execute(sql,('a','a','t')).fetchone(),('t',))
         self.assertFalse(self.db.execute(sql,('outsider','outsider','t')).fetchone())
         # Explicit thread membership still wins over a new household owner role.
-        self.db.execute("INSERT INTO household_members VALUES('h','outsider','owner','later')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h','outsider','owner','later')")
         self.assertFalse(self.db.execute(sql,('outsider','outsider','t')).fetchone())
         self.db.execute("DELETE FROM household_members WHERE household_id='h' AND user_id='b'")
         self.assertFalse(self.db.execute(sql,('b','b','t')).fetchone())
@@ -49,7 +49,7 @@ class DirectMessageIntegrity(unittest.TestCase):
         self.db.execute("UPDATE direct_threads SET pair_key='revoked:'||id WHERE household_id='h' AND id IN (SELECT thread_id FROM direct_thread_members WHERE user_id='b')")
         self.db.execute("DELETE FROM direct_thread_members WHERE user_id='b'")
         self.db.execute("DELETE FROM household_members WHERE user_id='b'")
-        self.db.execute("INSERT INTO household_members VALUES('h','b','member','later')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h','b','member','later')")
         self.assertFalse(self.db.execute("SELECT 1 FROM direct_thread_members WHERE thread_id='t' AND user_id='b'").fetchone())
         self.db.execute("INSERT INTO direct_threads VALUES('new','h','a:b','a','later')")
         self.assertEqual(self.db.execute("SELECT pair_key FROM direct_threads WHERE id='t'").fetchone()[0],'revoked:t')
