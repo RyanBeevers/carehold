@@ -29,3 +29,21 @@ test('journal push is a separate explicit preference from medication reminders',
  assert.doesNotMatch(section,/\/push\/preference/);
  assert.match(section,/\/push\/subscribe/);
 });
+
+test('Words and Messages show compact, keyboard-accessible pilot limits with details available',()=>{
+ const messages=readFileSync(new URL('../src/MessagesStudio.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
+ assert.match(hub,/<details className="words-hub-warning">/);
+ assert.match(hub,/<summary><LockKeyhole/);
+ assert.match(hub,/Fictional writing only/);
+ assert.match(hub,/Do not enter confidential family, health or therapeutic information/);
+ assert.match(hub,/Independent device revocation is unfinished/);
+ assert.match(messages,/<details className="messages-warning">/);
+ assert.match(messages,/Fictional messages only/);
+ assert.match(messages,/Do not send confidential family, medical, or therapeutic content/);
+ assert.match(messages,/recipient keys are not independently verified/);
+ assert.match(css,/\.words-hub-warning summary:focus-visible/);
+ assert.match(css,/\.messages-warning summary:focus-visible/);
+ assert.doesNotMatch(hub,/<div className="words-hub-warning"/);
+ assert.doesNotMatch(messages,/<div className="messages-warning"/);
+});
