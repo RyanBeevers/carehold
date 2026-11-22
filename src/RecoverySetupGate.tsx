@@ -50,8 +50,8 @@ export function RecoverySetupGate({userId,onVerified,onSignOut}:{
    <button type="button" className="quiet small" onClick={onSignOut}>Sign out</button></header>
   <main className="onboard-main">
    <div className="eyebrow"><span className="signal"/> 03 / KEEP YOUR WRITING SAFE</div>
-   <h1>Your recovery<br/><em>belongs to you.</em></h1>
-   <p>Your passkey signs you in. Your separate recovery code is what restores encrypted messages, Words and synchronized private writing on another phone or browser.</p>
+   <h1>Keep your writing<br/><em>within reach.</em></h1>
+   <p>Carehold handles encryption while you write. You'll save one backup code in your password manager so you can recover your words if you replace or lose your phone. You won't need it for everyday sharing.</p>
    {state==='checking'&&<p role="status">Checking secure recovery setup…</p>}
    {(state==='fresh'||state==='restore')&&<MessageRecoveryGate key={userId+':'+state} userId={userId} onReady={onRecovered}/>}
    {state==='legacy'&&<><p role="status">Your account has an older encryption key. It must be upgraded from its original browser without deleting previous messages.</p>
@@ -61,7 +61,10 @@ export function RecoverySetupGate({userId,onVerified,onSignOut}:{
     <p role="alert">{error||'This account has an encryption identity this browser cannot safely replace. Return to the original browser, or restore with its saved recovery code. No data has been deleted.'}</p>
     <button type="button" className="button outline" onClick={()=>setCheckNonce(n=>n+1)}>Retry recovery check</button>
    </div>}
-   <p className="fine-print">Save the one-time CH1- code outside this browser, then retrieve and re-enter it to finish setup. Never send it to another household member. Carehold cannot automatically save it to Apple Passwords. Keep this code separate from your sign-in password and do not clear existing browser data before recovery has been tested.</p>
+   <details className="recovery-storage-alternatives">
+    <summary>Why do I need a separate backup?</summary>
+    <p>Save the one-time CH1- code outside this browser, then retrieve and re-enter it to finish setup. Your passkey signs you in, but does not currently restore encryption keys by itself. Keep this backup private. Never send it to household members, and don't clear your browser data before recovery works on another device.</p>
+   </details>
   </main>
  </div>;
 }
