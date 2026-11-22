@@ -38,6 +38,8 @@ test('approvals require an active previously enrolled device and recipient-bound
  assert.match(routes,/await verifyProof\(db,user\.id,approver,b\.proof\)/);
  assert.match(routes,/validTransferEnvelope\(b\.envelope\)/);
  assert.match(routes,/state='pending' AND expires_at>\?/);
+ assert.match(routes,/ciphertext_json=NULL WHERE user_id=\? AND expires_at<\?/);
+ assert.match(routes,/DELETE FROM trusted_device_challenges WHERE user_id=\? AND expires_at<\?/);
  assert.match(client,/await readTrustedRecoveryCode\(userId,identity\.publicKey\)/);
  assert.match(client,/await openMessageRecoveryIdentity\(userId,secret,recoveryEnvelope\)/);
  assert.match(client,/sealTransferCode\(userId,request\.id,request\.publicKey,identity\.publicKey,secret\)/);
