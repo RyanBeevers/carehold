@@ -7,6 +7,8 @@ import {sealWord,unsealWord} from './lib/words-space-crypto';
 import {createMessageRecoveryIdentity,openMessageRecoveryIdentity,
  type MessageRecoveryEnvelope,type NewRecoveryIdentity} from './lib/message-recovery';
 import {RecoveryCodeSaveGuide,RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
+import {saveTrustedRecoveryCode} from './lib/trusted-device-vault';
+import {enrollLocalTrustedDevice} from './lib/trusted-device-client';
 import {reencryptSyncedJournalEntry,verifyStagedSyncedJournalEntry} from './lib/synced-private-journal';
 import {draftScopeToken,reencryptSyncedDraft,verifyStagedSyncedDraft} from './lib/recoverable-drafts';
 
@@ -155,6 +157,18 @@ export function RecoveryCodeRotation({userId,onComplete}:{userId:string,onComple
    throw new Error('The server has not committed the replacement key. Preserve original browser and saved code.');
   await storeRotatedMessageIdentity(userId,old,next);
   await clearPendingRecoveryEnvelope(userId,'rotation').catch(()=>{});
+  // A completed account-key rotation invalidates this device's old approval escrow.
+  // Re-enroll it with the new recovery code if that code is available here.
+  const freshCode=newIdentity?.recoveryCode??code.trim();
+  if(freshCode){
+   try{
+    const recovery=await api<{configured:boolean,envelope:MessageRecoveryEnvelope|null}>('/messages/recovery');
+    if(recovery.envelope){
+     await saveTrustedRecoveryCode(userId,freshCode,recovery.envelope);
+     await enrollLocalTrustedDevice(userId,next);
+    }
+   }catch{/* Key rotation is committed; manual CH1 recovery remains authoritative. */}
+  }
   setNewIdentity(null);setPendingEnvelope(null);setCode('');setMode('done');
   window.dispatchEvent(new CustomEvent('carehold:recovery-ready',{detail:{userId}}));
   onComplete();
