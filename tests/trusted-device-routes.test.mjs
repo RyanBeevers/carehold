@@ -25,7 +25,8 @@ test('all trusted-device endpoints are authenticated and gated by an enrolled pa
 
 test('new devices prove they possess the correct account private key before joining',()=>{
  assert.match(routes,/await seal\(\{kind:'message',text:proof\},current\.key/);
- assert.match(routes,/await verifyProof\(db,user\.id,deviceId,b\.proof\)/);
+ assert.match(routes,/await signedProof\(db,user\.id,deviceId,b\.proof,b\.signature,approvalPublic,'enroll',deviceId\)/);
+ assert.match(routes,/trusted_devices\.approval_public_jwk=excluded\.approval_public_jwk/);
  assert.match(routes,/SELECT COUNT\(\*\) AS n FROM trusted_devices WHERE user_id=\? AND revoked_at IS NULL AND account_public_jwk=\?/);
  assert.match(routes,/if\(!existing&&\(active\?\.n\?\?0\)>0\)/);
  assert.match(routes,/state='approved' AND account_public_jwk=\? AND expires_at>\?/);
@@ -38,7 +39,8 @@ test('new devices prove they possess the correct account private key before join
 
 test('approvals require an active previously enrolled device and recipient-bound ciphertext',()=>{
  assert.match(routes,/await activeDevice\(db,user\.id,approver,current\.encoded\)/);
- assert.match(routes,/await verifyProof\(db,user\.id,approver,b\.proof\)/);
+ assert.match(routes,/await signedProof\(db,user\.id,approver,b\.proof,b\.signature,JSON\.parse\(approverDevice\.approval_public_jwk\)/);
+ assert.match(routes,/await signedProof\(db,user\.id,row\.device_id,b\.proof,b\.signature,JSON\.parse\(completingDevice\.approval_public_jwk\)/);
  assert.match(routes,/validTransferEnvelope\(b\.envelope\)/);
  assert.match(routes,/state='pending' AND expires_at>\?/);
  assert.match(routes,/ciphertext_json=NULL WHERE user_id=\? AND expires_at<\?/);
@@ -71,10 +73,14 @@ test('device removal is explicit and never misrepresented as cryptographic key e
  assert.match(manager,/Removing a device does not yet revoke its already-imported account encryption key/);
  assert.match(manager,/rotate your account encryption key/);
  assert.match(routes,/requiresEncryptionRotation:true/);
- assert.match(routes,/await verifyProof\(db,user\.id,currentDevice,b\.proof\)/);
+ assert.match(routes,/await signedProof\(db,user\.id,currentDevice,b\.proof,b\.signature,JSON\.parse\(authorizedDevice\.approval_public_jwk\)/);
  assert.match(routes,/target===currentDevice/);
  assert.match(routes,/UPDATE trusted_devices SET revoked_at=/);
  assert.match(sql,/account_public_jwk TEXT NOT NULL/);
+ assert.match(sql,/approval_public_jwk TEXT NOT NULL/);
+ assert.match(vault,/approvalPrivateKey:CryptoKey/);
+ assert.match(client,/signDeviceAuthorization\(device\.approvalPrivateKey/);
+ assert.match(client,/action:DeviceSignatureAction,targetId:string/);
  assert.match(manager,/The numbers match on both of my devices/);
  assert.match(manager,/disabled=\{!matched\|\|!pairing\|\|busy\}/);
 });
