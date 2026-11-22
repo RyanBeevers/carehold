@@ -1,13 +1,14 @@
 import {samePublicKey,storedMessageIdentity,type PublicKey} from './message-crypto.ts';
 import {openMessageRecoveryIdentity,type MessageRecoveryEnvelope} from './message-recovery.ts';
 import type {TransferKeyPair} from './trusted-device-crypto.ts';
+import {newDeviceSigningPair} from './trusted-device-proof.ts';
 
 const NAME='carehold-trusted-devices-v1';
 const encoder=new TextEncoder();
 const validUser=(id:string)=>{if(!id||id.length>200)throw new Error('Sign in before using trusted devices.');};
 const encoded=(bytes:Uint8Array)=>{let x='';for(const b of bytes)x+=String.fromCharCode(b);return btoa(x).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
 const decoded=(x:string)=>Uint8Array.from(atob(x.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
-export type LocalTrustedDevice={userId:string,id:string,name:string,recoveryPublicKey?:PublicKey,recoveryKey?:CryptoKey,iv?:string,ct?:string};
+export type LocalTrustedDevice={userId:string,id:string,name:string,approvalPrivateKey:CryptoKey,approvalPublicKey:PublicKey,recoveryPublicKey?:PublicKey,recoveryKey?:CryptoKey,iv?:string,ct?:string};
 export type PendingDeviceTransfer={userId:string,id:string,privateKey:CryptoKey,publicKey:PublicKey,createdAt:number};
 function openDb():Promise<IDBDatabase>{
  if(typeof indexedDB==='undefined'||!crypto.subtle)throw new Error('This browser cannot keep trusted-device credentials.');
@@ -35,10 +36,21 @@ export async function localTrustedDevice(userId:string):Promise<LocalTrustedDevi
  const db=await openDb();
  try{
   const existing=await result<LocalTrustedDevice|undefined>(db.transaction('devices','readonly').objectStore('devices').get(userId));
-  if(existing)return existing;
+  if(existing?.approvalPrivateKey&&existing.approvalPublicKey)return existing;
+  const signing=await newDeviceSigningPair();
+  // The in-flight branch may have created a local record before device-unique
+  // approval keys existed. Upgrade it in-place; keep its ID and CH1 escrow.
+  if(existing){
+   const tx=db.transaction('devices','readwrite'),done=committed(tx),store=tx.objectStore('devices');
+   const current=await result<LocalTrustedDevice|undefined>(store.get(userId));
+   if(!current)throw new Error('Device identity disappeared during upgrade.');
+   if(current.approvalPrivateKey&&current.approvalPublicKey)return current;
+   const upgraded={...current,approvalPrivateKey:signing.privateKey,approvalPublicKey:signing.publicKey};
+   store.put(upgraded);await done;return upgraded;
+  }
   const agent=typeof navigator==='undefined'?'':navigator.userAgent;
   const name=/iPhone/i.test(agent)?'iPhone':/iPad/i.test(agent)?'iPad':/Android/i.test(agent)?'Android device':/Macintosh|Mac OS X/i.test(agent)?'Mac':/Windows/i.test(agent)?'Windows PC':'Browser';
-  const fresh:LocalTrustedDevice={userId,id:crypto.randomUUID(),name};
+  const fresh:LocalTrustedDevice={userId,id:crypto.randomUUID(),name,approvalPrivateKey:signing.privateKey,approvalPublicKey:signing.publicKey};
   try{
    const tx=db.transaction('devices','readwrite'),done=committed(tx);
    tx.objectStore('devices').add(fresh);
