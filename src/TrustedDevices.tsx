@@ -7,12 +7,13 @@ import {enrollLocalTrustedDevice,getTrustedDeviceDirectory,approveTrustedDeviceR
 import type {MessageRecoveryEnvelope} from './lib/message-recovery';
 
 const message=(e:unknown)=>e instanceof Error?e.message:'Unable to update devices.';
-export function TrustedDevices({userId}:{userId:string}){
+export function TrustedDevices({userId,onReviewRotation}:{userId:string,onReviewRotation:()=>void}){
  const [data,setData]=useState<DeviceDirectory|null>(null),[localId,setLocalId]=useState(''),[deviceName,setDeviceName]=useState('');
  const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [recoveryCode,setRecoveryCode]=useState(''),[recoveryAvailable,setRecoveryAvailable]=useState(false);
  const [selected,setSelected]=useState<DeviceRequest|null>(null),[pairing,setPairing]=useState(''),[matched,setMatched]=useState(false);
  const [removing,setRemoving]=useState<string|null>(null);
+ const [needsRotation,setNeedsRotation]=useState(false);
  async function load(enroll=false){
   const device=await localTrustedDevice(userId);
   const identity=await storedMessageIdentity(userId);
@@ -85,8 +86,8 @@ export function TrustedDevices({userId}:{userId:string}){
    const identity=await storedMessageIdentity(userId);
    if(!identity)throw new Error('Cannot verify this account encryption key.');
    await revokeTrustedDevice(userId,identity,targetId);
-   setRemoving(null);
-   setNotice('Device removed from trusted approvals. It may still hold an old encryption key. For confidentiality against a lost device, complete an account-key rotation under Advanced Security, then re-enroll your remaining devices.');
+   setRemoving(null);setNeedsRotation(true);
+   setNotice('Device removed from approvals. It can no longer authorize new devices, but it may still decrypt writing encrypted with your existing account key.');
    await load();
   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
   finally{setBusy(false);}
@@ -101,6 +102,7 @@ export function TrustedDevices({userId}:{userId:string}){
    {!ready&&<p role="status">Checking your enrolled devices…</p>}
    {error&&<p className="messages-error" role="alert">{error}</p>}
    {notice&&<p className="words-status" role="status">{notice}</p>}
+   {needsRotation&&<button type="button" className="button outline small" onClick={onReviewRotation}>Protect future writing — review key rotation</button>}
    {ready&&data&&!thisDeviceTrusted&&<p className="muted tiny" role="status">This browser can use your restored writing but isn't currently authorized to approve other devices. If your old devices are available, approve this one from them. If they're permanently lost, use Advanced Security to rotate your encryption identity before enrolling this browser.</p>}
   </div><button type="button" className="button outline small" onClick={()=>void load(true).catch(e=>setError(message(e)))} disabled={busy}>Refresh devices</button></div>
   {data&&<div className="trusted-device-body">
