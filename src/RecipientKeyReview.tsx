@@ -11,7 +11,7 @@ export function KeyChangeReview({changes,busy,onApprove,onDismiss}:{
   <p>{people} {changes.length===1?'has':'have'} updated encryption details. This sometimes happens when someone restores their account or replaces a device. Carehold paused sharing rather than automatically trusting the new information.</p>
   <details className="key-change-instructions">
    <summary>How to verify this change</summary>
-   <p>Ask {changes.length===1?'this person':'these people'} directly, outside Carehold, to open Settings → Encrypted data recovery → My encryption verification code. Compare their complete code with the new code below. If you cannot confirm it, choose Not now.</p>
+   <p>Ask {changes.length===1?'this person':'these people'} directly, outside Carehold, to open Settings → Encrypted writing → Recovery & advanced security → My encryption verification code. Compare their complete code with the new code below. If you cannot confirm it, choose Not now.</p>
    <ul>{changes.map(item=><li key={item.id}><strong>{item.name}</strong>
     <span>New code</span><code>{readableFingerprint(item.current)}</code>
     <span className="muted tiny">Previously seen: {readableFingerprint(item.previous)}</span>
