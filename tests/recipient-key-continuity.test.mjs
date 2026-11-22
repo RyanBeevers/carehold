@@ -48,6 +48,14 @@ test('silent recipient key substitution fails closed for the entire group',async
  assert.deepEqual(pins,before);
 });
 
+test('corrupt stored recipient checkpoints fail closed without rendering an invalid verification code',async()=>{
+ const pins=context();
+ await checkRecipientKeyContinuity('adult','home',[contact('sara')]);
+ const key=[...pins.keys()][0];
+ pins.set(key,'corrupt');
+ await assert.rejects(()=>checkRecipientKeyContinuity('adult','home',[contact('sara',rotated)]),/checkpoint is invalid/);
+});
+
 test('approving a verified rotation requires the exact previously seen key and is not automatic',async()=>{
  context();
  await checkRecipientKeyContinuity('adult','home',[contact('sara')]);
