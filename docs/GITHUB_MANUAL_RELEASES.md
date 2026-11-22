@@ -2,6 +2,12 @@
 
 These workflows let an operator start a release from the GitHub website/mobile browser. They **never** run on a push or pull request and never create a Cloudflare database or modify Worker secrets.
 
+## Dependencies while no lockfile is committed
+
+This repository currently has no `package-lock.json`. GitHub's npm cache and `npm ci` both require that lockfile, so manual staging run #45041576495 stopped in `actions/setup-node` before deployment. The workflows temporarily use `npm install --no-audit --no-fund` without caching in each job. This can resolve newer compatible dependency versions between releases.
+
+**Follow-up for reproducible production builds:** from a trusted development machine, run `npm install --package-lock-only`, review and commit the generated `package-lock.json`, then change both workflows back to `cache: npm` and `npm ci`. Do not use the missing-lockfile workaround as evidence of a reviewed/pinned dependency set.
+
 ## One-time GitHub and Cloudflare setup (do this before running)
 
 1. Merge the reviewed workflow PR into `main`. GitHub's Actions tab lists `workflow_dispatch` workflows once their files exist on the default branch.

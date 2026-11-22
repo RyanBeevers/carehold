@@ -44,11 +44,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: npm ci
+      - name: Install dependencies (no committed npm lockfile yet)
+        run: npm install --no-audit --no-fund
       - run: npm run preflight:production
       - run: npm run verify:pre-e2e
 
@@ -65,8 +65,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-      - run: npm ci
+      - name: Install dependencies (no committed npm lockfile yet)
+        run: npm install --no-audit --no-fund
       - run: npm run preflight:production
       - run: npm run build
       - name: Export and encrypt production D1 backup

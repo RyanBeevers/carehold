@@ -9,6 +9,10 @@ for (const env of ['staging','production']) {
     assert.match(workflow,/workflow_dispatch:/);
     assert.doesNotMatch(workflow,/\n\s+(push|schedule|pull_request|workflow_run):/);
     assert.match(workflow,new RegExp('environment: '+env));
+    // The repository does not currently commit package-lock.json; npm ci and setup-node npm cache would fail.
+    assert.doesNotMatch(workflow,/cache: npm/);
+    assert.doesNotMatch(workflow,/run: npm ci/);
+    assert.equal((workflow.match(/run: npm install --no-audit --no-fund/g)||[]).length,2);
     assert.match(workflow,/scripts\/github-d1-backup\.sh/);
     assert.match(workflow,/actions\/upload-artifact@v4/);
     assert.match(workflow,/if-no-files-found: error/);
