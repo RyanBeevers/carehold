@@ -235,3 +235,19 @@ Use fictional data only, two persistent browser profiles, and a freshly backed-u
 - [ ] **NO-GO:** mismatched revisions, incomplete source inventory, expired/wrong saved code, browser key mismatch, unverified content, partial finalization or any loss of original ciphertext.
 
 Original-browser key re-enrollment remains **experimental**, not independently security reviewed. This still does not provide per-device cryptographic revocation or verified recipient-key identity.
+
+## Phase 2 — Trusted devices & encrypted recovery (NOT YET PASSED)
+
+The canonical threat model and detailed acceptance criteria are in [TRUSTED_DEVICE_RECOVERY.md](TRUSTED_DEVICE_RECOVERY.md). Run **once** in the consolidated final two-browser pass after the branch's test/build verification is green. Do not erase or change live encryption keys for test fixtures.
+
+- [ ] Migration `0019_trusted_devices.sql` is additive and has passed SQLite tests and an encrypted D1 backup + restore rehearsal on a disposable database.
+- [ ] A new account verifies and saves its one-time CH1 recovery code, then obtains a trusted-device record and **locally encrypted** approval escrow with a non-exportable key. No plaintext CH1 in D1, logs, HTTP, localStorage, backup files or push.
+- [ ] On another persistent browser, sign in with the *same account* and tap **Request approval**. Two devices independently show the same eight-digit pairing number.
+- [ ] A trusted device lists pending requests only for the same account. The user explicitly confirms a matching number; approval is forbidden without the confirmation, a valid enrolled-device private-key challenge proof, and the correct current encrypted backup.
+- [ ] The new device decrypts the server-relayed encrypted CH1 credential and restores the current account encryption identity, private journal, synced drafts and authorized Words/direct history without manually entering CH1.
+- [ ] Browser reload mid-request, duplicate requests, expired requests, revocation, tampered ciphertext, wrong-account transfers, stale server key, unavailable storage, network outages and cancellation all fail closed without overwriting or clearing existing keys or ciphertext.
+- [ ] CH1 restore still works when no other trusted device exists. Existing legacy accounts without a saved CH1 remain intact; no silent reset/migration.
+- [ ] Device list removal blocks further approvals, but the UI explicitly says it is **not independent cryptographic revocation**. Run existing recovery-key rotation on disposable test data and verify old-key devices cannot open future newly encrypted content, while historic ciphertext remains retained.
+- [ ] The optional WebAuthn PRF approach remains **design-only** until verified authenticator support, server-verified assertions, signature-counter management, and Better Auth integration are completed. No unverified PRF get() call is made.
+- [ ] Local `npm run verify:pre-e2e` passes, staging HTTPS passkeys and installed PWA work, and an independent adversarial review resolves account/directory key substitution, device removal, concurrency, XSS and child/privacy concerns before declaring sensitive-data readiness.
+
