@@ -88,10 +88,13 @@ test('editing on mobile refreshes idle timers while server session stays checked
  assert.match(src('shared/session-policy.ts'),/INACTIVITY_LOCK_MS=180_000/);
 });
 
-test('a later-outcome action belongs to administration history, not the main Today ledger',()=>{
+test('Today and administration history both allow authorized factual corrections',()=>{
  const today=app.slice(app.indexOf("page==='today'&&"),app.indexOf("page==='people'&&"));
  const people=app.slice(app.indexOf("page==='people'&&"),app.indexOf("page==='words'&&"));
- assert.doesNotMatch(today,/Record a later outcome/);
+ assert.match(today,/e\.canRecordDose&&<div className="ledger-record-buttons">/);
+ assert.match(today,/onClick=\{\(\)=>beginCorrection\(e\.event!\)\}/);
+ assert.match(today,/onClick=\{\(\)=>beginCorrection\(e\.event!,'later'\)\}/);
+ assert.match(today,/Record a later outcome/);
  assert.match(people,/Record a later outcome/);
  assert.match(people,/onClick=\{\(\)=>beginCorrection\(e,'later'\)\}/);
 });
