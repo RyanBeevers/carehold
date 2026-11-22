@@ -1,4 +1,4 @@
-import {useEffect,useId,useRef,useState,type KeyboardEvent} from 'react';
+import {useEffect,useId,useRef,useState,type KeyboardEvent as ReactKeyboardEvent} from 'react';
 import {Check,ChevronDown} from 'lucide-react';
 import type {Household} from './lib/api';
 
@@ -21,7 +21,7 @@ export function HouseholdPicker({households,value,onChange}:{
   if(!open)return;
   options.current[activeIndex]?.focus();
   const closeOnOutside=(e:PointerEvent)=>{if(e.target instanceof Node&&!root.current?.contains(e.target))setOpen(false);};
-  const closeOnEscape=(e:globalThis.KeyboardEvent)=>{if(e.key==='Escape'){setOpen(false);trigger.current?.focus();}};
+  const closeOnEscape=(e:KeyboardEvent)=>{if(e.key==='Escape'){setOpen(false);trigger.current?.focus();}};
   document.addEventListener('pointerdown',closeOnOutside);
   document.addEventListener('keydown',closeOnEscape);
   return()=>{document.removeEventListener('pointerdown',closeOnOutside);document.removeEventListener('keydown',closeOnEscape);};
@@ -30,7 +30,7 @@ export function HouseholdPicker({households,value,onChange}:{
  if(!current)return <span className="household-picker-name">No care circle</span>;
  if(households.length===1)return <div className="household-picker-single" aria-label={'Current care circle: '+current.name}>{current.name}</div>;
  const choose=(id:string)=>{onChange(id);setOpen(false);trigger.current?.focus();};
- const move=(e:KeyboardEvent<HTMLButtonElement>,index:number)=>{
+ const move=(e:ReactKeyboardEvent<HTMLButtonElement>,index:number)=>{
   let next=index;
   if(e.key==='ArrowDown')next=(index+1)%households.length;
   else if(e.key==='ArrowUp')next=(index-1+households.length)%households.length;
