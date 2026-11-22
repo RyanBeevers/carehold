@@ -45,8 +45,8 @@ test('Settings presents fresh-code generation or recovery form directly without 
  assert.match(recovery,/<MessageRecoveryGate key=\{userId\+':'\+status\}/);
  assert.match(recovery,/status==='legacy'&&<LegacyMessageMigration/);
  assert.doesNotMatch(recovery,/href="\/words">Open Words recovery/);
- assert.match(source('src/MessageRecoveryGate.tsx'),/Generate recovery code/);
- assert.match(source('src/MessageRecoveryGate.tsx'),/Restore my message key/);
+ assert.match(source('src/MessageRecoveryGate.tsx'),/Set up secure backup/);
+ assert.match(source('src/MessageRecoveryGate.tsx'),/Restore my writing/);
 });
 test('server grace is longer than local idle lock and browser keeps explicit sign-out',()=>{
  const auth=source('worker/auth.ts'),policy=source('shared/session-policy.ts');
@@ -56,4 +56,18 @@ test('server grace is longer than local idle lock and browser keeps explicit sig
  assert.match(auth,/expiresIn:SESSION_IDLE_SECONDS,updateAge:SESSION_REFRESH_SECONDS/);
  assert.match(app,/lockNow\(message,false\)/);
  assert.match(app,/await authClient\.signOut\(\)/);
+});
+
+test('installed mobile PWA keeps a visible Settings sign-out without deleting stored encryption keys',()=>{
+ const settingsStart=app.indexOf("{page==='settings'&&");
+ const aboutStart=app.indexOf("{page==='about'&&",settingsStart);
+ assert.ok(settingsStart>0&&aboutStart>settingsStart,'Settings screen must be present');
+ const settings=app.slice(settingsStart,aboutStart);
+ assert.match(css, /\.masthead-actions \.quiet\{display:none\}/);
+ assert.match(settings, /aria-label="Sign out of Carehold"/);
+ assert.match(settings, /onClick=\{\(\)=>void logout\(\)\}/);
+ assert.match(settings, /<LogOut size=\{17\}\/> Sign out/);
+ const handler=app.slice(app.indexOf('async function logout()'),app.indexOf('async function createHousehold('));
+ assert.match(handler, /await authClient\.signOut\(\)/);
+ assert.doesNotMatch(handler, /indexedDB|localStorage|clearSiteData|deleteDatabase/);
 });

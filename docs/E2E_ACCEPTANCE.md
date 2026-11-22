@@ -9,12 +9,12 @@
 ## 0 — Prepare and verify once
 
 ```bash
-git switch feat/carehold-mvp-foundation
-git pull --ff-only
-npm install
-npm run db:local
+git switch main
+git pull --ff-only origin main
+npm install --no-audit --no-fund
 npm run verify:pre-e2e
 npm run db:backup:local
+npm run db:local
 ```
 
 The last two commands verify the source and create a private local D1 SQL export. The export is **not encrypted** and does **not** include the browser's private journal/key vault. It must remain out of Git and public cloud locations. If a command fails, record its terminal output and stop.
@@ -22,6 +22,20 @@ The last two commands verify the source and create a private local D1 SQL export
 Open **two terminals**: run `npm run dev:worker` and `npm run dev`, then browse **http://localhost:5173**. Use the exact origin for all passkey operations. Two local browser profiles (or normal and private windows) can connect to the same local API for local E2E tests, but they have separate per-account device keys and browser storage.
 
 Test with at least **three fictional accounts**: A (owner and journal sender), B (selected recipient), C (household member intentionally *not* selected to one shared journal). Each account must enroll a passkey and open Words once to register its device key. Keep a separate fictional-only care circle for cross-household isolation.
+
+## 0a — Household security readiness (new)
+
+Read [HOUSEHOLD_PILOT_SECURITY.md](HOUSEHOLD_PILOT_SECURITY.md) before the final multi-account acceptance pass.
+
+- [ ] Words and Messages have no persistent fictional-only banner. Actual encryption/recovery errors remain visible and blocking.
+- [ ] Routine first sharing requires no key comparisons or copy/paste. The recipient's verification code is optional under Settings → Encrypted writing → Recovery & advanced security → My encryption verification code; check that it is available but hidden by default.
+- [ ] A→B direct and shared-space writing succeeds, and only the intended recipients can decrypt it; no implicit household-owner/caregiver access.
+- [ ] A subsequent unexpected B public-key change fails closed **before** encryption/sending in all three flows: new shared space, reply, direct message. Do not overwrite a live encryption identity for this test: use controlled fixtures and isolated data.
+- [ ] Only when a key unexpectedly changes, the sender sees a blocking alert with an optional How to verify this change disclosure and can compare the new code to B's advanced Settings. Not now does not approve, and stale stored keys cannot be silently overwritten.
+- [ ] Device browser storage disabled: sending fails without creating a shared entry or silently deleting the private draft.
+- [ ] First-use key history is scoped to exact signed-in account, household and recipient; user-switch on a shared browser does not reuse another account's trust pin.
+- [ ] Simulate a legitimate restored or rotated B key, verify explicitly, and then confirm sending works again; previously received ciphertext and existing private drafts are preserved.
+- [ ] Staging static assets expose the existing strict Content Security Policy, no-referrer, nosniff and noindex headers without breaking WebAuthn, icons, app navigation or push notifications.
 
 ## 1 — Authentication, circle and access
 
@@ -135,9 +149,9 @@ This section is **not yet passed**. A new household with existing accounts does 
 
 - [ ] Back up and verify restore of the local/staging fictional D1 database; apply additive migrations 0011–0015 only to a backed-up local test database (and later separately reviewed staging).
 - [ ] Create fresh account A and fresh account B, each with a passkey; create a new household and join B explicitly.
-- [ ] In **Settings → Encrypted data recovery**, confirm a fresh account shows **Generate recovery code** directly (no hidden navigation link). Save a unique code securely outside the browser, confirm storage and complete enrollment. If you sign in on a second device, the same Settings section must present **Restore my message key**; if you have an original-browser legacy key, it should present the non-destructive migration.
-- [ ] **Recovery-code custody:** For both fresh enrollment and legacy migration, the app displays a one-time CH1- code, instructs the user to store it outside Carehold, hides it, and requires re-entering the externally saved code before the final action is enabled. Test incorrect code, switching storage method and returning to show the still-uncommitted code. Never test with real private writing.
-- [ ] **Missing-code scenario after completed enrollment:** Settings must clearly distinguish an enrolled browser key from an externally saved code and show **I didn't save my recovery code** guidance. No button should reset keys or delete ciphertext. The trusted-original-browser replacement flow is implemented in migration 0016, but remains **unverified in actual browser E2E and not production-approved**. Confirm the new code is saved and test recovery in a second persistent browser profile before relying on it.
+- [ ] For first enrollment, confirm **Set up secure backup** appears and a one-time CH1 code can be saved securely outside the browser, retrieved and verified before completion. On a new device, the gate must offer **Restore my writing**. In Settings → Encrypted writing, detailed recovery options remain collapsed when everything is healthy; legacy accounts still get a non-destructive migration path.
+- [ ] **Recovery-code custody:** For fresh enrollment, legacy migration and rotation, the app displays a one-time CH1- code, gives a single default Copy recovery code action, and hides alternative storage methods under optional details. It still requires retrieving the externally saved code before enrollment or migration is allowed. Wrong code and Show code again do not overwrite enrolled keys. Never test with real private writing.
+- [ ] **Missing-code scenario after completed enrollment:** Settings → Encrypted writing → Recovery & advanced security must distinguish an enrolled browser key from an externally saved code and offer **I didn't save my recovery code** guidance. No button should reset keys or delete ciphertext. The trusted-original-browser replacement flow is implemented in migration 0016, but remains **unverified in actual browser E2E and not production-approved**. Confirm the new code is saved and test recovery in a second persistent browser profile before relying on it.
 - [ ] Complete equivalent enrollment as B; verify two distinct public keys and ciphertext-only recovery rows.
 - [ ] Send fictional direct message and shared Words reply A↔B; verify actual plaintext can decrypt on intended accounts.
 - [ ] Sign A into a different browser/profile and enter the saved code; verify BOTH old direct and Words history decrypt there.
@@ -196,8 +210,8 @@ Use **fictional accounts and writing only**. The older shared account key and it
 - [ ] Start fresh enrollment on iPhone Safari and the installed Carehold PWA. Confirm the recovery code is visible, the default storage instructions are for Apple Passwords, and the searchable label is **Carehold — Encryption Recovery Key**.
 - [ ] Copy the key, background Carehold long enough to trigger its inactivity lock, save the code in Apple Passwords, then sign in again. Confirm enrollment resumes from the **same encrypted envelope**, accepts the saved code and does not generate a different key. Repeat for the original-browser legacy migration before server staging.
 - [ ] Discard an unregistered pending setup when the code wasn't saved; confirm the active account key and all historic ciphertext stay intact. An enrollment already staged or completed must not offer destructive cancellation.
-- [ ] Tap **Copy recovery code**, open **Passwords**, create a *separate* password entry with the code and a Carehold recovery label, then return. Ensure a copy operation alone does **not** mark enrollment complete.
-- [ ] Confirm a user can switch to **another password manager**, **locked note**, or **offline copy** without losing the displayed secret. Do not open a native browser alert or show a fake “Saved to Passwords” notification.
+- [ ] Tap **Copy recovery code**, open **Passwords**, create a *separate* password entry with the code and a Carehold recovery label, then return. Confirm it can be retrieved and pasted in the verification field. Copy alone must **not** mark enrollment complete.
+- [ ] Confirm optional **Other safe ways to store the code** explains another password manager, locked note or offline copy, without adding required choices. Do not open a native browser alert or show a fake “Saved to Passwords” notification.
 - [ ] Without selecting the save confirmation, the enrollment and legacy-migration completion buttons remain disabled. Once saved is explicitly confirmed, enrollment can proceed.
 - [ ] Sign in on another browser and search the chosen password app for **Carehold**. Enter the saved code and verify that encrypted journal/message recovery works. A wrong or missing code must not cause a silent reset.
 - [ ] Start a staged legacy migration; verify it reuses the exact same save guide and shows the same searchable label on Resume. No password, passkey, or prior encryption key is overwritten.
@@ -209,7 +223,7 @@ Use **fictional accounts and writing only**. The older shared account key and it
 
 Use fictional data only, two persistent browser profiles, and a freshly backed-up **local** D1 database. This is a release-blocking test; do not attempt to fix failures by deleting browser storage or keys.
 
-- [ ] On original browser A with a completed v2 identity whose old CH1 code was deliberately *not* saved, open **Settings → Encrypted data recovery → Replace lost recovery code**. Verify a second browser without the code cannot decrypt existing content.
+- [ ] On original browser A with a completed v2 identity whose old CH1 code was deliberately *not* saved, open **Settings → Encrypted writing → Recovery & advanced security → Replace lost recovery code**. Verify a second browser without the code cannot decrypt existing content.
 - [ ] Prepare a new code; confirm migration cannot begin until code is hidden and correctly re-entered from a separate password-manager entry or secure offline copy. A wrong code keeps the action disabled. Preserve the saved code throughout.
 - [ ] Before starting, create fictional direct messages and Words prompts/replies, a synced private journal entry, and unsent synced drafts for Words, direct Messages and a shared discussion. Also keep a second recipient able to read their own encrypted copies.
 - [ ] Start replacement; verify API challenge proves possession of the *existing browser private key*, and another signed-in browser without that key cannot start it. During the staged phase the original key, recipient copies, journals and drafts remain unchanged, and concurrent writes fail closed.

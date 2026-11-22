@@ -30,20 +30,17 @@ test('journal push is a separate explicit preference from medication reminders',
  assert.match(section,/\/push\/subscribe/);
 });
 
-test('Words and Messages show compact, keyboard-accessible pilot limits with details available',()=>{
+test('household pilot does not place fictional-only banners over private writing',()=>{
  const messages=readFileSync(new URL('../src/MessagesStudio.tsx',import.meta.url),'utf8');
+ const shared=readFileSync(new URL('../src/SharedWords.tsx',import.meta.url),'utf8');
+ const recovery=readFileSync(new URL('../src/RecoveryReadiness.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
- assert.match(hub,/<details className="words-hub-warning">/);
- assert.match(hub,/<summary><LockKeyhole/);
- assert.match(hub,/Fictional writing only/);
- assert.match(hub,/Do not enter confidential family, health or therapeutic information/);
- assert.match(hub,/Independent device revocation is unfinished/);
- assert.match(messages,/<details className="messages-warning">/);
- assert.match(messages,/Fictional messages only/);
- assert.match(messages,/Do not send confidential family, medical, or therapeutic content/);
- assert.match(messages,/recipient keys are not independently verified/);
- assert.match(css,/\.words-hub-warning summary:focus-visible/);
- assert.match(css,/\.messages-warning summary:focus-visible/);
- assert.doesNotMatch(hub,/<div className="words-hub-warning"/);
- assert.doesNotMatch(messages,/<div className="messages-warning"/);
+ for(const content of [hub,messages,shared,recovery])
+  assert.doesNotMatch(content,/Fictional (writing|messages|test writing) only|use fictional writing only|fictional messaging/i);
+ assert.doesNotMatch(hub,/words-hub-warning/);
+ assert.doesNotMatch(messages,/messages-warning/);
+ assert.match(recovery,/cannot independently revoke a previously authorized device/);
+ assert.match(recovery,/My encryption verification code/);
+ assert.match(css,/\.key-change-review/);
+ assert.match(css,/\.key-self-verification/);
 });

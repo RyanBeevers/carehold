@@ -107,7 +107,7 @@ export function WordsDraftStudio({
    </div>
    <div className="words-studio-notice" role="note">
      <ShieldAlert size={19} aria-hidden="true"/>
-     <p><strong>Experimental device-only drafts — fictional text only.</strong> {vaultEnabled?'Autosave encrypts writing before storing it in this browser. It is not synced or sent. The stored key can still be used by code running on this device; this is not end-to-end encryption. Clearing browser site data deletes drafts.':'Without autosave, writing disappears when you leave or lock Carehold. You can opt in to a device-only encrypted save for testing; it is not independently reviewed or safe for real confidential writing.'}</p>
+     <p><strong>Device-only encrypted drafts.</strong> {vaultEnabled?'Autosave encrypts writing before storing it in this browser. It is not synced or sent. The stored key can still be used by code running on this device; this is not end-to-end encryption. Clearing browser site data deletes drafts.':'Without autosave, writing disappears when you leave or lock Carehold. You can opt in to a device-only encrypted save; this legacy browser-only store is not intended for writing.'}</p>
    </div>
    <div className="words-vault-controls" role="status" aria-live="polite">
      <div><strong>{saveLabel}</strong>{vaultEnabled&&vault.savedAt&&<span>Last saved: {new Date(vault.savedAt).toLocaleString()}</span>}</div>

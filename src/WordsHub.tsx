@@ -323,10 +323,6 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   window.dispatchEvent(new Event('carehold:activity-changed'));
  }
  return <div className="words-hub">
-  <details className="words-hub-warning">
-   <summary><LockKeyhole size={17} aria-hidden="true"/><span className="words-hub-warning-message"><strong>Fictional writing only.</strong> Do not enter confidential family, health or therapeutic information.</span><span className="words-hub-warning-more">Why?</span></summary>
-   <div className="words-hub-warning-detail"><p>Security and child/privacy reviews are still pending. Private journals and drafts are encrypted locally; recovery-enrolled accounts can also synchronize encrypted copies. Only successfully synced writing can be recovered on a new device with your saved recovery code. Shared messages and original-browser migration remain experimental. Independent device revocation is unfinished.</p></div>
-  </details>
   {!identity&&<MessageRecoveryGate userId={userId} onReady={setIdentity} onError={setKeyError}/>}
   <nav className="words-hub-tabs" aria-label="Words sections">{TABS.map(item=><button type="button" key={item.id} className={tab===item.id&&!seed?'selected':''} aria-current={tab===item.id&&!seed?'page':undefined} onClick={()=>{setSeed(null);selectTab(item.id);setFeedback('');}}>
    <span>{item.title}{item.id==='activity'&&activity.length>0&&<b className="words-activity-count">{activity.length}</b>}</span>
