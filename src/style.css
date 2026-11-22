@@ -151,8 +151,9 @@
 
 /* Direct messages: calm editorial rows, not a dashboard */
 .messages-warning{background:var(--panel);border-left:3px solid var(--coral);padding:10px 12px;margin-bottom:20px;font-size:12px;line-height:1.5}
-.messages-warning summary{display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-height:32px;cursor:pointer;list-style:none}
+.messages-warning summary{display:flex;align-items:center;gap:9px;min-height:32px;cursor:pointer;list-style:none}
 .messages-warning summary::-webkit-details-marker{display:none}
+.messages-warning-message{flex:1;min-width:0}
 .messages-warning summary strong{font-weight:700}
 .messages-warning-more{margin-left:auto;color:var(--muted);text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
 .messages-warning summary:focus-visible{outline:2px solid var(--coral);outline-offset:3px}
