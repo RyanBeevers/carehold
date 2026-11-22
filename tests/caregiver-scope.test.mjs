@@ -13,7 +13,7 @@ test('full-circle must never promote ordinary members or minors to medication ed
  for(const role of ['member','owner'])
   assert.equal(canUseCareProfile(role,'adult',[],'manage_medication',false,true),role==='owner');
  for(const cls of ['child','teen','unverified']){
-  assert.equal(canUseCareProfile('caregiver',cls,[],'view_schedule',false,true),true);
+  assert.equal(canUseCareProfile('caregiver',cls,[],'view_schedule',false,true),false);
   assert.equal(canUseCareProfile('caregiver',cls,[],'record_dose',false,true),false);
   assert.equal(canUseCareProfile('caregiver',cls,[],'manage_medication',false,true),false);
  }
