@@ -75,7 +75,13 @@ type LockedCorrectionDraft={
  status:(typeof statuses)[number]|null,kind:'not_administered'|null,
  mode:'correction'|'later',actualAt:string,idempotencyKey:string
 };
-type Member={user_id:string,name:string,email:string,role:'owner'|'caregiver'|'member',classification:'adult'|'teen'|'child'|'unverified'};
+type CareCapability='view_schedule'|'record_dose'|'view_history'|'manage_medication';
+type CareScope='limited'|'full';
+type Member={user_id:string,name:string,email?:string,role:'owner'|'caregiver'|'member',classification?:'adult'|'teen'|'child'|'unverified',access_scope?:CareScope,grants?:{profileId:string,capabilities:CareCapability[]}[]};
+const DEFAULT_CARE_CAPABILITIES:CareCapability[]=['view_schedule','record_dose','view_history'];
+const CARE_PERMISSION_OPTIONS:[CareCapability,string][]=[
+ ['record_dose','Record administrations'],['view_history','View medication history'],['manage_medication','Manage medication plans']
+];
 export default function App(){
  const [theme,setTheme]=useState<Mode>(preference);
  const emailInputRef=useRef<HTMLInputElement|null>(null);
@@ -151,7 +157,7 @@ export default function App(){
  const pageUnread=(id:Page)=>id==='words'?unread.words:id==='messages'?unread.direct:0;
 
  const [date,setDate]=useState(''),[error,setError]=useState('');
- const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'archive-profile'|'archive-med'|'invite'|'remove'|'link'|null>(null),[pending,setPending]=useState<Pending>({});
+ const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'archive-profile'|'archive-med'|'invite'|'remove'|'link'|'access'|null>(null),[pending,setPending]=useState<Pending>({});
  const [saving,setSaving]=useState(false),[accessCode,setAccessCode]=useState(''),[inviteInput,setInviteInput]=useState('');
  const [inviteCreated,setInviteCreated]=useState('');
  const [audience,setAudience]=useState<Audience|null>(null),[signupAudience,setSignupAudience]=useState<Audience>('parent');
@@ -173,6 +179,9 @@ export default function App(){
  const [correctionReason,setCorrectionReason]=useState('');
  const [correctionKind,setCorrectionKind]=useState<'not_administered'|null>(null),[correctionMode,setCorrectionMode]=useState<'correction'|'later'>('correction');
  const [inviteRole,setInviteRole]=useState<'caregiver'|'member'>('caregiver'),[inviteProfiles,setInviteProfiles]=useState<string[]>([]);
+ const [inviteScope,setInviteScope]=useState<CareScope>('limited'),[inviteCapabilities,setInviteCapabilities]=useState<CareCapability[]>([...DEFAULT_CARE_CAPABILITIES]);
+ const [accessMember,setAccessMember]=useState<Member|null>(null),[accessScope,setAccessScope]=useState<CareScope>('limited');
+ const [accessProfiles,setAccessProfiles]=useState<string[]>([]),[accessCapabilities,setAccessCapabilities]=useState<CareCapability[]>([...DEFAULT_CARE_CAPABILITIES]);
  const active=households.find(h=>h.id===hid),owner=active?.role==='owner';
  const showToast=(kind:'success'|'error'|'info',message:string)=>setToast({id:++toastSequence.current,kind,message});
  const notice=(message:string)=>{if(lockingRef.current)return;showToast('success',message);setError('');};
@@ -325,10 +334,10 @@ export default function App(){
    void acceptStagedInvitation();
  },[user?.id,hasPasskey,recoveryCompletedUser,pendingInvitation]);
  const refreshMembers=useCallback(async()=>{
-   if(!hid||!owner)return;
+   if(!hid||(active?.role!=='owner'&&active?.role!=='caregiver'))return;
    try{const result=await api<{members:Member[]}>(`/members?householdId=${encodeURIComponent(hid)}`);setMembers(result.members);}catch(e){fail(e);}
- },[hid,owner]);
- useEffect(()=>{if((page==='circle'||page==='people')&&owner)void refreshMembers();},[page,owner,refreshMembers]);
+ },[hid,active?.role]);
+ useEffect(()=>{if((page==='circle'&&active?.role!=='member')||(page==='people'&&owner))void refreshMembers();},[page,active?.role,owner,refreshMembers]);
  async function setMemberClassification(memberId:string,next:Member['classification']){
   if(!hid||!owner||next==='unverified')return;
   setSaving(true);
@@ -336,6 +345,23 @@ export default function App(){
    await api('/members/'+encodeURIComponent(memberId)+'/classification','PATCH',{householdId:hid,classification:next});
    await refreshMembers();
    notice('Account classification updated. Medication permissions are enforced by the server.');
+  }catch(e){fail(e);}finally{setSaving(false);}
+ }
+ function beginManageAccess(member:Member){
+  setAccessMember(member);setAccessScope(member.access_scope==='full'?'full':'limited');
+  setAccessProfiles(member.grants?.map(g=>g.profileId)||[]);
+  const caps=new Set<CareCapability>(['view_schedule',...(member.grants||[]).flatMap(g=>g.capabilities)]);
+  setAccessCapabilities([...caps]);setModal('access');
+ }
+ async function saveMemberAccess(e:FormEvent){
+  e.preventDefault();if(!accessMember||!owner)return;
+  setSaving(true);
+  try{
+   const grants=accessScope==='full'?[]:accessProfiles.map(profileId=>({profileId,capabilities:accessCapabilities}));
+   await api('/members/'+encodeURIComponent(accessMember.user_id)+'/access','PATCH',{householdId:hid,accessScope,grants});
+   setModal(null);setAccessMember(null);
+   await Promise.all([refreshMembers(),refreshProfiles(),refreshToday()]);
+   notice('Caregiver access updated. Private Words and messages were not shared.');
   }catch(e){fail(e);}finally{setSaving(false);}
  }
  async function revokeMember(e:FormEvent){e.preventDefault();if(!memberToRemove)return;setSaving(true);try{
@@ -474,8 +500,8 @@ export default function App(){
   setModal(null);await Promise.all([refreshToday(),refreshPerson()]);notice('Correction appended. The original record is preserved.');
  }catch(e){fail(e);}finally{setSaving(false);}}
  async function createInvite(e:FormEvent){e.preventDefault();setSaving(true);try{
-  const grants=inviteProfiles.map(profileId=>({profileId,capabilities:['view_schedule','record_dose','view_history']}));
-  const r=await api<{code:string}>('/invitations','POST',{householdId:hid,role:inviteRole,grants});setInviteCreated(r.code);notice('One-time invitation created. It expires in 48 hours.');
+  const grants=inviteScope==='full'&&inviteRole==='caregiver'?[]:inviteProfiles.map(profileId=>({profileId,capabilities:inviteCapabilities}));
+  const r=await api<{code:string}>('/invitations','POST',{householdId:hid,role:inviteRole,accessScope:inviteRole==='caregiver'?inviteScope:'limited',grants});setInviteCreated(r.code);notice('One-time invitation created. It expires in 48 hours.');
  }catch(e){fail(e);}finally{setSaving(false);}}
  const enablePush=async()=>{
    setPushFeedback(null);
