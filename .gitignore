@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+coverage/
+
+# Local D1 exports contain authentication and medication data; never publish.
+backups/
