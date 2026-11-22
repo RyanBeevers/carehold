@@ -86,9 +86,10 @@ export function notifyPrivateRecipients(env:CareEnv,ctx:ExecutionContext,hid:str
     const devices=await env.DB.prepare('SELECT endpoint,p256dh,auth_secret FROM push_subscriptions WHERE user_id=? LIMIT 10')
      .bind(uid).all<{endpoint:string,p256dh:string,auth_secret:string}>();
     for(const sub of devices.results||[]){
-     try{await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
+     try{const accepted=await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
       {title:'A moment for care',body:'Something new is waiting in Carehold.',url:'/words',tag:'carehold-private-activity'},
       {publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!,subject:env.VAPID_SUBJECT!});
+      if(!accepted)await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint=? AND user_id=?').bind(sub.endpoint,uid).run();
      }catch{/* Push is best-effort; the private activity inbox remains authoritative. */}
     }
    }catch{/* Never let a push failure leak into or roll back a successful send. */}
@@ -111,6 +112,35 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
     ON CONFLICT(user_id,household_id) DO UPDATE SET enabled=excluded.enabled`).bind(user.id,hid,b?.enabled===true?1:0).run();
    return respond({enabled:b?.enabled===true});
   }
+ }
+ if(path==='/api/words/push/test'&&req.method==='POST'){
+  const b=await body(req),hid=householdId(b.householdId);await member(db,hid,user.id);
+  if(!pushConfigured(env))fail(503,'Words device notifications are not configured on this server.');
+  const preference=await db.prepare('SELECT enabled FROM private_word_push_preferences WHERE user_id=? AND household_id=?')
+   .bind(user.id,hid).first<{enabled:number}>();
+  if(preference?.enabled!==1)fail(409,'Enable Words notifications before testing.');
+  const devices=await db.prepare('SELECT id,endpoint,p256dh,auth_secret FROM push_subscriptions WHERE user_id=? LIMIT 10')
+   .bind(user.id).all<{id:string,endpoint:string,p256dh:string,auth_secret:string}>();
+  if(!devices.results.length)fail(409,'No registered notification device. Enable notifications on this device first.');
+  const cutoff=new Date(Date.now()-60_000).toISOString();
+  const claim=await db.prepare(`INSERT INTO push_test_rate_limits(user_id,last_sent_at) VALUES(?,?)
+    ON CONFLICT(user_id) DO UPDATE SET last_sent_at=excluded.last_sent_at
+    WHERE push_test_rate_limits.last_sent_at<? RETURNING last_sent_at`)
+   .bind(user.id,new Date().toISOString(),cutoff).first();
+  if(!claim)fail(429,'Wait one minute before sending another notification test.');
+  let accepted=0;
+  const testId=crypto.randomUUID();
+  for(const sub of devices.results){
+   try{
+    const sent=await sendPushNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth_secret}},
+     {title:'A moment for care',body:'Your Carehold Words notification test arrived.',url:'/words',tag:'carehold-words-test-'+testId},
+     {publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!,subject:env.VAPID_SUBJECT!});
+    if(sent)accepted++;
+    else await db.prepare('DELETE FROM push_subscriptions WHERE id=? AND user_id=?').bind(sub.id,user.id).run();
+   }catch{/* Push service details remain private. */}
+  }
+  if(!accepted)fail(502,'The push service rejected the test. Re-enable notifications on this device and try again.');
+  return respond({accepted,attempted:devices.results.length});
  }
  if(path==='/api/words/people'&&req.method==='GET'){
   const hid=householdId(url.searchParams.get('householdId'));await member(db,hid,user.id);
@@ -168,12 +198,13 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
   const hash=await digest(sid+':'+user.id+':'+kind+':'+JSON.stringify(selected.map(uid=>[uid,copies[uid]])));
   // A successful request may lose its HTTP response. Retry with identical
   // ciphertext/IDs rather than silently creating a duplicate shared space.
-  const exists=await db.prepare(`SELECT s.household_id,s.created_by,s.initial_kind,
+  const exists=await db.prepare(`SELECT s.household_id,s.created_by,s.initial_kind,s.deleted_at,
    p.id post_id,p.body_hash FROM shared_word_spaces s
    JOIN shared_word_posts p ON p.space_id=s.id AND p.kind=s.initial_kind
    WHERE s.id=?`).bind(sid)
-   .first<{household_id:string,created_by:string,initial_kind:string,post_id:string,body_hash:string}>();
+   .first<{household_id:string,created_by:string,initial_kind:string,deleted_at:string|null,post_id:string,body_hash:string}>();
   if(exists){
+   if(exists.deleted_at)fail(409,'This shared space was removed and cannot be recreated with the same identifier.');
    if(exists.household_id===hid&&exists.created_by===user.id&&exists.initial_kind===kind&&exists.post_id===postId&&exists.body_hash===hash)
     return respond({id:sid,created:true,replayed:true});
    fail(409,'This identifier belongs to another shared space.');
