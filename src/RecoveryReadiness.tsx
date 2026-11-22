@@ -47,7 +47,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
  const onError=useCallback((message:string)=>setError(message),[]);
  const info:Record<Status,string>={
   checking:'Checking your encrypted account recovery…',
-  configured:'This browser has an enrolled encryption key. That confirms local access — not that the one-time recovery code was saved elsewhere. Without your saved CH1- code, a different device cannot recover this key.',
+  configured:'Encrypted writing is ready on this device.',
   restore:'This account has a recovery record, but this browser does not have the encryption key. Restore below with your saved code.',
   legacy:'This account has an older browser key without recovery. Preserve it and use the non-destructive migration below to set up recovery.',
   setup:'Encryption recovery has not been configured. Generate and save your code here before sharing writing or saving private journals.',
@@ -55,27 +55,33 @@ export function RecoveryReadiness({userId}:{userId:string}){
   error:'Recovery status unavailable: '+error
  };
  return <section className="recovery-readiness" aria-label="Encrypted account recovery settings">
-  <div className="setting-section"><div><h2>Encrypted data recovery</h2>
-   <p role="status">{info[status]}</p>
-   {(status==='configured'||status==='restore')&&<p className="fine-print">Search your secure vault for <strong>{RECOVERY_SEARCH_LABEL}</strong>. Carehold does not automatically put codes in Apple Passwords, and it cannot re-display one after setup.</p>}
-   {status==='configured'&&<button type="button" className="button outline small" aria-expanded={missingCodeHelp} onClick={()=>setMissingCodeHelp(v=>!v)}>{missingCodeHelp?'Hide recovery code guidance':"I didn't save my recovery code"}</button>}
-   {status==='configured'&&missingCodeHelp&&<div className="recovery-missing-code" role="status">
-    <strong>Keep this browser and its Carehold site data intact.</strong>
-    <p>The enrolled key should still open your encrypted data on this browser. Without the old CH1- code, another device cannot recover that old key. You can now use <strong>Replace lost recovery code</strong> below on this original browser: the experimental flow creates a new recoverable key, verifies migrated ciphertext, and refuses to finalize if anything is missing. Do not reset keys, clear browser storage, delete the account, or retry legacy migration. Complete local tests before relying on the replacement for real information.</p>
-    <p>If you have private journal entries, use the separate encrypted journal export where available and store its passphrase safely. That export does not back up Messages or shared Words.</p>
-   </div>}
-   <p className="fine-print">Passkey sign-in alone does not restore encryption keys. This household pilot has account-level recovery; it cannot independently revoke a previously authorized device's existing decryption key or retract copies already received.</p>
-   {ownCode&&status==='configured'&&<details className="key-self-verification">
-    <summary>My encryption verification code</summary>
-    <p>Share this public code directly with someone who is verifying your encryption key before sending. Compare the complete code. It is not your secret CH1 recovery code and cannot be used to sign in.</p>
-    <code>{ownCode}</code>
-   </details>}
-  </div>
+  <div className="setting-section">
+   <div>
+    <h2>Encrypted writing</h2>
+    <p role={status==='error'||status==='mismatch'?'alert':'status'}>{info[status]}</p>
+    {status==='configured'&&<details className="recovery-advanced-settings">
+     <summary>Recovery &amp; advanced security</summary>
+     <p className="fine-print">This browser has an enrolled encryption key. That confirms local access — not that the one-time recovery code was saved elsewhere. Without your saved CH1- code, a different device cannot recover this key. Search your secure vault for <strong>{RECOVERY_SEARCH_LABEL}</strong> if you need it.</p>
+     <p className="fine-print">Passkey sign-in alone does not restore encryption keys. This household pilot has account-level recovery; it cannot independently revoke a previously authorized device's existing decryption key or retract copies already received.</p>
+     {ownCode&&<details className="key-self-verification">
+      <summary>My encryption verification code</summary>
+      <p>Only needed when someone asks you to confirm an unexpected encryption key change. This public code is not your secret CH1 recovery code.</p>
+      <code>{ownCode}</code>
+     </details>}
+     <button type="button" className="button outline small" aria-expanded={missingCodeHelp} onClick={()=>setMissingCodeHelp(v=>!v)}>{missingCodeHelp?'Hide recovery code guidance':"I didn't save my recovery code"}</button>
+     {missingCodeHelp&&<div className="recovery-missing-code" role="status">
+      <strong>Keep this browser and its Carehold site data intact.</strong>
+      <p>The enrolled key should still open your encrypted data on this browser. Without the old CH1- code, another device cannot recover that old key. You can now use <strong>Replace lost recovery code</strong> below on this original browser: the experimental flow creates a new recoverable key, verifies migrated ciphertext, and refuses to finalize if anything is missing. Do not reset keys, clear browser storage, delete the account, or retry legacy migration. Complete local tests before relying on the replacement for real information.</p>
+      <p>If you have private journal entries, use the separate encrypted journal export where available and store its passphrase safely. That export does not back up Messages or shared Words.</p>
+     </div>}
+     <RecoveryCodeRotation userId={userId} onComplete={()=>{setReplacementComplete(true);setMissingCodeHelp(false);setRetry(n=>n+1);}}/>
+    </details>}
+    {status==='restore'&&<p className="fine-print">Search your secure vault for <strong>{RECOVERY_SEARCH_LABEL}</strong>. Carehold cannot automatically put codes in Apple Passwords or re-display an old code.</p>}
+   </div>
    {status==='error'&&<button type="button" className="button outline" onClick={()=>setRetry(n=>n+1)}>Retry recovery check</button>}
   </div>
   {(status==='setup'||status==='restore')&&<MessageRecoveryGate key={userId+':'+status} userId={userId} onReady={onReady} onError={onError}/>}
   {status==='configured'&&replacementComplete&&<p role="status" className="recovery-replaced-status"><strong>New recovery code enrolled successfully.</strong> Keep the externally saved code. Verify access from a separate browser profile before relying on it.</p>}
-  {status==='configured'&&<RecoveryCodeRotation userId={userId} onComplete={()=>{setReplacementComplete(true);setMissingCodeHelp(false);setRetry(n=>n+1);}}/>}
   {status==='legacy'&&<LegacyMessageMigration userId={userId}/>}
   {status==='mismatch'&&<><p role="alert" className="messages-error">This browser has an older encryption key. If you intentionally replaced your recovery code on another trusted device, enter the new saved CH1- code below. Carehold will retain the old browser key in local history instead of deleting it.</p>
    <MessageRecoveryGate key={userId+':mismatch'} userId={userId} onReady={onReady} onError={onError}/></>}
