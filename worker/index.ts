@@ -151,7 +151,10 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
         db.prepare('SELECT 1 FROM user LIMIT 1').first(),
         db.prepare('SELECT 1 FROM message_account_recovery LIMIT 1').first(),
         db.prepare('SELECT 1 FROM private_draft_sync LIMIT 1').first(),
-        db.prepare('SELECT 1 FROM account_key_migrations LIMIT 1').first()
+        db.prepare('SELECT 1 FROM account_key_migrations LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM account_recovery_rotations LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM account_recovery_rotation_journals LIMIT 1').first(),
+        db.prepare('SELECT 1 FROM account_recovery_rotation_drafts LIMIT 1').first()
       ]);
       return json({ok:true,product:'carehold'});
     }catch{
