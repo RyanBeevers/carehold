@@ -11,7 +11,7 @@ type Inventory={copies:{kind:'direct'|'words',sourceId:string,contextId:string,e
 const errText=(e:unknown)=>e instanceof Error?e.message:'Migration stopped; no original data was erased.';
 
 /** Explicit, resumable, self-only legacy upgrade. NEVER auto-rotates keys. */
-export function LegacyMessageMigration({userId}:{userId:string}){
+export function LegacyMessageMigration({userId,onComplete}:{userId:string,onComplete?:()=>void}){
  const [status,setStatus]=useState<Status>('checking');
  const [oldKey,setOldKey]=useState<Identity|null>(null),[pending,setPending]=useState<NewRecoveryIdentity|null>(null);
  const [stage,setStage]=useState<Stage|null>(null),[recoveryCode,setRecoveryCode]=useState('');
@@ -50,6 +50,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
     await storeRecoveredMessageIdentity(userId,next);
     await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
     setStage(confirmed);setPending(null);setRecoveryCode('');setStatus('done');
+    onComplete?.();
     return true;
    }
   }catch{}
@@ -197,6 +198,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   await storeRecoveredMessageIdentity(userId,next);
   await clearPendingRecoveryEnvelope(userId,'legacy').catch(()=>{});
   setStatus('done');setPending(null);
+  onComplete?.();
  }
  if(status==='checking')return <p role="status">Checking legacy encryption…</p>;
  if(status==='done')return <div className="recovery-gate"><strong>Message recovery upgrade completed.</strong><p>Original ciphertext and the old browser key were retained. A recovery code saved outside this browser is required to restore access on another device. This success state alone does not prove you stored the code. If you missed it, keep this browser profile and its site data intact. Reload Carehold to refresh encrypted screens.</p><button type="button" className="button outline" onClick={()=>window.location.reload()}>Reload encrypted screens</button></div>;
