@@ -109,3 +109,27 @@ export async function reencryptSyncedDraft(
   throw new Error('Rotated draft did not verify. No account key was changed.');
  return {expectedRevision:row.revision,iv:b64(nextIv),ciphertext:b64(new Uint8Array(nextCipher))};
 }
+
+
+/** Resume safety: the staged new-key draft must equal the original plaintext. */
+export async function verifyStagedSyncedDraft(
+ uid:string,scope:string,row:{revision:number,iv:string,ciphertext:string},
+ staged:{expectedRevision:number,iv:string,ciphertext:string},
+ oldKey:CryptoKey,nextKey:CryptoKey
+):Promise<void>{
+ scopeFor(uid,scope,oldKey);scopeFor(uid,scope,nextKey);
+ if(staged.expectedRevision!==row.revision)throw new Error('Draft revision changed while rotating keys.');
+ const open=async(crypt:{iv:string,ciphertext:string},key:CryptoKey,revision:number)=>{
+  const iv=unb64(crypt.iv),ciphertext=unb64(crypt.ciphertext);
+  if(iv.length!==12||ciphertext.length>9000)throw new Error('Invalid encrypted draft.');
+  const raw=await crypto.subtle.decrypt(
+   {name:'AES-GCM',iv,additionalData:associated(uid,scope,revision)},key,ciphertext);
+  const decoded:unknown=JSON.parse(decoder.decode(raw));
+  if(!validate(decoded))throw new Error('Draft plaintext invalid.');
+  return decoded;
+ };
+ const before=await open(row,oldKey,row.revision);
+ const after=await open(staged,nextKey,row.revision+1);
+ if(JSON.stringify(before)!==JSON.stringify(after))
+  throw new Error('Staged draft differs from original encrypted content. No key was changed.');
+}
