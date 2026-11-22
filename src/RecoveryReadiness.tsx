@@ -64,6 +64,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
   {(status==='setup'||status==='restore')&&<MessageRecoveryGate key={userId+':'+status} userId={userId} onReady={onReady} onError={onError}/>}
   {status==='configured'&&<RecoveryCodeRotation userId={userId} onComplete={()=>{setMissingCodeHelp(false);setRetry(n=>n+1);}}/>}
   {status==='legacy'&&<LegacyMessageMigration userId={userId}/>}
-  {status==='mismatch'&&<p role="alert" className="messages-error">This browser has a different key. Return to your original browser or restore on a clean trusted device using your saved code. Do not replace the existing key.</p>}
+  {status==='mismatch'&&<><p role="alert" className="messages-error">This browser has an older encryption key. If you intentionally replaced your recovery code on another trusted device, enter the new saved CH1- code below. Carehold will retain the old browser key in local history instead of deleting it.</p>
+   <MessageRecoveryGate key={userId+':mismatch'} userId={userId} onReady={onReady} onError={onError}/></>}
  </section>;
 }
