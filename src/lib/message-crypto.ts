@@ -12,7 +12,7 @@ export type Content={kind:'prompt'|'message',text:string};
 export type Envelope={v:1,epk:PublicKey,iv:string,salt:string,ct:string};
 const enc=new TextEncoder(),dec=new TextDecoder();
 const dbName='carehold-direct-message-keys-v1';
-export type RecoverySetupFlow='fresh'|'legacy';
+export type RecoverySetupFlow='fresh'|'legacy'|'rotation';
 type PendingRecovery={scope:string,createdAt:number,envelope:MessageRecoveryEnvelope};
 function committed(tx:IDBTransaction):Promise<void>{
  return new Promise((resolve,reject)=>{
@@ -22,7 +22,7 @@ function committed(tx:IDBTransaction):Promise<void>{
  });
 }
 const pendingScope=(userId:string,flow:RecoverySetupFlow)=>{
- if(!userId||userId.length>200||!['fresh','legacy'].includes(flow))throw new Error('Sign in to preserve encrypted setup.');
+ if(!userId||userId.length>200||!['fresh','legacy','rotation'].includes(flow))throw new Error('Sign in to preserve encrypted setup.');
  return flow+':'+userId;
 };
 const algorithm={name:'ECDH',namedCurve:'P-256'} as const;
