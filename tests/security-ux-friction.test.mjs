@@ -32,7 +32,9 @@ test('routine Settings keeps recovery details collapsed; onboarding still requir
  const guide=read('src/RecoveryCodeSaveGuide.tsx');
  const recovery=read('src/MessageRecoveryGate.tsx');
  assert.match(readiness,/configured:'Encrypted writing is ready on this device.'/);
- assert.match(readiness,/<details className="recovery-advanced-settings">/);
+ assert.match(readiness,/<details id="carehold-advanced-recovery" className="recovery-advanced-settings" open=\{advancedOpen\}/);
+ assert.match(readiness,/onToggle=\{e=>setAdvancedOpen\(e\.currentTarget\.open\)\}/);
+ assert.match(readiness,/onReviewRotation=\{reviewRotation\}/);
  assert.match(readiness,/Recovery &amp; advanced security/);
  assert.match(readiness,/My encryption verification code/);
  assert.match(guide,/One-time backup/);
