@@ -33,9 +33,11 @@ export function readableFingerprint(fingerprint:string):string{
  return fingerprint.match(/.{1,8}/g)!.join(' ');
 }
 export class RecipientKeyChangedError extends Error{
- constructor(public readonly changed:KeyChange[]){
+ readonly changed:KeyChange[];
+ constructor(changed:KeyChange[]){
   super('A participant\'s encryption key changed. Verify their new code with them outside Carehold before sending.');
   this.name='RecipientKeyChangedError';
+  this.changed=changed;
  }
 }
 /** Fail closed if a previously observed recipient changes, including for group shares.
