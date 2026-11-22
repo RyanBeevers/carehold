@@ -603,7 +603,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
   if(path==='/api/push/test'&&req.method==='POST') {
     const b=await jsonBody(req),hid=required(b.householdId);
     await member(db,hid,user.id);
-    if(!pushConfigured(env))bad(503,'Push is not configured. Add VAPID keys to local secrets and restart Wrangler.');
+    if(!pushConfigured(env))bad(503,'Push is not configured for this Carehold environment. Please contact the app administrator.');
     const pref=await db.prepare('SELECT enabled FROM push_preferences WHERE user_id=? AND household_id=?').bind(user.id,hid).first<{enabled:number}>();
     if(pref?.enabled!==1)bad(409,'Enable reminders for this household before testing.');
     const subs=await db.prepare('SELECT id,endpoint,p256dh,auth_secret FROM push_subscriptions WHERE user_id=? LIMIT 10').bind(user.id)
