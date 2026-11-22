@@ -26,6 +26,9 @@ test('all trusted-device endpoints are authenticated and gated by an enrolled pa
 test('new devices prove they possess the correct account private key before joining',()=>{
  assert.match(routes,/await seal\(\{kind:'message',text:proof\},current\.key/);
  assert.match(routes,/await verifyProof\(db,user\.id,deviceId,b\.proof\)/);
+ assert.match(routes,/SELECT COUNT\(\*\) AS n FROM trusted_devices WHERE user_id=\? AND revoked_at IS NULL AND account_public_jwk=\?/);
+ assert.match(routes,/if\(!existing&&\(active\?\.n\?\?0\)>0\)/);
+ assert.match(routes,/state='approved' AND account_public_jwk=\? AND expires_at>\?/);
  assert.match(routes,/expires_at<now\(\)/);
  assert.match(routes,/proof_hash/);
  assert.match(client,/unseal\(challenge\.envelope,identity\.privateKey/);
@@ -40,6 +43,8 @@ test('approvals require an active previously enrolled device and recipient-bound
  assert.match(routes,/state='pending' AND expires_at>\?/);
  assert.match(routes,/ciphertext_json=NULL WHERE user_id=\? AND expires_at<\?/);
  assert.match(routes,/DELETE FROM trusted_device_challenges WHERE user_id=\? AND expires_at<\?/);
+ assert.match(routes,/export async function purgeExpiredDeviceTransfers/);
+ assert.match(index,/purgeExpiredDeviceTransfers\(env\)/);
  assert.match(client,/await readTrustedRecoveryCode\(userId,identity\.publicKey\)/);
  assert.match(client,/await openMessageRecoveryIdentity\(userId,secret,recoveryEnvelope\)/);
  assert.match(client,/sealTransferCode\(userId,request\.id,request\.publicKey,identity\.publicKey,secret\)/);
