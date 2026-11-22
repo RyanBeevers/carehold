@@ -743,7 +743,62 @@ export default function App(){
     <button type="button" className="button outline" onClick={()=>setModal(null)}>Keep active</button>
    </form></>}
   {modal==='remove'&&<><h2>Remove access<span>.</span></h2><p>This immediately revokes {memberToRemove?.name}'s household membership and medication grants. It does not erase the history of actions they recorded.</p><form className="form-stack" onSubmit={revokeMember}><button className="button primary big" disabled={saving}>Revoke access <Check size={18}/></button><button className="quiet" type="button" onClick={()=>setModal(null)}>Keep their access</button></form></>}
- {modal==='link'&&<><h2>Link an account<span>.</span></h2><p>Connect this medication profile to a person who already joined your circle. Linking identifies the person; it does not grant medication access or expose future private writing.</p><div className="dose-confirm"><span className="form-index">PROFILE</span><h3>{pending.profile?.display_name}</h3></div><form className="form-stack" onSubmit={saveLink}><label>Circle member<select value={linkUserId} onChange={e=>setLinkUserId(e.target.value)}><option value="">Not linked to an account</option>{members.map(m=><option value={m.user_id} key={m.user_id}>{m.name} ({m.email})</option>)}</select></label><p className="fine-print">Only existing household members can be linked. One account can be linked to one person per care circle. Existing permission grants remain unchanged.</p><button className="button primary big" disabled={saving}>{saving?'Saving…':'Save account link'} <Check size={17}/></button></form></>}{modal==='invite'&&<><h2>Invite with intention<span>.</span></h2><p>Share only the profiles needed. This invitation expires in 48 hours and works once.</p>{inviteCreated?<div className="invite-result"><label>One-time invitation code<textarea readOnly rows={3} value={inviteCreated}/></label><button className="button primary" onClick={()=>void copy(inviteCreated,'invite')}>{copyFeedback?.key==='invite'&&copyFeedback.success?<Check size={17}/>:<Copy size={17}/>} {copyFeedback?.key==='invite'&&copyFeedback.success?'Copied':'Copy code'}</button><span className={`copy-feedback ${copyFeedback?.key==='invite'&&!copyFeedback.success?'is-error':''}`} role="status" aria-live="polite">{copyFeedback?.key==='invite'?copyFeedback.message:''}</span><p className="fine-print">Share privately. The invitation is not emailed automatically. New recipients enter this code once during sign-up; it follows them into passkey setup. Existing users can accept it from the care circle.</p></div>:<form className="form-stack" onSubmit={createInvite}><label>Access type<select value={inviteRole} onChange={e=>setInviteRole(e.target.value as 'caregiver'|'member')}><option value="caregiver">Caregiver</option><option value="member">Household member</option></select></label><div className="form-label">Medication access for</div>{profiles.map(p=><label key={p.id} className="check-row"><input type="checkbox" checked={inviteProfiles.includes(p.id)} onChange={e=>setInviteProfiles(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>{p.display_name} <span className="tiny muted">{p.kind}</span></label>)}<p className="fine-print">Selected profiles grant schedule viewing, administration recording, and history viewing—not medication editing or private communication access.</p><button className="button primary big" disabled={saving}>Create invitation <ArrowUpRight size={18}/></button></form>}</>}
+ {modal==='link'&&<><h2>Link an account<span>.</span></h2><p>Connect this medication profile to a person who already joined your circle. Linking identifies the person; it does not grant medication access or expose future private writing.</p><div className="dose-confirm"><span className="form-index">PROFILE</span><h3>{pending.profile?.display_name}</h3></div><form className="form-stack" onSubmit={saveLink}><label>Circle member<select value={linkUserId} onChange={e=>setLinkUserId(e.target.value)}><option value="">Not linked to an account</option>{members.map(m=><option value={m.user_id} key={m.user_id}>{m.name} ({m.email})</option>)}</select></label><p className="fine-print">Only existing household members can be linked. One account can be linked to one person per care circle. Existing permission grants remain unchanged.</p><button className="button primary big" disabled={saving}>{saving?'Saving…':'Save account link'} <Check size={17}/></button></form></>}{modal==='invite'&&<>
+  <h2>Invite with intention<span>.</span></h2>
+  <p>Choose full-circle medication care or specific people and permissions. Invitations expire after 48 hours.</p>
+  {inviteCreated?<div className="invite-result">
+   <label>One-time invitation code<textarea readOnly rows={3} value={inviteCreated}/></label>
+   <button className="button primary" onClick={()=>void copy(inviteCreated,'invite')}>{copyFeedback?.key==='invite'&&copyFeedback.success?<Check size={17}/>:<Copy size={17}/>} {copyFeedback?.key==='invite'&&copyFeedback.success?'Copied':'Copy code'}</button>
+   <span className={`copy-feedback ${copyFeedback?.key==='invite'&&!copyFeedback.success?'is-error':''}`} role="status" aria-live="polite">{copyFeedback?.key==='invite'?copyFeedback.message:''}</span>
+   <p className="fine-print">Share privately. New recipients enter this code at signup; existing members accept it from their Circle.</p>
+  </div>:<form className="form-stack" onSubmit={createInvite}>
+   <label>Access type<select value={inviteRole} onChange={e=>{setInviteRole(e.target.value as 'caregiver'|'member');setInviteScope('limited');}}>
+    <option value="caregiver">Caregiver</option><option value="member">Household member</option>
+   </select></label>
+   {inviteRole==='caregiver'&&<label>Caregiver scope<select value={inviteScope} onChange={e=>setInviteScope(e.target.value as CareScope)}>
+    <option value="limited">Limited - selected profiles</option><option value="full">Full circle - everyone, including new profiles</option>
+   </select></label>}
+   {(inviteRole!=='caregiver'||inviteScope==='limited')&&<>
+    <span className="form-label">People and pets to share</span>
+    {profiles.filter(p=>!p.archived_at).map(p=><label key={p.id} className="check-row">
+     <input type="checkbox" checked={inviteProfiles.includes(p.id)} onChange={e=>setInviteProfiles(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>
+     {p.display_name} <span className="tiny muted">{p.kind}</span>
+    </label>)}
+    <span className="form-label">Medication permissions - same for selected profiles</span>
+    <p className="fine-print">Viewing medication schedules is included.</p>
+    {CARE_PERMISSION_OPTIONS.map(([cap,label])=><label key={cap} className="check-row">
+     <input type="checkbox" checked={inviteCapabilities.includes(cap)} onChange={e=>setInviteCapabilities(v=>e.target.checked?[...v,cap]:v.filter(x=>x!==cap))}/>{label}
+    </label>)}
+   </>}
+   <p className="fine-print">No invitation grants access to private journals, personal messages, or shared conversations.</p>
+   <button className="button primary big" disabled={saving}>Create invitation <ArrowUpRight size={18}/></button>
+  </form>}
+ </>}
+ {modal==='access'&&accessMember&&<>
+  <h2>Manage care access<span>.</span></h2>
+  <p>Change {accessMember.name}'s medication permissions without removing their account or recorded history.</p>
+  <form className="form-stack" onSubmit={saveMemberAccess}>
+   {accessMember.role==='caregiver'&&<label>Caregiver scope<select value={accessScope} onChange={e=>setAccessScope(e.target.value as CareScope)}>
+    <option value="limited">Limited - selected profiles</option><option value="full">Full circle - everyone, including new profiles</option>
+   </select></label>}
+   {accessScope==='limited'&&<>
+    <span className="form-label">People and pets to share</span>
+    {profiles.filter(p=>!p.archived_at).map(p=><label key={p.id} className="check-row">
+     <input type="checkbox" checked={accessProfiles.includes(p.id)} onChange={e=>setAccessProfiles(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>
+     {p.display_name} <span className="tiny muted">{p.kind}</span>
+    </label>)}
+    <span className="form-label">Medication permissions - same for selected profiles</span>
+    <p className="fine-print">Viewing medication schedules is included.</p>
+    {CARE_PERMISSION_OPTIONS.map(([cap,label])=><label key={cap} className="check-row">
+     <input type="checkbox" checked={accessCapabilities.includes(cap)} onChange={e=>setAccessCapabilities(v=>e.target.checked?[...v,cap]:v.filter(x=>x!==cap))}/>{label}
+    </label>)}
+   </>}
+   {accessScope==='full'&&<p className="fine-print">Full-circle care permits viewing and managing all medication plans and administration records, including for people or pets added later. Adult account classification is required to record doses or edit plans.</p>}
+   <p className="fine-print">Private journals, drafts, messages, and conversations always require explicit sharing and remain outside caregiver permissions.</p>
+   <button className="button primary big" disabled={saving}>{saving?'Saving…':'Save access'} <Check size={18}/></button>
+   <button type="button" className="button outline" onClick={()=>setModal(null)}>Cancel</button>
+  </form>
+ </>}
  </section></div>}
  </>;
 }
