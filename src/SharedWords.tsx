@@ -177,7 +177,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
  const author=(id:string)=>detail?.participants.find(p=>p.id===id)?.name||'Participant';
  async function send(kind:'reflection'|'discussion'){
   const vault=kind==='reflection'?reflection:discussion,text=vault.text;
-  if(!identity||!detail||!vault.ready||!text.trim()||busy)return;
+  if(!identity||!detail||!vault.ready||!text.trim()||busy||removing)return;
   setBusy(kind);setError('');setStatus('');
   try{
    if(detail.participants.some(p=>!p.publicKey))throw new Error('A participant has no registered device key.');
@@ -199,7 +199,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   finally{setBusy(null);}
  }
  async function savePrivateNote(){
-  if(!discussion.ready||!discussion.text.trim()||busy)return;
+  if(!discussion.ready||!discussion.text.trim()||busy||removing)return;
   setBusy('save');setError('');setStatus('');
   try{
    if(!identity)throw new Error('Set up encryption recovery before saving private notes.');
@@ -216,7 +216,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   finally{setBusy(null);}
  }
   async function removeSharedContent(){
-   if(!confirmAction||removing)return;
+   if(!confirmAction||removing||busy)return;
    setRemoving(true);setError('');setStatus('');
    try{
     if(confirmAction.kind==='post'){
@@ -260,7 +260,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
       ?'Remove this shared space and all replies from everyone’s Carehold view? Your private journal entry is not deleted. Past copies on other devices and encrypted recovery history may remain.'
       :'Leave this shared space? It will disappear from your account. Others can keep existing copies and continue without you.'}</span>
      <button type="button" className="quiet small" disabled={removing} onClick={()=>setConfirmAction(null)}>Keep space</button>
-     <button type="button" className="button dark small" disabled={removing} onClick={()=>void removeSharedContent()}>{removing?'Removing…':confirmAction.kind==='space'?'Remove for everyone':'Leave space'}</button>
+     <button type="button" className="button dark small" disabled={removing||!!busy} onClick={()=>void removeSharedContent()}>{removing?'Removing…':confirmAction.kind==='space'?'Remove for everyone':'Leave space'}</button>
     </div>}
    </div>
    <section className="words-space-discussion">
@@ -287,11 +287,11 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
        onClick={()=>discussion.setText(reflection.text)}>Copy old draft</button>
      </div>}
      <label htmlFor="words-discussion-reply">Write a reply or private note</label>
-     <textarea id="words-discussion-reply" rows={5} maxLength={2600} disabled={!discussion.ready||!!busy}
+     <textarea id="words-discussion-reply" rows={5} maxLength={2600} disabled={!discussion.ready||!!busy||removing}
       value={discussion.text} onChange={e=>{discussion.setText(e.target.value);retry.current=null;}}
       placeholder="Write here first. Decide whether to keep it private or share it below…"/>
      <div className="words-response-actions">
-      <button type="button" className="button outline small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'}
+      <button type="button" className="button outline small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||removing||discussion.status==='conflict'}
        onClick={()=>void savePrivateNote()}>{busy==='save'?'Saving…':'Post private note · only me'}</button>
       <button type="button" className="button dark small" disabled={!discussion.ready||!discussion.text.trim()||!!busy||discussion.status==='conflict'} onClick={()=>void send('discussion')}>
        <Send size={15}/> {busy==='discussion'?'Posting…':'Post reply · everyone'}</button>
