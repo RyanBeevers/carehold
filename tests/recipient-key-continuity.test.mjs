@@ -79,7 +79,7 @@ test('all three send surfaces validate keys before constructing recipient cipher
  for(const text of [share,reply,direct]){
   assert.match(text,/await checkRecipientKeyContinuity\(/);
   assert.match(text,/RecipientKeyChangedError/);
-  assert.ok(text.indexOf('await checkRecipientKeyContinuity(')<text.indexOf('const copies:Record<string,Envelope>'));
+  assert.ok(text.indexOf('await checkRecipientKeyContinuity(')>=0&&text.indexOf('await checkRecipientKeyContinuity(')<text.indexOf('await seal'),'Confirm the recipient key before encrypting any copy');
  }
  assert.match(words,/KeyChangeReview/);
  assert.match(messages,/KeyChangeReview/);
