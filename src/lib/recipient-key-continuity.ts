@@ -53,6 +53,8 @@ export async function checkRecipientKeyContinuity(accountId:string,householdId:s
   const key=scopedKey(accountId,householdId,contact.id);
   const current=await fingerprintPublicKey(contact.publicKey);
   const previous=store.getItem(key);
+  if(previous&&!/^[A-F0-9]{64}$/.test(previous))
+   throw new Error('A saved encryption key checkpoint is invalid. Sending is blocked on this browser.');
   if(previous&&previous!==current)changed.push({id:contact.id,name:contact.name,previous,current});
   else if(!previous)toPin.push({key,fingerprint:current});
  }
