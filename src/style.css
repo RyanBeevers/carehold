@@ -577,3 +577,9 @@
 .key-change-review li>strong{font-size:12px}
 .key-change-review .words-response-actions{display:flex;flex-wrap:wrap;gap:9px}
 @media(max-width:720px){.key-change-review{padding:13px}.key-change-review .button{max-width:100%;white-space:normal}.recipient-key-details code,.key-self-verification code,.key-change-review code{font-size:10px}}
+
+/* Settings-only disclosure; everyday journal and conversation pages stay clear. */
+.household-security-details{max-width:470px;min-width:0;font-size:12px;color:var(--ink)}
+.household-security-details summary{cursor:pointer;font-weight:700;line-height:1.5;padding:9px 0}
+.household-security-details summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.household-security-details p{line-height:1.6;margin:11px 0;color:var(--muted)}
