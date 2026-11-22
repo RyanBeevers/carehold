@@ -1,6 +1,6 @@
 import {useEffect,useState,type FormEvent} from 'react';
 import {api,StaleSessionRequest} from './lib/api';
-import {samePublicKey,storedMessageIdentity,storeRecoveredMessageIdentity,storedPendingRecoveryEnvelope,storePendingRecoveryEnvelope,clearPendingRecoveryEnvelope,type Identity,type PublicKey} from './lib/message-crypto';
+import {samePublicKey,storedMessageIdentity,storeRecoveredMessageIdentity,storeRotatedMessageIdentity,storedPendingRecoveryEnvelope,storePendingRecoveryEnvelope,clearPendingRecoveryEnvelope,type Identity,type PublicKey} from './lib/message-crypto';
 import {createMessageRecoveryIdentity,openMessageRecoveryIdentity,type MessageRecoveryEnvelope,type NewRecoveryIdentity} from './lib/message-recovery';
 import {RecoveryCodeSaveGuide,RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 
@@ -105,7 +105,12 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
   try{
    const identity=await openMessageRecoveryIdentity(userId,code.trim(),server.envelope);
    if(!samePublicKey(identity.publicKey,enrolledPublic))throw new Error('The recovered key does not match the registered identity.');
-   await storeRecoveredMessageIdentity(userId,identity);
+   const previous=await storedMessageIdentity(userId);
+   // Another browser may still hold an older non-extractable account key.
+   // Preserve it in local history instead of clearing site data or replacing it.
+   if(previous&&!samePublicKey(previous.publicKey,identity.publicKey))
+    await storeRotatedMessageIdentity(userId,previous,identity);
+   else await storeRecoveredMessageIdentity(userId,identity);
    await clearPendingRecoveryEnvelope(userId,'fresh').catch(()=>{});
    setCode('');
    onReady(identity);announceRecovery();setMode('ready');setNotice('Message key restored on this device.');
