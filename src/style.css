@@ -533,3 +533,17 @@
  .recovery-verification .button{width:100%}
  .recovery-missing-code{padding:15px 14px}
 }
+
+/* Mandatory onboarding recovery is a full first-run step, not a hidden
+   Settings subsection. Keep one readable narrow column on phones. */
+.recovery-onboarding .onboard-main{margin:5vh auto 9vh;padding-bottom:28px}
+.recovery-onboarding .onboard-main>p{max-width:710px}
+.recovery-onboarding .recovery-gate{box-sizing:border-box;width:100%;max-width:780px}
+.recovery-onboarding .recovery-save-guide{min-width:0;max-width:100%}
+.recovery-onboarding .recovery-secret{overflow-wrap:anywhere;user-select:text}
+@media(max-width:680px){
+ .recovery-onboarding .onboard-main{margin:5vh auto;padding:0 18px 40px}
+ .recovery-onboarding .onboard-main h1{font-size:clamp(42px,11vw,70px)}
+ .recovery-onboarding .recovery-gate{padding:16px}
+ .recovery-onboarding .recovery-gate .button{max-width:100%;white-space:normal;text-align:center}
+}
