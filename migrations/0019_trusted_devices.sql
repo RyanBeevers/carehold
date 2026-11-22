@@ -7,6 +7,7 @@ CREATE TABLE trusted_devices (
  device_id TEXT NOT NULL,
  label TEXT NOT NULL CHECK(length(label) BETWEEN 1 AND 60),
  account_public_jwk TEXT NOT NULL,
+ approval_public_jwk TEXT NOT NULL,
  created_at TEXT NOT NULL,
  last_seen_at TEXT NOT NULL,
  revoked_at TEXT,
