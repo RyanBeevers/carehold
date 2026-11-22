@@ -126,12 +126,14 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
  if(path==='/api/words/spaces'&&req.method==='GET'){
   const hid=householdId(url.searchParams.get('householdId'));await member(db,hid,user.id);
   const result=await db.prepare(`SELECT s.id,s.initial_kind,s.created_by,s.created_at,u.name creator_name,
-   p.id initial_post_id,COALESCE(mc.envelope_json,c.envelope_json) envelope_json FROM shared_word_spaces s
+   p.id initial_post_id,COALESCE(rc.envelope_json,mc.envelope_json,c.envelope_json) envelope_json FROM shared_word_spaces s
    JOIN shared_word_participants own ON own.space_id=s.id AND own.user_id=?
    JOIN user u ON u.id=s.created_by
    JOIN shared_word_posts p ON p.space_id=s.id AND p.kind IN ('prompt','journal')
    JOIN shared_word_copies c ON c.post_id=p.id AND c.recipient_id=?
    LEFT JOIN account_migrated_copies mc ON mc.source_kind='words' AND mc.source_id=p.id AND mc.user_id=c.recipient_id AND EXISTS(SELECT 1 FROM account_key_migrations mig WHERE mig.user_id=c.recipient_id AND mig.state='complete')
+    LEFT JOIN account_recovery_rotation_copies rc ON rc.source_kind='words' AND rc.source_id=p.id
+     AND rc.rotation_id=(SELECT rotation_id FROM account_recovery_rotations WHERE user_id=c.recipient_id AND state='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 1)
    WHERE s.household_id=? ORDER BY s.created_at DESC LIMIT 100`)
    .bind(user.id,user.id,hid).all<{id:string,initial_kind:string,created_by:string,created_at:string,creator_name:string,initial_post_id:string,envelope_json:string}>();
   return respond({spaces:(result.results||[]).map(r=>({id:r.id,kind:r.initial_kind,createdBy:r.created_by,createdAt:r.created_at,creatorName:r.creator_name,
@@ -215,9 +217,11 @@ async function route(req:Request,env:CareEnv,user:SessionUser,ctx:ExecutionConte
    return respond({id:postId,accepted:true},201);
   }
   if(!path.endsWith('/posts')&&req.method==='GET'){
-   const result=await db.prepare(`SELECT p.id,p.author_id,p.kind,p.created_at,COALESCE(mc.envelope_json,c.envelope_json) envelope_json FROM shared_word_posts p
+   const result=await db.prepare(`SELECT p.id,p.author_id,p.kind,p.created_at,COALESCE(rc.envelope_json,mc.envelope_json,c.envelope_json) envelope_json FROM shared_word_posts p
     JOIN shared_word_copies c ON c.post_id=p.id AND c.recipient_id=?
     LEFT JOIN account_migrated_copies mc ON mc.source_kind='words' AND mc.source_id=p.id AND mc.user_id=c.recipient_id AND EXISTS(SELECT 1 FROM account_key_migrations mig WHERE mig.user_id=c.recipient_id AND mig.state='complete')
+    LEFT JOIN account_recovery_rotation_copies rc ON rc.source_kind='words' AND rc.source_id=p.id
+     AND rc.rotation_id=(SELECT rotation_id FROM account_recovery_rotations WHERE user_id=c.recipient_id AND state='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 1)
     WHERE p.space_id=? ORDER BY p.created_at,p.id LIMIT 300`).bind(user.id,sid)
     .all<{id:string,author_id:string,kind:string,created_at:string,envelope_json:string}>();
    return respond({id:sid,kind:space.initial_kind,createdBy:space.created_by,participants:people,
