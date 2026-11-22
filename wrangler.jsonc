@@ -3,21 +3,61 @@
   "name": "carehold-local",
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "d1_databases": [{"binding":"DB", "database_name":"carehold-local", "database_id":"00000000-0000-0000-0000-000000000000", "migrations_dir":"migrations"}],
-  "assets": {"directory":"./dist", "binding":"ASSETS", "not_found_handling":"single-page-application", "run_worker_first":["/api/*"]},
-  "triggers": {"crons": ["*/5 * * * *"]},
-  "vars": {"APP_ORIGIN":"http://localhost:5173"},
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "carehold-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "vars": {
+    "APP_ORIGIN": "http://localhost:5173"
+  },
   "env": {
     "staging": {
-      "name":"carehold-staging",
-      "d1_databases":[{"binding":"DB","database_name":"carehold-staging","database_id":"REPLACE_STAGING_D1_ID","migrations_dir":"migrations"}],
-      "vars":{"APP_ORIGIN":"https://REPLACE-STAGING-HOST"}
+      "name": "carehold-staging",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "carehold-staging",
+          "database_id": "9829b2d4-3a98-4982-8848-8821d6a6ee0c",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "APP_ORIGIN": "https://carehold-staging.wavelength-woodworks-loop-api.workers.dev"
+      }
     },
     "production": {
-      "name":"carehold-production",
-      "d1_databases":[{"binding":"DB","database_name":"carehold-production","database_id":"REPLACE_PRODUCTION_D1_ID","migrations_dir":"migrations"}],
-      "vars":{"APP_ORIGIN":"https://REPLACE-PRODUCTION-HOST"}
+      "name": "carehold-production",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "carehold-production",
+          "database_id": "bc3588e9-d56d-4fa3-b04e-e40f3a5a862c",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "APP_ORIGIN": "https://carehold-production.wavelength-woodworks-loop-api.workers.dev"
+      }
     }
   }
 }
