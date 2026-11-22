@@ -11,7 +11,7 @@ test('cloud readiness verifies D1 schema without disclosing account data or SQL 
  const start=worker.indexOf("if(path==='/api/health/ready'&&req.method==='GET')");
  assert.notEqual(start,-1);
  const block=worker.slice(start,worker.indexOf("if(path.startsWith('/api/auth/'))",start));
- for(const table of ['user','message_account_recovery','private_draft_sync','account_key_migrations'])
+ for(const table of ['user','message_account_recovery','private_draft_sync','account_key_migrations','account_recovery_rotations','account_recovery_rotation_journals','account_recovery_rotation_drafts'])
   assert.ok(block.includes('SELECT 1 FROM '+table+' LIMIT 1'),table);
  assert.match(block,/return json\(\{ok:true,product:'carehold'\}\)/);
  assert.match(block,/return json\(\{ok:false,product:'carehold'\},503\)/);
