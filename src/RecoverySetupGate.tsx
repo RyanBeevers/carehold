@@ -61,7 +61,7 @@ export function RecoverySetupGate({userId,onVerified,onSignOut}:{
     <p role="alert">{error||'This account has an encryption identity this browser cannot safely replace. Return to the original browser, or restore with its saved recovery code. No data has been deleted.'}</p>
     <button type="button" className="button outline" onClick={()=>setCheckNonce(n=>n+1)}>Retry recovery check</button>
    </div>}
-   <p className="fine-print">Save the one-time CH1- code outside this browser, then retrieve and re-enter it to finish setup. Never send it to another household member. Carehold cannot automatically save it to Apple Passwords. Use fictional information in this unaudited pilot.</p>
+   <p className="fine-print">Save the one-time CH1- code outside this browser, then retrieve and re-enter it to finish setup. Never send it to another household member. Carehold cannot automatically save it to Apple Passwords. Keep this code separate from your sign-in password and do not clear existing browser data before recovery has been tested.</p>
   </main>
  </div>;
 }
