@@ -537,20 +537,28 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     if(target!.role==='owner')bad(403,'Owner permissions cannot be changed here.');
     if(b.accessScope!=='limited'&&b.accessScope!=='full')bad(400,'Choose a valid care access scope.');
     if(b.accessScope==='full'&&target!.role!=='caregiver')bad(400,'Only caregivers can have full-circle access.');
-    if(!Array.isArray(b.grants)||b.grants.length>40)bad(400,'Invalid profile permissions.');
-    if(b.accessScope==='full'&&b.grants.length)bad(400,'Full-circle access cannot include separate profile grants.');
+    // JSON request fields are unknown until explicitly validated. Keep a narrowed
+    // local array so TypeScript does not infer permissions from untrusted payloads.
+    const submittedGrants=b.grants;
+    if(!Array.isArray(submittedGrants)||submittedGrants.length>40)bad(400,'Invalid profile permissions.');
+    if(b.accessScope==='full'&&submittedGrants.length)bad(400,'Full-circle access cannot include separate profile grants.');
     const selected=new Set<string>();
     const grants:{profileId:string,capabilities:Capability[]}[]=[];
-    for(const entry of b.grants){
-      if(!entry||typeof entry!=='object'||typeof entry.profileId!=='string'||
-         !validCapabilities(entry.capabilities)||entry.capabilities.length===0||
-         !entry.capabilities.includes('view_schedule'))bad(400,'Invalid profile permission selection.');
-      if(selected.has(entry.profileId))bad(400,'Duplicate profile permission.');
-      selected.add(entry.profileId);
+    for(const rawEntry of submittedGrants as unknown[]){
+      if(!rawEntry||typeof rawEntry!=='object'||Array.isArray(rawEntry))
+        bad(400,'Invalid profile permission selection.');
+      const entry=rawEntry as Record<string,unknown>;
+      const profileId=entry.profileId;
+      const capabilities=entry.capabilities;
+      if(typeof profileId!=='string'||!validCapabilities(capabilities)||
+         capabilities.length===0||!capabilities.includes('view_schedule'))
+        bad(400,'Invalid profile permission selection.');
+      if(selected.has(profileId))bad(400,'Duplicate profile permission.');
+      selected.add(profileId);
       const exists=await db.prepare('SELECT 1 FROM profiles WHERE id=? AND household_id=? AND archived_at IS NULL')
-        .bind(entry.profileId,hid).first();
+        .bind(profileId,hid).first();
       if(!exists)bad(400,'Selected profile is not active in this circle.');
-      grants.push({profileId:entry.profileId,capabilities:[...new Set(entry.capabilities)]});
+      grants.push({profileId,capabilities:[...new Set<Capability>(capabilities)]});
     }
     const prior=await db.prepare('SELECT profile_id,capability FROM profile_grants WHERE household_id=? AND user_id=?')
       .bind(hid,memberAccess[1]).all<{profile_id:string;capability:Capability}>();
