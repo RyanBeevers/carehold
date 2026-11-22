@@ -8,22 +8,23 @@ import {localTrustedDevice,savePendingTransfer,pendingTransfer,discardPendingTra
 export type TrustedDevice={id:string,name:string,createdAt:string,lastSeenAt:string,revokedAt:string|null,keyCurrent:boolean};
 export type DeviceRequest={id:string,deviceId:string,deviceName:string,publicKey:PublicKey,accountPublicKey:PublicKey,state:'pending'|'approved'|'consumed'|'cancelled'|'expired',expiresAt:number,createdAt:string,envelope:TransferEnvelope|null};
 export type DeviceDirectory={accountPublicKey:PublicKey,devices:TrustedDevice[],pendingRequests:DeviceRequest[]};
-type DeviceChallenge={envelope:Parameters<typeof unseal>[0],accountPublicKey:PublicKey};
+type DeviceChallenge={envelope:Parameters<typeof unseal>[0],accountPublicKey:PublicKey,challengeId:string};
 
 /** This is a crypto proof, not merely a user session or a browser device ID.
  * The server encrypts a random single-use challenge for this account key.
  */
-async function keyProof(userId:string,identity:Identity,deviceId:string,action:DeviceSignatureAction,targetId:string):Promise<{proof:string,signature:string}>{
+async function keyProof(userId:string,identity:Identity,deviceId:string,action:DeviceSignatureAction,targetId:string):Promise<{proof:string,signature:string,challengeId:string}>{
  const device=await localTrustedDevice(userId);
  if(device.id!==deviceId||!device.approvalPrivateKey||device.approvalPrivateKey.extractable)
   throw new Error('A different browser owns this trusted-device identity.');
  const challenge=await api<DeviceChallenge>('/trusted-devices/challenge','POST',{deviceId});
+ if(!/^[0-9a-f-]{36}$/i.test(challenge.challengeId))throw new Error('Invalid trusted-device challenge.');
  if(!samePublicKey(identity.publicKey,challenge.accountPublicKey))
   throw new Error('Your account encryption identity changed. Restore it before managing devices.');
  const clear=await unseal(challenge.envelope,identity.privateKey,'carehold-trusted-device-register',deviceId,userId);
  if(clear.kind!=='message'||!/^[A-Za-z0-9_-]{43}$/.test(clear.text))throw new Error('Invalid device proof.');
  const signature=await signDeviceAuthorization(device.approvalPrivateKey,userId,deviceId,clear.text,action,targetId);
- return {proof:clear.text,signature};
+ return {proof:clear.text,signature,challengeId:challenge.challengeId};
 }
 const enrollmentInFlight=new Map<string,Promise<void>>();
 export function enrollLocalTrustedDevice(userId:string,identity:Identity):Promise<void>{
