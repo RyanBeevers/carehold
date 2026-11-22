@@ -22,5 +22,5 @@ export function canUseCareProfile(
  const mutation=capability==='manage_medication'||capability==='record_dose';
  if(mutation&&classification!=='adult')return false;
  const self=classification==='adult'&&linkedAdultSelf;
- return self||(role==='caregiver'&&fullCircleCaregiver)||canAccess(role,grants,capability);
+ return self||(role==='caregiver'&&classification==='adult'&&fullCircleCaregiver)||canAccess(role,grants,capability);
 }
