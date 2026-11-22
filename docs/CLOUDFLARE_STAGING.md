@@ -50,7 +50,9 @@ npx wrangler whoami
 npx wrangler d1 create carehold-staging
 ```
 
-Copy the returned **real staging D1 database ID** into `env.staging.d1_databases[0].database_id` of `wrangler.jsonc`, replacing `REPLACE_STAGING_D1_ID`. Set `env.staging.vars.APP_ORIGIN` to the **exact HTTPS origin** planned for this Worker (no trailing slash or path), e.g. `https://carehold-staging.<YOUR_ACCOUNT_SUBDOMAIN>.workers.dev`. Confirm your account's real workers.dev subdomain in the Cloudflare dashboard; don't assume the example is yours. Keep this origin stable after enrolling passkeys because it sets the WebAuthn RP ID.
+Run `npm run configure:staging` to enter the **real staging D1 database ID** and **exact HTTPS Worker origin** (e.g. `https://carehold-staging.<YOUR_ACCOUNT_SUBDOMAIN>.workers.dev`). The interactive command validates both, requires an explicit confirmation, changes only `env.staging` in `wrangler.jsonc`, and never requests a secret or deploys anything. Confirm your actual workers.dev subdomain in the Cloudflare dashboard; do not assume the example is yours. Keep the origin stable after enrolling passkeys because it sets the WebAuthn RP ID.
+
+If you prefer to edit `wrangler.jsonc` yourself, replace `REPLACE_STAGING_D1_ID` and `REPLACE-STAGING-HOST` under `env.staging`, leaving production untouched.
 
 To protect the app, configure two strong **environment-specific secrets**. Wrangler prompts for the values. Don't paste values into chat, commit them, put them in `vars`, or reuse the local development values:
 
