@@ -69,3 +69,43 @@ export async function deleteSyncedDraft(uid:string,scope:string,key:CryptoKey,ex
   throw new Error('Remote draft deletion was not confirmed.');
  return result.revision;
 }
+
+
+/** Calculate the same opaque draft locator without writing or reading a draft. */
+export async function draftScopeToken(uid:string,scope:string){
+ if(!uid||!scope||uid.length>200||scope.length>240)throw new Error('Invalid draft scope.');
+ const digest=await crypto.subtle.digest('SHA-256',encoder.encode('carehold-draft-locator-v1:'+uid+':'+scope));
+ return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+/**
+ * A staged rotation must locate every current remotely synchronized draft.
+ * Check the old AES-GCM authenticated revision, encrypt at revision+1 under
+ * the new key, and verify it before sending ONLY ciphertext to the Worker.
+ */
+export async function reencryptSyncedDraft(
+ uid:string,scope:string,row:{revision:number,iv:string,ciphertext:string},
+ oldKey:CryptoKey,nextKey:CryptoKey
+):Promise<{expectedRevision:number,iv:string,ciphertext:string}>{
+ scopeFor(uid,scope,oldKey);scopeFor(uid,scope,nextKey);
+ if(!Number.isSafeInteger(row.revision)||row.revision<1)throw new Error('Invalid synced draft revision.');
+ const iv=unb64(row.iv),ciphertext=unb64(row.ciphertext);
+ if(iv.length!==12||ciphertext.length>9000)throw new Error('Invalid stored draft cipher.');
+ const old=await crypto.subtle.decrypt(
+  {name:'AES-GCM',iv,additionalData:associated(uid,scope,row.revision)},oldKey,ciphertext);
+ let plain:unknown;
+ try{plain=JSON.parse(decoder.decode(old));}catch{throw new Error('Draft cannot be decrypted with this browser key.');}
+ if(!validate(plain))throw new Error('Draft ciphertext was not a valid document.');
+ const nextRevision=row.revision+1;
+ const nextIv=crypto.getRandomValues(new Uint8Array(12));
+ const nextCipher=await crypto.subtle.encrypt(
+  {name:'AES-GCM',iv:nextIv,additionalData:associated(uid,scope,nextRevision)},
+  nextKey,encoder.encode(JSON.stringify(plain))
+ );
+ const verified=await crypto.subtle.decrypt(
+  {name:'AES-GCM',iv:nextIv,additionalData:associated(uid,scope,nextRevision)},
+  nextKey,nextCipher
+ );
+ if(JSON.stringify(JSON.parse(decoder.decode(verified)))!==JSON.stringify(plain))
+  throw new Error('Rotated draft did not verify. No account key was changed.');
+ return {expectedRevision:row.revision,iv:b64(nextIv),ciphertext:b64(new Uint8Array(nextCipher))};
+}
