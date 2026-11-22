@@ -336,7 +336,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable.</strong> {keyError} Your existing local journal is preserved on this device. Never reset your account key to bypass this warning.</p>}
    {identity?.journalKey&&legacyCount>0&&<div className="recovery-gate"><strong>{legacyCount} older journal entries are stored on this device only.</strong><p>Import them into private encrypted sync without deleting the original local copies. This can be safely retried.</p><button type="button" className="button outline" disabled={migratingJournal} onClick={()=>void migrateJournal()}>{migratingJournal?'Migrating…':'Safely migrate local journal'}</button></div>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} keyError={keyError} people={people}
-    onCreated={sid=>{void finishSharing(sid);}}
+    onCreated={finishSharing}
     onCancel={()=>setSeed(null)} onRefreshPeople={()=>void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`).then(r=>{setPeople(r.people);setContactsError('');}).catch(e=>setContactsError(errorText(e)))}/>:
   tab==='explore'?<section className="words-explore" aria-label="Prompt library">
    <div className="words-hub-section-top"><div><span className="mono kicker">A GENTLE PLACE TO BEGIN</span><h2>Find the right words.</h2><p className="muted">Browse 100+ thoughtful prompts. Share one as an invitation, or use it as inspiration for your own entry.</p></div></div>
