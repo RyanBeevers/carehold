@@ -62,10 +62,12 @@ async function challenge(db:D1Database,userId:string,deviceId:string){
  return {envelope:ciphertext,accountPublicKey:current.key};
 }
 async function verifyProof(db:D1Database,userId:string,deviceId:string,proof:unknown):Promise<void>{
- if(typeof proof!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(proof))fail(403,'Current-device verification required.');
+ if(typeof proof!=='string')return fail(403,'Current-device verification required.');
+ if(!/^[A-Za-z0-9_-]{43}$/.test(proof))return fail(403,'Current-device verification required.');
  const row=await db.prepare('SELECT proof_hash,expires_at FROM trusted_device_challenges WHERE user_id=? AND device_id=?')
   .bind(userId,deviceId).first<{proof_hash:string,expires_at:number}>();
- if(!row||row.expires_at<now()||row.proof_hash!==await sha(proof))fail(403,'Device verification expired or incorrect.');
+ if(!row)return fail(403,'Device verification expired or incorrect.');
+ if(row.expires_at<now()||row.proof_hash!==await sha(proof))return fail(403,'Device verification expired or incorrect.');
  const consumed=await db.prepare('DELETE FROM trusted_device_challenges WHERE user_id=? AND device_id=? AND proof_hash=? AND expires_at>=?')
   .bind(userId,deviceId,row.proof_hash,now()).run();
  if(consumed.meta.changes!==1)fail(409,'Device verification was already used.');
@@ -187,7 +189,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
   await activeDevice(db,user.id,currentDevice,current.encoded);
   const existing=await db.prepare('SELECT revoked_at FROM trusted_devices WHERE user_id=? AND device_id=?')
    .bind(user.id,target).first<{revoked_at:string|null}>();
-  if(!existing)fail(404,'Device unavailable.');
+  if(!existing)return fail(404,'Device unavailable.');
   if(existing.revoked_at)return json({revoked:true,requiresEncryptionRotation:true});
   await verifyProof(db,user.id,currentDevice,b.proof);
   await db.batch([
@@ -196,7 +198,7 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
   ]);
   return json({revoked:true,requiresEncryptionRotation:true});
  }
- fail(404,'Trusted-device route not found.');
+ return fail(404,'Trusted-device route not found.');
 }
 export async function handleTrustedDevices(req:Request,env:CareEnv,user:SessionUser):Promise<Response>{
  try{return await route(req,env,user);}
