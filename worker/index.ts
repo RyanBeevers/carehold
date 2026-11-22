@@ -540,19 +540,19 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     // JSON request fields are unknown until explicitly validated. Keep a narrowed
     // local array so TypeScript does not infer permissions from untrusted payloads.
     const submittedGrants=b.grants;
-    if(!Array.isArray(submittedGrants)||submittedGrants.length>40)bad(400,'Invalid profile permissions.');
+    if(!Array.isArray(submittedGrants)||submittedGrants.length>40)throw new ApiError(400,'Invalid profile permissions.');
     if(b.accessScope==='full'&&submittedGrants.length)bad(400,'Full-circle access cannot include separate profile grants.');
     const selected=new Set<string>();
     const grants:{profileId:string,capabilities:Capability[]}[]=[];
     for(const rawEntry of submittedGrants as unknown[]){
       if(!rawEntry||typeof rawEntry!=='object'||Array.isArray(rawEntry))
-        bad(400,'Invalid profile permission selection.');
+        throw new ApiError(400,'Invalid profile permission selection.');
       const entry=rawEntry as Record<string,unknown>;
       const profileId=entry.profileId;
       const capabilities=entry.capabilities;
       if(typeof profileId!=='string'||!validCapabilities(capabilities)||
          capabilities.length===0||!capabilities.includes('view_schedule'))
-        bad(400,'Invalid profile permission selection.');
+        throw new ApiError(400,'Invalid profile permission selection.');
       if(selected.has(profileId))bad(400,'Duplicate profile permission.');
       selected.add(profileId);
       const exists=await db.prepare('SELECT 1 FROM profiles WHERE id=? AND household_id=? AND archived_at IS NULL')
