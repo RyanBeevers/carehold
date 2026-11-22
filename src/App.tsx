@@ -793,7 +793,7 @@ export default function App(){
      <input type="checkbox" checked={accessCapabilities.includes(cap)} onChange={e=>setAccessCapabilities(v=>e.target.checked?[...v,cap]:v.filter(x=>x!==cap))}/>{label}
     </label>)}
    </>}
-   {accessScope==='full'&&<p className="fine-print">Full-circle care permits viewing and managing all medication plans and administration records, including for people or pets added later. Adult account classification is required to record doses or edit plans.</p>}
+   {accessScope==='full'&&<p className="fine-print">Full-circle care permits viewing and managing all medication plans and administration records, including new people or pets. The owner must classify this account Adult before full-circle access becomes active.</p>}
    <p className="fine-print">Private journals, drafts, messages, and conversations always require explicit sharing and remain outside caregiver permissions.</p>
    <button className="button primary big" disabled={saving}>{saving?'Saving…':'Save access'} <Check size={18}/></button>
    <button type="button" className="button outline" onClick={()=>setModal(null)}>Cancel</button>
