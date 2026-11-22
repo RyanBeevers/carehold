@@ -37,7 +37,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
  const [loadingJournal,setLoadingJournal]=useState(true),[journalError,setJournalError]=useState(''),[journalBusy,setJournalBusy]=useState(false),[pendingLoad,setPendingLoad]=useState<JournalEntry|null>(null),[confirmDelete,setConfirmDelete]=useState<string|null>(null);
  const [seed,setSeed]=useState<ShareSeed|null>(null),[openSpaceId,setOpenSpaceId]=useState<string|null>(null);
  const [activity,setActivity]=useState<ActivityEvent[]>([]),[pushEnabled,setPushEnabled]=useState(false),[pushReady,setPushReady]=useState(false),[pushPublicKey,setPushPublicKey]=useState<string|null>(null),[pushBusy,setPushBusy]=useState(false),[pushError,setPushError]=useState('');
- const [feedback,setFeedback]=useState('');
+ const [feedback,setFeedback]=useState(''),[pushNotice,setPushNotice]=useState('');
  const [backupMode,setBackupMode]=useState<'export'|'import'|null>(null);
  const [legacyCount,setLegacyCount]=useState(0),[migratingJournal,setMigratingJournal]=useState(false);
  const [backupPassphrase,setBackupPassphrase]=useState(''),[backupFile,setBackupFile]=useState<File|null>(null);
@@ -116,7 +116,15 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   void api<{enabled:boolean}>(`/words/push-preference?householdId=${encodeURIComponent(householdId)}`)
    .then(r=>{if(live)setPushEnabled(r.enabled);}).catch(()=>{});
   void api<{configured:boolean,subscriptionCount:number}>(`/push/status?householdId=${encodeURIComponent(householdId)}`)
-   .then(r=>{if(live)setPushReady(r.subscriptionCount>0);}).catch(()=>{});
+   .then(async r=>{
+    let thisDevice=false;
+    if(r.configured&&r.subscriptionCount>0&&'serviceWorker' in navigator&&'PushManager' in window&&
+       'Notification' in window&&Notification.permission==='granted'){
+     try{const reg=await navigator.serviceWorker.getRegistration();
+      thisDevice=!!(await reg?.pushManager.getSubscription());}catch{/* Keep device setup available. */}
+    }
+    if(live)setPushReady(thisDevice);
+   }).catch(()=>{});
   void api<{configured:boolean,publicKey:string|null}>('/push/config')
    .then(r=>{if(live)setPushPublicKey(r.configured?r.publicKey:null);}).catch(()=>{});
   void reloadActivity().catch(()=>{});
@@ -261,6 +269,16 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    await api('/push/subscribe','POST',{subscription:subscription.toJSON()});
    const pref=await api<{enabled:boolean}>('/words/push-preference','POST',{householdId,enabled:true});
    setPushReady(true);setPushEnabled(pref.enabled);
+   setPushNotice('Words notifications enabled here. Send a test to check delivery.');
+  }catch(e){setPushError(errorText(e));}
+  finally{setPushBusy(false);}
+ }
+ async function testWordsNotification(){
+  if(!pushReady||!pushEnabled)return;
+  setPushBusy(true);setPushError('');setPushNotice('');
+  try{
+   const result=await api<{accepted:number,attempted:number}>('/words/push/test','POST',{householdId});
+   setPushNotice(`The push service accepted ${result.accepted} of ${result.attempted} notification requests. If none arrives, check Carehold notification permissions and Focus on your device.`);
   }catch(e){setPushError(errorText(e));}
   finally{setPushBusy(false);}
  }
@@ -432,10 +450,13 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
     <strong>{ev.eventKind==='shared'?'Someone shared a prompt or journal entry':'A shared space has a new response'}</strong>
     <span className="muted tiny">Open the shared space at your own pace.</span>
     <ArrowUpRight size={17}/></button>)}</div>
-   <div className="words-push-setting"><div><h3>Quiet device notifications</h3><p className="muted tiny">Optional notifications say only "Something new is waiting in Carehold." They never include names, prompts or writing. Read status is not shared.</p></div>
-    {pushReady?<label className="words-push-choice"><input type="checkbox" checked={pushEnabled} disabled={pushBusy} onChange={e=>void setNotificationPreference(e.target.checked)}/> Notify this account about new shared writing</label>:
+   <div className="words-push-setting"><div><h3>Quiet device notifications</h3><p className="muted tiny">Words notifications are separate from medication reminders and are off until each recipient opts in. Enable on an installed iPhone Home Screen app or another push-capable browser. Alerts never include names or writing. In-app Activity works without push.</p></div>
+    {pushReady?<label className="words-push-choice"><input type="checkbox" checked={pushEnabled} disabled={pushBusy} onChange={e=>void setNotificationPreference(e.target.checked)}/> Notify my account about shared writing</label>:
      pushPublicKey?<button type="button" className="button outline small" disabled={pushBusy} onClick={()=>void registerWordNotifications()}>{pushBusy?'Enabling…':'Enable Words notifications on this device'}</button>:
      <p className="muted tiny">Device push keys are not configured here. In-app activity remains available without device notifications.</p>}
+    {pushReady&&pushEnabled&&<button type="button" className="button outline small" disabled={pushBusy} onClick={()=>void testWordsNotification()}>{pushBusy?'Sending…':'Send a test notification'}</button>}
+    {pushEnabled&&!pushReady&&pushPublicKey&&<p className="muted tiny">Words notifications may be enabled on another device, but this one has no active subscription. Enable them here to receive alerts on this device.</p>}
+    {pushNotice&&<p className="words-status" role="status">{pushNotice}</p>}
     {pushError&&<p className="messages-error" role="alert">{pushError}</p>}
    </div>
   </section>}
