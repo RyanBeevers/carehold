@@ -11,6 +11,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
  const [status,setStatus]=useState<Status>('checking'),[error,setError]=useState('');
  const [retry,setRetry]=useState(0);
  const [missingCodeHelp,setMissingCodeHelp]=useState(false);
+ const [replacementComplete,setReplacementComplete]=useState(false);
  useEffect(()=>{
   let live=true;setStatus('checking');setError('');
   void (async()=>{
@@ -62,7 +63,8 @@ export function RecoveryReadiness({userId}:{userId:string}){
    {status==='error'&&<button type="button" className="button outline" onClick={()=>setRetry(n=>n+1)}>Retry recovery check</button>}
   </div>
   {(status==='setup'||status==='restore')&&<MessageRecoveryGate key={userId+':'+status} userId={userId} onReady={onReady} onError={onError}/>}
-  {status==='configured'&&<RecoveryCodeRotation userId={userId} onComplete={()=>{setMissingCodeHelp(false);setRetry(n=>n+1);}}/>}
+  {status==='configured'&&replacementComplete&&<p role="status" className="recovery-replaced-status"><strong>New recovery code enrolled successfully.</strong> Keep the externally saved code. Verify access from a separate browser profile before relying on it.</p>}
+  {status==='configured'&&<RecoveryCodeRotation userId={userId} onComplete={()=>{setReplacementComplete(true);setMissingCodeHelp(false);setRetry(n=>n+1);}}/>}
   {status==='legacy'&&<LegacyMessageMigration userId={userId}/>}
   {status==='mismatch'&&<><p role="alert" className="messages-error">This browser has an older encryption key. If you intentionally replaced your recovery code on another trusted device, enter the new saved CH1- code below. Carehold will retain the old browser key in local history instead of deleting it.</p>
    <MessageRecoveryGate key={userId+':mismatch'} userId={userId} onReady={onReady} onError={onError}/></>}
