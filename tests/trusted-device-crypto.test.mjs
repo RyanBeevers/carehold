@@ -34,7 +34,7 @@ test('malformed ciphertext and unsupported transfer envelope versions fail close
  assert.equal(validTransferEnvelope({...sealed,v:2}),false);
  assert.equal(validTransferEnvelope({...sealed,ct:'bad'}),false);
  assert.equal(validTransferEnvelope({...sealed,salt:'invalid'}),false);
- const tampered={...sealed,ct:sealed.ct.slice(0,-1)+(sealed.ct.endsWith('A')?'B':'A')};
+ const tampered={...sealed,ct:(sealed.ct[0]==='A'?'B':'A')+sealed.ct.slice(1)};
  await assert.rejects(()=>openTransferCode(ACCOUNT,REQUEST,target,account.publicKey,tampered));
  await assert.rejects(()=>sealTransferCode(ACCOUNT,REQUEST,target.publicKey,account.publicKey,'not a recovery code'));
 });
