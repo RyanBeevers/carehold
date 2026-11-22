@@ -1,0 +1,78 @@
+name: Carehold - Deploy staging (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DEPLOY STAGING to back up D1, migrate and deploy the selected branch"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: carehold-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify selected commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check explicit request
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$CONFIRMATION" = "DEPLOY STAGING" || { echo "Staging confirmation did not match"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run preflight:staging
+      - run: npm run verify:pre-e2e
+
+  deploy:
+    name: Back up and deploy staging
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run preflight:staging
+      - run: npm run build
+      - name: Export and encrypt staging D1 backup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_BACKUP_PASSPHRASE: ${{ secrets.D1_BACKUP_PASSPHRASE }}
+        run: bash scripts/github-d1-backup.sh staging
+      - name: Preserve encrypted backup before migrations
+        uses: actions/upload-artifact@v4
+        with:
+          name: carehold-staging-d1-${{ github.run_id }}
+          path: backups/carehold-staging-*.sql.enc
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Migrate, deploy and check staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: bash scripts/github-deploy.sh staging

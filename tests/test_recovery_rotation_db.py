@@ -28,7 +28,7 @@ class RecoveryRotationDatabase(unittest.TestCase):
         )
         self.db.execute("INSERT INTO households VALUES('h','Fictional','America/New_York','a','now')")
         for uid in ("a", "b"):
-            self.db.execute("INSERT INTO household_members VALUES('h',?,'member','now')", (uid,))
+            self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h',?,'member','now')", (uid,))
         self.db.execute("INSERT INTO direct_threads VALUES('t','h','a:b','a','now')")
         for uid in ("a", "b"):
             self.db.execute("INSERT INTO direct_thread_members VALUES('t',?,'now')", (uid,))

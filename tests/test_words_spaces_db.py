@@ -16,8 +16,8 @@ class SharedWordsIntegrity(unittest.TestCase):
         self.db.execute("INSERT INTO households VALUES('h','Test','America/New_York','owner','now')")
         self.db.execute("INSERT INTO households VALUES('other-h','Separate','America/New_York','other','now')")
         for uid,role in (('owner','owner'),('child','member'),('teen','member')):
-            self.db.execute("INSERT INTO household_members VALUES('h',?,?, 'now')",(uid,role))
-        self.db.execute("INSERT INTO household_members VALUES('other-h','other','owner','now')")
+            self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h',?,?, 'now')",(uid,role))
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('other-h','other','owner','now')")
         self.db.execute("INSERT INTO shared_word_spaces VALUES('s','h','child','prompt','now')")
         for uid in ('child','teen'):
             self.db.execute("INSERT INTO shared_word_participants VALUES('s',?,'now')",(uid,))
@@ -39,7 +39,7 @@ class SharedWordsIntegrity(unittest.TestCase):
         self.db.execute("DELETE FROM household_members WHERE household_id='h' AND user_id='teen'")
         self.assertIsNone(self.db.execute(sql,('teen','teen','s')).fetchone())
         self.db.execute("DELETE FROM shared_word_participants WHERE space_id='s' AND user_id='teen'")
-        self.db.execute("INSERT INTO household_members VALUES('h','teen','member','later')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h','teen','member','later')")
         self.assertIsNone(self.db.execute(sql,('teen','teen','s')).fetchone())
 
     def test_duplicate_and_missing_ciphertext_copies_rejected(self):

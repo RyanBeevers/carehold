@@ -75,7 +75,13 @@ type LockedCorrectionDraft={
  status:(typeof statuses)[number]|null,kind:'not_administered'|null,
  mode:'correction'|'later',actualAt:string,idempotencyKey:string
 };
-type Member={user_id:string,name:string,email:string,role:'owner'|'caregiver'|'member',classification:'adult'|'teen'|'child'|'unverified'};
+type CareCapability='view_schedule'|'record_dose'|'view_history'|'manage_medication';
+type CareScope='limited'|'full';
+type Member={user_id:string,name:string,email?:string,role:'owner'|'caregiver'|'member',classification?:'adult'|'teen'|'child'|'unverified',access_scope?:CareScope,grants?:{profileId:string,capabilities:CareCapability[]}[]};
+const DEFAULT_CARE_CAPABILITIES:CareCapability[]=['view_schedule','record_dose','view_history'];
+const CARE_PERMISSION_OPTIONS:[CareCapability,string][]=[
+ ['record_dose','Record administrations'],['view_history','View medication history'],['manage_medication','Manage medication plans']
+];
 export default function App(){
  const [theme,setTheme]=useState<Mode>(preference);
  const emailInputRef=useRef<HTMLInputElement|null>(null);
@@ -151,7 +157,7 @@ export default function App(){
  const pageUnread=(id:Page)=>id==='words'?unread.words:id==='messages'?unread.direct:0;
 
  const [date,setDate]=useState(''),[error,setError]=useState('');
- const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'archive-profile'|'archive-med'|'invite'|'remove'|'link'|null>(null),[pending,setPending]=useState<Pending>({});
+ const [modal,setModal]=useState<'profile'|'med'|'dose'|'correct'|'archive-profile'|'archive-med'|'invite'|'remove'|'link'|'access'|null>(null),[pending,setPending]=useState<Pending>({});
  const [saving,setSaving]=useState(false),[accessCode,setAccessCode]=useState(''),[inviteInput,setInviteInput]=useState('');
  const [inviteCreated,setInviteCreated]=useState('');
  const [audience,setAudience]=useState<Audience|null>(null),[signupAudience,setSignupAudience]=useState<Audience>('parent');
@@ -173,6 +179,9 @@ export default function App(){
  const [correctionReason,setCorrectionReason]=useState('');
  const [correctionKind,setCorrectionKind]=useState<'not_administered'|null>(null),[correctionMode,setCorrectionMode]=useState<'correction'|'later'>('correction');
  const [inviteRole,setInviteRole]=useState<'caregiver'|'member'>('caregiver'),[inviteProfiles,setInviteProfiles]=useState<string[]>([]);
+ const [inviteScope,setInviteScope]=useState<CareScope>('limited'),[inviteCapabilities,setInviteCapabilities]=useState<CareCapability[]>([...DEFAULT_CARE_CAPABILITIES]);
+ const [accessMember,setAccessMember]=useState<Member|null>(null),[accessScope,setAccessScope]=useState<CareScope>('limited');
+ const [accessProfiles,setAccessProfiles]=useState<string[]>([]),[accessCapabilities,setAccessCapabilities]=useState<CareCapability[]>([...DEFAULT_CARE_CAPABILITIES]);
  const active=households.find(h=>h.id===hid),owner=active?.role==='owner';
  const showToast=(kind:'success'|'error'|'info',message:string)=>setToast({id:++toastSequence.current,kind,message});
  const notice=(message:string)=>{if(lockingRef.current)return;showToast('success',message);setError('');};
@@ -325,10 +334,10 @@ export default function App(){
    void acceptStagedInvitation();
  },[user?.id,hasPasskey,recoveryCompletedUser,pendingInvitation]);
  const refreshMembers=useCallback(async()=>{
-   if(!hid||!owner)return;
+   if(!hid||(active?.role!=='owner'&&active?.role!=='caregiver'))return;
    try{const result=await api<{members:Member[]}>(`/members?householdId=${encodeURIComponent(hid)}`);setMembers(result.members);}catch(e){fail(e);}
- },[hid,owner]);
- useEffect(()=>{if((page==='circle'||page==='people')&&owner)void refreshMembers();},[page,owner,refreshMembers]);
+ },[hid,active?.role]);
+ useEffect(()=>{if((page==='circle'&&active?.role!=='member')||(page==='people'&&owner))void refreshMembers();},[page,active?.role,owner,refreshMembers]);
  async function setMemberClassification(memberId:string,next:Member['classification']){
   if(!hid||!owner||next==='unverified')return;
   setSaving(true);
@@ -336,6 +345,23 @@ export default function App(){
    await api('/members/'+encodeURIComponent(memberId)+'/classification','PATCH',{householdId:hid,classification:next});
    await refreshMembers();
    notice('Account classification updated. Medication permissions are enforced by the server.');
+  }catch(e){fail(e);}finally{setSaving(false);}
+ }
+ function beginManageAccess(member:Member){
+  setAccessMember(member);setAccessScope(member.access_scope==='full'?'full':'limited');
+  setAccessProfiles((member.grants||[]).map(g=>g.profileId).filter(id=>profiles.some(p=>p.id===id&&!p.archived_at)));
+  const caps=new Set<CareCapability>(['view_schedule',...(member.grants||[]).flatMap(g=>g.capabilities)]);
+  setAccessCapabilities([...caps]);setModal('access');
+ }
+ async function saveMemberAccess(e:FormEvent){
+  e.preventDefault();if(!accessMember||!owner)return;
+  setSaving(true);
+  try{
+   const grants=accessScope==='full'?[]:accessProfiles.map(profileId=>({profileId,capabilities:accessCapabilities}));
+   await api('/members/'+encodeURIComponent(accessMember.user_id)+'/access','PATCH',{householdId:hid,accessScope,grants});
+   setModal(null);setAccessMember(null);
+   await Promise.all([refreshMembers(),refreshProfiles(),refreshToday()]);
+   notice('Caregiver access updated. Private Words and messages were not shared.');
   }catch(e){fail(e);}finally{setSaving(false);}
  }
  async function revokeMember(e:FormEvent){e.preventDefault();if(!memberToRemove)return;setSaving(true);try{
@@ -474,8 +500,8 @@ export default function App(){
   setModal(null);await Promise.all([refreshToday(),refreshPerson()]);notice('Correction appended. The original record is preserved.');
  }catch(e){fail(e);}finally{setSaving(false);}}
  async function createInvite(e:FormEvent){e.preventDefault();setSaving(true);try{
-  const grants=inviteProfiles.map(profileId=>({profileId,capabilities:['view_schedule','record_dose','view_history']}));
-  const r=await api<{code:string}>('/invitations','POST',{householdId:hid,role:inviteRole,grants});setInviteCreated(r.code);notice('One-time invitation created. It expires in 48 hours.');
+  const grants=inviteScope==='full'&&inviteRole==='caregiver'?[]:inviteProfiles.map(profileId=>({profileId,capabilities:inviteCapabilities}));
+  const r=await api<{code:string}>('/invitations','POST',{householdId:hid,role:inviteRole,accessScope:inviteRole==='caregiver'?inviteScope:'limited',grants});setInviteCreated(r.code);notice('One-time invitation created. It expires in 48 hours.');
  }catch(e){fail(e);}finally{setSaving(false);}}
  const enablePush=async()=>{
    setPushFeedback(null);
@@ -621,7 +647,7 @@ export default function App(){
    <button className="button outline" onClick={()=>{setPersonName('');setPersonKind('adult');setModal('profile');}}><Plus size={16}/> Add a person or pet</button>
   </div>}</div>
   {profiles.filter(p=>!p.archived_at).length===0&&!showArchivedProfiles?<div className="empty-state"><span className="empty-star">✺</span><h2>Who are we looking after?</h2><p>Add an adult, child, or pet to start the medication ledger.</p>{owner&&<button className="button primary" onClick={()=>setModal('profile')}>Add the first profile</button>}</div>:<div className="person-layout"><div className="person-list" aria-label="Choose a profile">{visibleProfiles.map(p=><button key={p.id} className={p.id===selected?'person-list-item selected':'person-list-item'} onClick={()=>setSelected(p.id)}><IconLabel kind={p.kind}/><span>{p.display_name}<small>{p.archived_at?'Archived · ':''}{p.kind}</small></span><ArrowUpRight size={18}/></button>)}</div><section className="person-detail">{person&&<><div className="detail-intro"><span className="form-index">PROFILE / {person.kind.toUpperCase()}</span><h2>{person.display_name}<span>.</span></h2><div className="detail-actions" role="group" aria-label="Profile actions">
-   {!person.archived_at&&<button type="button" className="profile-action profile-action--primary" disabled={saving} onClick={()=>newMed(person.id)}><Plus size={17} aria-hidden="true"/> Add medication</button>}
+   {!person.archived_at&&person.can_manage_medication&&<button type="button" className="profile-action profile-action--primary" disabled={saving} onClick={()=>newMed(person.id)}><Plus size={17} aria-hidden="true"/> Add medication</button>}
    {owner&&!person.archived_at&&person.kind!=='pet'&&<button type="button" className="profile-action profile-action--secondary" disabled={saving} onClick={()=>beginLink(person)}><Link2 size={17} aria-hidden="true"/>{person.linked_user_id?'Change linked account':'Link an account'}</button>}
    {owner&&(person.archived_at?
     <button type="button" className="profile-action profile-action--secondary" disabled={saving} onClick={()=>void restoreProfile(person)}><ArchiveRestore size={17} aria-hidden="true"/> Restore profile</button>:
@@ -630,23 +656,42 @@ export default function App(){
   {meds.some(m=>m.archived_at)&&<button type="button" className="quiet small" onClick={()=>setShowArchivedMeds(v=>!v)}>{showArchivedMeds?'Hide archived medications':'Show archived medications'}</button>}
   {visibleMeds.length===0?<p className="muted">No active medications.</p>:visibleMeds.map(m=><div className="med-row" key={m.id}><div><span className="mono muted tiny">{m.archived_at?'ARCHIVED · ':''}{m.cadence.replace('_',' ').toUpperCase()} · {m.catalog_source==='rxterms'?'RXTERMS MATCH':'CUSTOM ENTRY'}</span><h4>{m.name}</h4><p>{m.dose} {m.form?` · ${m.form}`:''}</p>{m.product_strength&&<p className="muted tiny">Catalog product: {m.product_strength} (not the prescribed dose)</p>}<p className="muted tiny">{m.cadence==='prn'?'As-needed medication':m.times.join(' / ')}</p></div><div className="med-row-actions">
    {m.archived_at?
-    <button type="button" className="button outline small" disabled={saving||Boolean(person.archived_at)} onClick={()=>void restoreMedication(m)}>Restore</button>:
+    person.can_manage_medication&&<button type="button" className="button outline small" disabled={saving||Boolean(person.archived_at)} onClick={()=>void restoreMedication(m)}>Restore</button>:
     !person.archived_at&&<>
-     <button className="quiet small" onClick={()=>newMed(person.id,m)}>Edit</button>
-     {m.cadence==='prn'&&<button className="button outline small" onClick={()=>beginDose(undefined,m)}>Record PRN</button>}
-     <button type="button" className="quiet small" onClick={()=>{setPending({medication:m});setModal('archive-med');}}>Archive</button>
+     {person.can_manage_medication&&<button className="quiet small" onClick={()=>newMed(person.id,m)}>Edit</button>}
+     {m.cadence==='prn'&&person.can_record_dose&&<button className="button outline small" onClick={()=>beginDose(undefined,m)}>Record PRN</button>}
+     {person.can_manage_medication&&<button type="button" className="quiet small" onClick={()=>{setPending({medication:m});setModal('archive-med');}}>Archive</button>}
     </>}
   </div></div>)}<h3 className="subsection-title history-title">Administration history <span>{history.length.toString().padStart(2,'0')}</span></h3><p className="muted tiny">Corrections append to this ledger; the original entries remain.</p>{history.length===0?<p className="muted">No administration history yet.</p>:history.map(e=><div className="history-row" key={e.id}><div><b>{e.med_name_snapshot||'Medication'}</b><span className="history-status">{doseLabel(e)}</span><small>{e.actor_name||'Caregiver'} · {stamp(new Date(e.occurred_at))}{e.supersedes_event_id?' · corrected':''}</small></div>{e.is_current===0?<span className="muted tiny">Superseded · preserved in history</span>:
-   <div className="med-row-actions">
+   person.can_record_dose&&<div className="med-row-actions">
     <button type="button" className="quiet small" onClick={()=>beginCorrection(e)}>Correct record</button>
     {e.event_type!=='given'&&<button type="button" className="button outline small" onClick={()=>beginCorrection(e,'later')}>Record a later outcome</button>}
    </div>}</div>)}</>}</section></div>}
  </>}
  {page==='words'&&<><PageTitle eyebrow="WORDS THAT OPEN DOORS" title="What matters, in your words" subtitle="Private journaling, thoughtful prompts, and shared spaces that make room for conversation."/><WordsHub key={user.id+':'+hid+':'+audience} userId={user.id} householdId={hid} audience={audience}/></>}
  {page==='messages'&&<><PageTitle eyebrow="WORDS WE SHARE" title="Conversations, gently" subtitle="Intentional questions and replies, without pressure or read receipts."/><MessagesStudio key={user.id+':'+hid} userId={user.id} householdId={hid} audience={audience} handoff={messageHandoff?.userId===user.id&&messageHandoff.householdId===hid?messageHandoff:null} onHandoffHandled={id=>setMessageHandoff(current=>current?.id===id?null:current)}/></>}
-  {page==='circle'&&<><PageTitle eyebrow="CARE IS A SHARED THING" title="Your care circle" subtitle="Invite trusted people with only the medication access they actually need."/><div className="circle-hero"><div><span className="mono kicker">HOUSEHOLD</span><h2>{active?.name}</h2><p>Access is intentional. Medication permissions never unlock private writing.</p></div><div className="circle-stamp">✳</div></div><div className="section-heading"><span>TRUSTED ACCESS</span>{owner&&<button className="button dark" onClick={()=>{setInviteCreated('');setInviteProfiles([]);setModal('invite');}}><Plus size={16}/> Invite a caregiver</button>}</div><p className="muted">{owner?'You can create a one-time, 48-hour invitation and choose which profiles are visible to the recipient.':'Your access is scoped to the profiles and actions explicitly shared with you.'}</p>
-  <div className="words-audience-confirm"><span><strong>Access roles:</strong> Owner administers the circle; Caregiver is limited to explicit grants; Member can manage their own linked Adult profile after classification. Teens and children can view granted records but cannot edit medications or record administrations. An administrator must classify each invited account before adult medication actions are available.</span></div>{owner&&<section className="member-section"><h3 className="subsection-title">Circle members <span>{members.length.toString().padStart(2,'0')}</span></h3>{members.map(member=><div className="history-row" key={member.user_id}><div><b>{member.name} {member.user_id===user.id?'(you)':''}</b><small>{member.role} · {member.email}</small></div>{member.role!=='owner'&&<div className="member-controls"><label>Account class<select aria-label={'Account classification for '+member.name} value={member.classification} disabled={saving} onChange={e=>void setMemberClassification(member.user_id,e.target.value as Member['classification'])}><option value="unverified" disabled>Unverified</option><option value="adult">Adult</option><option value="teen">Teen</option><option value="child">Child</option></select></label><button className="quiet small" onClick={()=>{setMemberToRemove(member);setModal('remove');}}>Revoke access</button></div>}</div>)}</section>}
-  <div className="join-inline"><h3>Have another invitation?</h3><form onSubmit={joinHousehold}><input required autoComplete="off" value={inviteInput} onChange={e=>setInviteInput(e.target.value)} placeholder="Enter one-time code"/><button className="button outline" disabled={saving}>Join circle</button></form></div></>}
+  {page==='circle'&&<>
+   <PageTitle eyebrow="CARE IS A SHARED THING" title="Your care circle" subtitle="See who belongs here and manage only the care permissions intentionally granted."/>
+   <div className="circle-hero"><div><span className="mono kicker">HOUSEHOLD</span><h2>{active?.name}</h2><p>Medication access is separate from private writing and messages.</p></div><div className="circle-stamp">✳</div></div>
+   <div className="section-heading"><span>TRUSTED ACCESS</span>{owner&&<button className="button dark" onClick={()=>{
+     setInviteCreated('');setInviteProfiles([]);setInviteRole('caregiver');setInviteScope('limited');
+     setInviteCapabilities([...DEFAULT_CARE_CAPABILITIES]);setModal('invite');
+   }}><Plus size={16}/> Invite a caregiver</button>}</div>
+   <p className="muted">{owner?'Full-circle caregivers can manage medication care for all current and new profiles. Limited caregivers get only selected care permissions.':'You can see who is in the circle; medication details remain limited to what the owner granted.'}</p>
+   <div className="words-audience-confirm"><span><strong>Privacy boundary:</strong> No caregiver access level grants private journals, drafts, personal messages, or conversations automatically. Only the owner can change care access. Child and teen accounts remain read-only for medication records.</span></div>
+   {(owner||active?.role==='caregiver')&&<section className="member-section">
+    <h3 className="subsection-title">Circle members <span>{members.length.toString().padStart(2,'0')}</span></h3>
+    {members.map(m=><div className="history-row" key={m.user_id}>
+     <div><b>{m.name} {m.user_id===user.id?'(you)':''}</b><small>{m.role}{owner&&m.role==='caregiver'?' · '+(m.access_scope==='full'?'Full circle':'Limited access'):''}{owner&&m.email?' · '+m.email:''}</small></div>
+     {owner&&m.role!=='owner'&&<div className="member-controls">
+      <label>Account class<select aria-label={'Account classification for '+m.name} value={m.classification||'unverified'} disabled={saving} onChange={e=>void setMemberClassification(m.user_id,e.target.value as NonNullable<Member['classification']>)}><option value="unverified" disabled>Unverified</option><option value="adult">Adult</option><option value="teen">Teen</option><option value="child">Child</option></select></label>
+      <button className="quiet small" onClick={()=>beginManageAccess(m)}>Manage access</button>
+      <button className="quiet small" onClick={()=>{setMemberToRemove(m);setModal('remove');}}>Revoke access</button>
+     </div>}
+    </div>)}
+   </section>}
+   <div className="join-inline"><h3>Have another invitation?</h3><form onSubmit={joinHousehold}><input required autoComplete="off" value={inviteInput} onChange={e=>setInviteInput(e.target.value)} placeholder="Enter one-time code"/><button className="button outline" disabled={saving}>Join circle</button></form></div>
+  </>}
  {page==='settings'&&<><PageTitle eyebrow="MAKE IT YOURS" title="Little preferences" subtitle="The details that make Carehold feel like your place."/><div className="setting-section"><div><h2>Appearance</h2><p>Light, dark, or let your device decide.</p></div><AppearanceSwitch theme={theme} setTheme={setTheme}/></div><div className="setting-section"><div><h2>Conversation prompts</h2><p>Choose the Words prompts that appear for you. This doesn't change care permissions.</p></div><div className="setting-audience">{active?.classification==='teen'||active?.classification==='child'?<p className="muted">A household administrator manages this account's Words audience.</p>:<AudienceField value={audience} onChange={next=>void saveAudience(next)}/>}</div></div><div className="setting-section notifications-section"><div><h2>Gentle reminders</h2><p>Opt-in device notifications with no medication or personal details on the lock screen. These are reminders, not a guaranteed medical alarm.</p><p className="notification-status">{pushConfig===null?'Checking notification configuration…':!pushConfig.configured?PUSH_UNAVAILABLE_MESSAGE:pushEnabled?`Reminders enabled · ${pushSubscriptionCount} registered device(s)`:'Reminders paused for this household.'}</p>{pushFeedback&&<p role="status" aria-live="polite" className={`notification-feedback ${pushFeedback.kind}`}>{pushFeedback.text}</p>}<div className="push-diagnostics" aria-live="polite"><span className="mono kicker">DELIVERY DIAGNOSTICS</span><p><strong>Browser permission:</strong> {typeof Notification==='undefined'?'Unsupported':Notification.permission}</p><p><strong>Service-worker push received:</strong> {pushTrace?(pushTrace.received?'Yes':'Not observed in this tab'):'No test sent yet'}</p><p><strong>Browser display requested:</strong> {pushTrace?(pushTrace.displayRequested?'Yes':pushTrace.displayError?'Failed':'Not observed yet'):'No test sent yet'}</p><p><strong>Push gateway accepted:</strong> {pushTrace?(pushTrace.accepted?'Yes':'Awaiting / failed'):'No test sent yet'}</p><p className="muted tiny">A browser display request does not guarantee that your device shows an alert. Check device notification settings and Focus/Do Not Disturb if local display succeeds but nothing appears.</p>{localNotificationFeedback&&<p className="notification-feedback info" role="status">{localNotificationFeedback}</p>}</div></div><div className="notification-actions"><button disabled={saving} className="button outline" onClick={pushEnabled?disablePush:enablePush}>{pushEnabled?<BellOff size={17}/>:<Bell size={17}/>} {pushEnabled?'Pause reminders':'Enable reminders'}</button>{pushEnabled&&pushConfig?.configured&&<button className="button outline" disabled={saving} onClick={()=>void testPush()}><Bell size={17}/> Send push test</button>}<button className="button outline" disabled={saving} onClick={()=>void testLocalNotification()}><Bell size={17}/> Test local display</button></div></div><div className="setting-section"><div><h2>Install Carehold</h2><p>Keep your circle a tap away with the matching icon on your home screen.</p></div><button className="button outline" onClick={install}><Plus size={17}/> Add to home screen</button></div><div className="setting-section"><div><h2>Auto-lock</h2><p>Carehold locks after 3 minutes without activity or 1 minute away from the app. Unlock quickly with your passkey.</p></div><button className="button outline" type="button" onClick={()=>lockNow()}><LockKeyhole size={17}/> Lock now</button></div><RecoveryReadiness userId={user.id}/><div className="setting-section"><div><h2>Account security</h2><p>Passkeys help keep your account protected. You can add another for a second device.</p></div><button className="button outline" onClick={addPasskey} disabled={saving}><KeyRound size={17}/> Add another passkey</button></div><div className="setting-section"><div><h2>About Carehold</h2><p>The story behind our icon and the values it represents.</p></div><a className="button outline setting-about-link" href={pagePath('about')} onClick={e=>followPageLink(e,'about')}>The Story Behind Our Icon <ArrowUpRight size={17}/></a></div><div className="setting-footer">carehold. — a place for the everyday things that matter.</div></>}
  {page==='about'&&<BrandStory onNavigateBack={e=>followPageLink(e,'settings')}/>}
  </main></div><nav className="mobile-nav" aria-label="Mobile navigation">{NAV_ITEMS.map(([id,label,Icon])=><a key={id as string} href={pagePath(id)} aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={e=>followPageLink(e,id)}><Icon size={20}/><span>{id==='circle'?'Circle':label}</span>{pageUnread(id)>0&&<span className="mobile-unread" aria-label={`${pageUnread(id)} unread`}>{pageUnread(id)>99?'99+':pageUnread(id)}</span>}</a>)}</nav></div>
@@ -698,7 +743,62 @@ export default function App(){
     <button type="button" className="button outline" onClick={()=>setModal(null)}>Keep active</button>
    </form></>}
   {modal==='remove'&&<><h2>Remove access<span>.</span></h2><p>This immediately revokes {memberToRemove?.name}'s household membership and medication grants. It does not erase the history of actions they recorded.</p><form className="form-stack" onSubmit={revokeMember}><button className="button primary big" disabled={saving}>Revoke access <Check size={18}/></button><button className="quiet" type="button" onClick={()=>setModal(null)}>Keep their access</button></form></>}
- {modal==='link'&&<><h2>Link an account<span>.</span></h2><p>Connect this medication profile to a person who already joined your circle. Linking identifies the person; it does not grant medication access or expose future private writing.</p><div className="dose-confirm"><span className="form-index">PROFILE</span><h3>{pending.profile?.display_name}</h3></div><form className="form-stack" onSubmit={saveLink}><label>Circle member<select value={linkUserId} onChange={e=>setLinkUserId(e.target.value)}><option value="">Not linked to an account</option>{members.map(m=><option value={m.user_id} key={m.user_id}>{m.name} ({m.email})</option>)}</select></label><p className="fine-print">Only existing household members can be linked. One account can be linked to one person per care circle. Existing permission grants remain unchanged.</p><button className="button primary big" disabled={saving}>{saving?'Saving…':'Save account link'} <Check size={17}/></button></form></>}{modal==='invite'&&<><h2>Invite with intention<span>.</span></h2><p>Share only the profiles needed. This invitation expires in 48 hours and works once.</p>{inviteCreated?<div className="invite-result"><label>One-time invitation code<textarea readOnly rows={3} value={inviteCreated}/></label><button className="button primary" onClick={()=>void copy(inviteCreated,'invite')}>{copyFeedback?.key==='invite'&&copyFeedback.success?<Check size={17}/>:<Copy size={17}/>} {copyFeedback?.key==='invite'&&copyFeedback.success?'Copied':'Copy code'}</button><span className={`copy-feedback ${copyFeedback?.key==='invite'&&!copyFeedback.success?'is-error':''}`} role="status" aria-live="polite">{copyFeedback?.key==='invite'?copyFeedback.message:''}</span><p className="fine-print">Share privately. The invitation is not emailed automatically. New recipients enter this code once during sign-up; it follows them into passkey setup. Existing users can accept it from the care circle.</p></div>:<form className="form-stack" onSubmit={createInvite}><label>Access type<select value={inviteRole} onChange={e=>setInviteRole(e.target.value as 'caregiver'|'member')}><option value="caregiver">Caregiver</option><option value="member">Household member</option></select></label><div className="form-label">Medication access for</div>{profiles.map(p=><label key={p.id} className="check-row"><input type="checkbox" checked={inviteProfiles.includes(p.id)} onChange={e=>setInviteProfiles(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>{p.display_name} <span className="tiny muted">{p.kind}</span></label>)}<p className="fine-print">Selected profiles grant schedule viewing, administration recording, and history viewing—not medication editing or private communication access.</p><button className="button primary big" disabled={saving}>Create invitation <ArrowUpRight size={18}/></button></form>}</>}
+ {modal==='link'&&<><h2>Link an account<span>.</span></h2><p>Connect this medication profile to a person who already joined your circle. Linking identifies the person; it does not grant medication access or expose future private writing.</p><div className="dose-confirm"><span className="form-index">PROFILE</span><h3>{pending.profile?.display_name}</h3></div><form className="form-stack" onSubmit={saveLink}><label>Circle member<select value={linkUserId} onChange={e=>setLinkUserId(e.target.value)}><option value="">Not linked to an account</option>{members.map(m=><option value={m.user_id} key={m.user_id}>{m.name} ({m.email})</option>)}</select></label><p className="fine-print">Only existing household members can be linked. One account can be linked to one person per care circle. Existing permission grants remain unchanged.</p><button className="button primary big" disabled={saving}>{saving?'Saving…':'Save account link'} <Check size={17}/></button></form></>}{modal==='invite'&&<>
+  <h2>Invite with intention<span>.</span></h2>
+  <p>Choose full-circle medication care or specific people and permissions. Invitations expire after 48 hours.</p>
+  {inviteCreated?<div className="invite-result">
+   <label>One-time invitation code<textarea readOnly rows={3} value={inviteCreated}/></label>
+   <button className="button primary" onClick={()=>void copy(inviteCreated,'invite')}>{copyFeedback?.key==='invite'&&copyFeedback.success?<Check size={17}/>:<Copy size={17}/>} {copyFeedback?.key==='invite'&&copyFeedback.success?'Copied':'Copy code'}</button>
+   <span className={`copy-feedback ${copyFeedback?.key==='invite'&&!copyFeedback.success?'is-error':''}`} role="status" aria-live="polite">{copyFeedback?.key==='invite'?copyFeedback.message:''}</span>
+   <p className="fine-print">Share privately. New recipients enter this code at signup; existing members accept it from their Circle.</p>
+  </div>:<form className="form-stack" onSubmit={createInvite}>
+   <label>Access type<select value={inviteRole} onChange={e=>{setInviteRole(e.target.value as 'caregiver'|'member');setInviteScope('limited');}}>
+    <option value="caregiver">Caregiver</option><option value="member">Household member</option>
+   </select></label>
+   {inviteRole==='caregiver'&&<label>Caregiver scope<select value={inviteScope} onChange={e=>setInviteScope(e.target.value as CareScope)}>
+    <option value="limited">Limited - selected profiles</option><option value="full">Full circle - everyone, including new profiles</option>
+   </select></label>}
+   {(inviteRole!=='caregiver'||inviteScope==='limited')&&<>
+    <span className="form-label">People and pets to share</span>
+    {profiles.filter(p=>!p.archived_at).map(p=><label key={p.id} className="check-row">
+     <input type="checkbox" checked={inviteProfiles.includes(p.id)} onChange={e=>setInviteProfiles(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>
+     {p.display_name} <span className="tiny muted">{p.kind}</span>
+    </label>)}
+    <span className="form-label">Medication permissions - same for selected profiles</span>
+    <p className="fine-print">Viewing medication schedules is included.</p>
+    {CARE_PERMISSION_OPTIONS.map(([cap,label])=><label key={cap} className="check-row">
+     <input type="checkbox" checked={inviteCapabilities.includes(cap)} onChange={e=>setInviteCapabilities(v=>e.target.checked?[...v,cap]:v.filter(x=>x!==cap))}/>{label}
+    </label>)}
+   </>}
+   <p className="fine-print">No invitation grants access to private journals, personal messages, or shared conversations.</p>
+   <button className="button primary big" disabled={saving}>Create invitation <ArrowUpRight size={18}/></button>
+  </form>}
+ </>}
+ {modal==='access'&&accessMember&&<>
+  <h2>Manage care access<span>.</span></h2>
+  <p>Change {accessMember.name}'s medication permissions without removing their account or recorded history.</p>
+  <form className="form-stack" onSubmit={saveMemberAccess}>
+   {accessMember.role==='caregiver'&&<label>Caregiver scope<select value={accessScope} onChange={e=>setAccessScope(e.target.value as CareScope)}>
+    <option value="limited">Limited - selected profiles</option><option value="full">Full circle - everyone, including new profiles</option>
+   </select></label>}
+   {accessScope==='limited'&&<>
+    <span className="form-label">People and pets to share</span>
+    {profiles.filter(p=>!p.archived_at).map(p=><label key={p.id} className="check-row">
+     <input type="checkbox" checked={accessProfiles.includes(p.id)} onChange={e=>setAccessProfiles(v=>e.target.checked?[...v,p.id]:v.filter(id=>id!==p.id))}/>
+     {p.display_name} <span className="tiny muted">{p.kind}</span>
+    </label>)}
+    <span className="form-label">Medication permissions - same for selected profiles</span>
+    <p className="fine-print">Viewing medication schedules is included.</p>
+    {CARE_PERMISSION_OPTIONS.map(([cap,label])=><label key={cap} className="check-row">
+     <input type="checkbox" checked={accessCapabilities.includes(cap)} onChange={e=>setAccessCapabilities(v=>e.target.checked?[...v,cap]:v.filter(x=>x!==cap))}/>{label}
+    </label>)}
+   </>}
+   {accessScope==='full'&&<p className="fine-print">Full-circle care permits viewing and managing all medication plans and administration records, including new people or pets. The owner must classify this account Adult before full-circle access becomes active.</p>}
+   <p className="fine-print">Private journals, drafts, messages, and conversations always require explicit sharing and remain outside caregiver permissions.</p>
+   <button className="button primary big" disabled={saving}>{saving?'Saving…':'Save access'} <Check size={18}/></button>
+   <button type="button" className="button outline" onClick={()=>setModal(null)}>Cancel</button>
+  </form>
+ </>}
  </section></div>}
  </>;
 }

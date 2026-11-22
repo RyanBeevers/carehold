@@ -16,7 +16,7 @@ class RecoveryMigrationDatabase(unittest.TestCase):
                             (uid,uid,uid+'@test.invalid'))
         self.db.execute("INSERT INTO households VALUES('h','Fictional','America/New_York','a','now')")
         for uid,role in [('a','owner'),('b','member')]:
-            self.db.execute("INSERT INTO household_members VALUES('h',?,?, 'now')",(uid,role))
+            self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h',?,?, 'now')",(uid,role))
         for uid in ('a','b'):
             self.db.execute("INSERT INTO message_device_keys VALUES(?,?,'now')",(uid,'old-'+uid))
         self.db.execute("INSERT INTO direct_threads VALUES('t','h','a:b','a','now')")

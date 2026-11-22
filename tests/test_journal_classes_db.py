@@ -17,9 +17,9 @@ class JournalAndClassMigration(unittest.TestCase):
                 (name,name,name+'@test.invalid')
             )
         self.db.execute("INSERT INTO households VALUES('h','Fictional','America/New_York','a','now')")
-        self.db.execute("INSERT INTO household_members VALUES('h','a','owner','now')")
-        self.db.execute("INSERT INTO household_members VALUES('h','b','member','now')")
-        self.db.execute("INSERT INTO household_members VALUES('h','minor','member','now')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h','a','owner','now')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h','b','member','now')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h','minor','member','now')")
         for uid,cls in [('a','adult'),('b','adult'),('minor','child')]:
             self.db.execute(
                 'INSERT INTO household_member_classes(household_id,user_id,classification,updated_at) VALUES(?,?,?,?)',

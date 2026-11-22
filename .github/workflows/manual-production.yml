@@ -1,0 +1,93 @@
+name: Carehold - Deploy production (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DEPLOY CAREHOLD PRODUCTION"
+        required: true
+        type: string
+      e2e_review:
+        description: "Type E2E REVIEWED only after testing this exact code locally and on staging"
+        required: true
+        type: string
+      security_review:
+        description: "Type SECURITY REVIEWED only after the security/privacy release gates are approved"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: carehold-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify production release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main and independent release approvals
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          E2E_CONFIRMATION: ${{ inputs.e2e_review }}
+          SECURITY_CONFIRMATION: ${{ inputs.security_review }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Production can only deploy main"; exit 1; }
+          test "$CONFIRMATION" = "DEPLOY CAREHOLD PRODUCTION" || { echo "Production confirmation did not match"; exit 1; }
+          test "$E2E_CONFIRMATION" = "E2E REVIEWED" || { echo "E2E review must be explicitly confirmed"; exit 1; }
+          test "$SECURITY_CONFIRMATION" = "SECURITY REVIEWED" || { echo "Security review must be explicitly confirmed"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run preflight:production
+      - run: npm run verify:pre-e2e
+
+  deploy:
+    name: Approve, back up and deploy production
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run preflight:production
+      - run: npm run build
+      - name: Export and encrypt production D1 backup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_BACKUP_PASSPHRASE: ${{ secrets.D1_BACKUP_PASSPHRASE }}
+        run: bash scripts/github-d1-backup.sh production
+      - name: Preserve encrypted backup before migrations
+        uses: actions/upload-artifact@v4
+        with:
+          name: carehold-production-d1-${{ github.run_id }}
+          path: backups/carehold-production-*.sql.enc
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Migrate, deploy and check production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          E2E_CONFIRMATION: ${{ inputs.e2e_review }}
+          SECURITY_CONFIRMATION: ${{ inputs.security_review }}
+        run: bash scripts/github-deploy.sh production

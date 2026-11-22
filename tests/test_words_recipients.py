@@ -19,7 +19,7 @@ class RecipientPreviewScope(unittest.TestCase):
             self.db.execute("INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES(?,?,?,?,1,1)",(uid,uid.title(),uid+'@example.invalid',0))
         self.db.execute("INSERT INTO households VALUES('circle','Test','America/New_York','owner','now')")
         for idx,(uid,role) in enumerate((('owner','owner'),('teen','member'),('child','member'))):
-            self.db.execute("INSERT INTO household_members VALUES(?,?,?,?)",('circle',uid,role,f'2026-01-01T00:00:0{idx}Z'))
+            self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES(?,?,?,?)",('circle',uid,role,f'2026-01-01T00:00:0{idx}Z'))
 
     def test_child_or_teen_sees_only_household_owner(self):
         rows=self.db.execute(QUERY,('circle','teen','member')).fetchall()

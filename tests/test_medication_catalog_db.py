@@ -22,7 +22,7 @@ class MedicationCatalogDBTest(unittest.TestCase):
                 self.db.executescript(migration.read_text())
         self.db.execute("INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES('owner','Owner','owner@test.invalid',0,1,1)")
         self.db.execute("INSERT INTO households VALUES('h','Home','America/New_York','owner','now')")
-        self.db.execute("INSERT INTO household_members VALUES('h','owner','owner','now')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h','owner','owner','now')")
         for kind,pid in (('adult','adult'),('pet','pet')):
             self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,created_at) VALUES(?,'h',?,?,'now')",(pid,pid,kind))
             self.db.execute("INSERT INTO medications(id,profile_id,name,dose,cadence,start_date,created_at,updated_at) VALUES(?,?,?,?,'daily','2026-11-01','now','now')",
