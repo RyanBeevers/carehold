@@ -29,7 +29,7 @@ Test with at least **three fictional accounts**: A (owner and journal sender), B
 - [ ] A invites B and C; invitations expire/are one-time, and B/C cannot view another household.
 - [ ] Link B to a fictional profile. Confirm linking does **not** independently grant medication management or private journal access.
 - [ ] Limited caregiver permissions allow only their selected profiles and actions. A revoked person cannot read their former medication data, encrypted shared-space data or unread activity.
-- [ ] The app behaves predictably after the three-minute session timeout and after returning from the background; unsent encrypted drafts recover only where enabled.
+- [ ] The UI locks after **3 minutes of no interaction** or **1 minute away**, while the independent server session has a **30-minute sliding expiry** with active refreshes; after every screen lock, passkey/password reauthentication is still required. Encrypted drafts must recover only where enabled.
 - [ ] Open **two Carehold tabs in the same persistent browser profile and same account**. Leave tab A untouched in the background for over one minute while actively typing/scrolling in tab B. Tab A must show its own local lock on return, but **tab B must remain authenticated, responsive and able to save**. Repeat with tab A foregrounded but untouched for over three minutes while B remains active.
 - [ ] Keep the cursor moving and scroll a long fictional Words entry for over three minutes; the active tab must NOT lock from inactivity. Leave the app untouched for three minutes; now only that tab must lock, displaying the inactivity reason.
 - [ ] Trigger explicit **Lock now** in one tab; unlike automatic locking, this should revoke its authenticated server session, causing other tabs to require reauthentication on their next authenticated request. Verify explicit Sign out too.
@@ -47,6 +47,7 @@ Use fictional medication names and harmless doses, not actual instructions.
 - [ ] Record a dose and verify Today and the person's history show the same actor, actual time and prescribed snapshot.
 - [ ] Retry the same idempotency key: no second event. Try a second event for the same scheduled occurrence: server rejects it.
 - [ ] Correct the recorded status with a reason; the original remains immutable and visible in history, while the latest outcome displays correctly.
+- [ ] On **Today**, use **Correct record** on an already recorded entry (including a previously corrected Not administered event). For non-given entries, **Record a later outcome** must work directly from Today without navigating to the person's administration history. Unauthorized viewers must see neither action. The result and original audit chain must match People → History.
 - [ ] Edit a future medication schedule; historical events do not change. Check timezone and DST edge-case behavior.
 - [ ] B with a grant can record permitted profiles but cannot manage a medication or see unrelated profiles. C without grants cannot access their records.
 - [ ] Verify scheduled reminder permission and generic payload if device subscription is configured. A push is best-effort, **not** a guaranteed medication alarm.
@@ -87,6 +88,8 @@ Use fictional medication names and harmless doses, not actual instructions.
 - [ ] Words notifications are opt-in independently of medication reminders; enabling Words alone does not enable medication reminders, and vice versa.
 - [ ] Actual push receipt contains only generic wording, never sender names, prompt titles, journal responses or medication details.
 - [ ] Check dark/light/system themes and mobile nav on a narrow screen. No clipped buttons, browser-native prompts, unexpected zoom, or blocked textarea controls.
+- [ ] Top-right header shows **one circular sun/moon button** instead of three rectangular theme buttons; it toggles light/dark. Settings still permits the OS System preference.
+- [ ] With **one** care circle, the header shows a tidy non-interactive label with no useless dropdown arrow. With two, open the styled care-circle list using mouse and keyboard (up/down, Home/End, Enter, Escape) and confirm changing circles navigates to Today and updates authorized data.
 - [ ] Verify PWA icon, refresh restoration, keyboard-only controls and focus visibility.
 - [ ] On actual mobile devices, repeat the multi-account flow **only after** a deliberately configured private HTTPS staging origin exists. `localhost:5173` on a phone is the phone itself, not the developer Mac.
 
@@ -120,7 +123,7 @@ This section is **not yet passed**. A new household with existing accounts does 
 
 - [ ] Back up and verify restore of the local/staging fictional D1 database; apply additive migrations 0011–0015 only to a backed-up local test database (and later separately reviewed staging).
 - [ ] Create fresh account A and fresh account B, each with a passkey; create a new household and join B explicitly.
-- [ ] Open Words/Messages as A; generate a unique recovery code, record it securely outside the browser, confirm storage and complete enrollment.
+- [ ] In **Settings → Encrypted data recovery**, confirm a fresh account shows **Generate recovery code** directly (no hidden navigation link). Save a unique code securely outside the browser, confirm storage and complete enrollment. If you sign in on a second device, the same Settings section must present **Restore my message key**; if you have an original-browser legacy key, it should present the non-destructive migration.
 - [ ] Complete equivalent enrollment as B; verify two distinct public keys and ciphertext-only recovery rows.
 - [ ] Send fictional direct message and shared Words reply A↔B; verify actual plaintext can decrypt on intended accounts.
 - [ ] Sign A into a different browser/profile and enter the saved code; verify BOTH old direct and Words history decrypt there.
