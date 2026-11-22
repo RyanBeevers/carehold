@@ -6,7 +6,7 @@ import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
 import {savePrivateJournal,listPrivateJournal,type JournalEntry} from './lib/private-journal';
 import {saveSyncedPrivateJournal,listSyncedPrivateJournal} from './lib/synced-private-journal';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
-import {KeyChangeReview,KeyFingerprintDetails} from './RecipientKeyReview';
+import {KeyChangeReview} from './RecipientKeyReview';
 import {checkRecipientKeyContinuity,acceptVerifiedRecipientKeys,RecipientKeyChangedError,type KeyChange} from './lib/recipient-key-continuity';
 
 export type WordContact={id:string,name:string,publicKey:PublicKey|null};
@@ -74,7 +74,6 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
    <div className="words-audience-confirm"><Users size={18}/><span>{chosen.length===0?'Nobody selected yet':`This will be shared with ${chosen.map(p=>p.name).join(', ')}. All participants can see discussion replies.`}</span></div>
    {error&&<p role="alert" className="messages-error">{error}</p>}
    {notice&&<p role="status" className="words-status">{notice}</p>}
-   <KeyFingerprintDetails contacts={chosen}/>
    {keyChanges&&<KeyChangeReview changes={keyChanges} busy={busy}
     onDismiss={()=>{setKeyChanges(null);pending.current=null;onRefreshPeople();}}
     onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);pending.current=null;setError('');setNotice('Encryption key checkpoint updated. Review the recipients and press Share again.');}catch(e){setError(message(e));}}}/>}
@@ -318,7 +317,6 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    <section className="words-space-discussion">
      <div className="words-hub-section-top"><div><span className="mono kicker">TALK ABOUT IT</span><h3>Discussion</h3></div><MessageCircle size={19}/></div>
      <p className="muted tiny">One place to talk together or keep a private note. Private notes are encrypted for your account and synchronized when recovery is configured; shared replies are visible to all selected participants.</p>
-     <KeyFingerprintDetails contacts={detail.participants.filter(p=>p.id!==userId)}/>
      {keyChanges&&<KeyChangeReview changes={keyChanges} busy={Boolean(busy)||removing}
       onDismiss={()=>{setKeyChanges(null);void load().catch(e=>setError(message(e)));}}
       onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);retry.current=null;setStatus('Recipient key checkpoint updated. Review the discussion and send again.');}catch(e){setError(message(e));}}}/>}
