@@ -15,6 +15,7 @@
     "deploy:staging": "npm run preflight:staging && npm run build && wrangler deploy --env staging",
     "release:staging": "bash scripts/release-staging.sh",
     "preflight:production": "node scripts/check-production-config.mjs",
+    "configure:production": "node scripts/configure-production.mjs",
     "release:production": "bash scripts/release-production.sh",
     "push:setup": "node scripts/configure-local-push.mjs",
     "db:backup:local": "bash scripts/backup-local.sh",
