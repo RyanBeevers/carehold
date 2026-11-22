@@ -150,8 +150,13 @@
 @media(max-width:720px){.words-vault-controls{align-items:flex-start;flex-direction:column}.words-vault-conflict{padding:15px}}
 
 /* Direct messages: calm editorial rows, not a dashboard */
-.messages-warning{background:var(--panel);border-left:3px solid var(--coral);padding:18px 22px;margin-bottom:25px;font-size:13px;line-height:1.6}
-.messages-warning p{color:var(--muted);margin:5px 0 0}
+.messages-warning{background:var(--panel);border-left:3px solid var(--coral);padding:10px 12px;margin-bottom:20px;font-size:12px;line-height:1.5}
+.messages-warning summary{display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-height:32px;cursor:pointer;list-style:none}
+.messages-warning summary::-webkit-details-marker{display:none}
+.messages-warning summary strong{font-weight:700}
+.messages-warning-more{margin-left:auto;color:var(--muted);text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.messages-warning summary:focus-visible{outline:2px solid var(--coral);outline-offset:3px}
+.messages-warning p{color:var(--muted);margin:8px 0 2px;line-height:1.6}
 .messages-error{border-left:3px solid var(--coral);padding:10px 15px;font-size:13px}
 .messages-layout{display:grid;grid-template-columns:minmax(205px,31%) minmax(0,1fr);gap:30px}
 .messages-directory,.messages-thread{border-top:2px solid var(--ink);min-width:0}
