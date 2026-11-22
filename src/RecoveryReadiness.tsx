@@ -3,6 +3,7 @@ import {api} from './lib/api';
 import {LegacyMessageMigration} from './LegacyMessageMigration';
 import {MessageRecoveryGate} from './MessageRecoveryGate';
 import {RecoveryCodeRotation} from './RecoveryCodeRotation';
+import {TrustedDevices} from './TrustedDevices';
 import {RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 import {samePublicKey,storedMessageIdentity,type Identity,type PublicKey} from './lib/message-crypto';
 import {fingerprintPublicKey,readableFingerprint} from './lib/recipient-key-continuity';
@@ -81,6 +82,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
    {status==='error'&&<button type="button" className="button outline" onClick={()=>setRetry(n=>n+1)}>Retry recovery check</button>}
   </div>
   {(status==='setup'||status==='restore')&&<MessageRecoveryGate key={userId+':'+status} userId={userId} onReady={onReady} onError={onError}/>}
+  {status==='configured'&&<TrustedDevices userId={userId}/>}
   {status==='configured'&&replacementComplete&&<p role="status" className="recovery-replaced-status"><strong>New recovery code enrolled successfully.</strong> Keep the externally saved code. Verify access from a separate browser profile before relying on it.</p>}
   {status==='legacy'&&<LegacyMessageMigration userId={userId}/>}
   {status==='mismatch'&&<><p role="alert" className="messages-error">This browser has an older encryption key. If you intentionally replaced your recovery code on another trusted device, enter the new saved CH1- code below. Carehold will retain the old browser key in local history instead of deleting it.</p>
