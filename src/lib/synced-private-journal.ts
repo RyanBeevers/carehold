@@ -112,3 +112,19 @@ export async function reencryptSyncedJournalEntry(
   throw new Error('Encrypted journal verification failed. No key was changed.');
  return {sourceId:row.id,householdId:hid,expectedRevision:row.revision,...staged};
 }
+
+
+/** Resume safety: existing staged ciphertext must decrypt to EXACTLY the old entry. */
+export async function verifyStagedSyncedJournalEntry(
+ uid:string,hid:string,row:CipherEntry,
+ staged:{expectedRevision:number,iv:string,ciphertext:string},
+ oldKey:CryptoKey,nextKey:CryptoKey
+):Promise<void>{
+ checkScope(uid,hid,oldKey);checkScope(uid,hid,nextKey);
+ if(staged.expectedRevision!==row.revision)throw new Error('Journal changed during key replacement.');
+ const before=await unseal(uid,hid,row,oldKey);
+ const after=await unseal(uid,hid,{...row,iv:staged.iv,ciphertext:staged.ciphertext,revision:row.revision+1},nextKey);
+ if(before.id!==after.id||before.text!==after.text||before.prompt!==after.prompt||
+  before.title!==after.title||before.sharedAt!==after.sharedAt||before.spaceId!==after.spaceId)
+  throw new Error('Existing staged journal ciphertext differs from the original. No key was changed.');
+}
