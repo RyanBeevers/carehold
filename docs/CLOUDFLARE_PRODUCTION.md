@@ -1,6 +1,6 @@
 # Carehold — Cloudflare production release (prepared, NOT authorized)
 
-> **Current gate:** Local automated tests passed on the earlier commit `c447fd5`, but **new release-guard changes must pass again**. A successful TypeScript/Vite build is not authorization to store real family, minor, medication, or therapeutic data. No Cloudflare production Worker or D1 has been created by these source changes.
+> **Current gate:** The staging release log confirms 138 Node tests, 40 Python tests, a successful TypeScript/Vite build, all 16 staging migrations, and an HTTPS D1 readiness check on commit `6583556`. This verifies deployment mechanics, **not** real-world browser acceptance, recovery, clinical/minor privacy, or external security review. New commits after that release require a fresh `npm run verify:pre-e2e`. PR #1 remains a draft and is not merged into `main`. A successful build or staging deployment does **not** authorize storing real family, minor, medication, or therapeutic data in production.
 
 ## Go/no-go criteria — before any real data
 
@@ -25,7 +25,15 @@ npx wrangler whoami
 npx wrangler d1 create carehold-production
 ```
 
-Copy the returned production database UUID to `env.production.d1_databases[0].database_id` in `wrangler.jsonc`. Replace `env.production.vars.APP_ORIGIN` with the exact intended HTTPS origin (for example, `https://carehold.YOURDOMAIN.com` **only if the matching route/custom domain has been configured in Cloudflare**). No trailing slash or URL path. Do not guess a Worker hostname or deploy to a hostname not actually routed to that Worker.
+If a `carehold-production` database already exists, do **not** create a second one; use `npx wrangler d1 list` to find its real UUID. Then run:
+
+```sh
+npm run configure:production
+```
+
+Enter the newly created **production** D1 UUID, a final production HTTPS origin, and confirm with `CONFIGURE PRODUCTION`. This wizard changes only the local `env.production` portion of `wrangler.jsonc`; it does **not** touch staging, access secrets, execute migrations, modify DNS or deploy. Prefer a durable, final custom domain if it is already routed to the Worker; otherwise your account's unique production workers.dev origin can be used, but changing domains later will require a passkey migration. No trailing slash or path. Do not guess the origin. The D1 binding must stay named `DB`, not the suggested `carehold_production`.
+
+The generated configuration is a tracked source file. Review and commit its nonsecret production D1 UUID/origin on the feature branch, then include that commit in the reviewed PR before merging into `main`. **Do not** commit `.dev.vars`, secret values, database SQL exports or real family data. Production's release script will deliberately refuse a dirty worktree or a local `main` not synchronized with `origin/main`.
 
 The production Worker name must be `carehold-production`. Staging and production must have **different D1 IDs, secrets, Workers, and origins**. The production guard checks these properties before any remote command.
 
@@ -77,3 +85,9 @@ Do not confirm a release gate that has not actually happened. This workflow deli
 If a deployment fails after remote migrations, do **not** assume redeploying an older Worker reverses its schema. Stop writes, review the last production D1 export (private, unencrypted SQL), investigate migrations, and plan a verified restore. Existing devices must keep their browser/IndexedDB original encryption keys until recovery is verified; do not clear site data to force a restart.
 
 A web-authenticated session is not equivalent to independent revocation of encryption keys already imported by a device. Encryption and minors' privacy must be reviewed separately from the deployment process.
+
+## Limited production pilot versus real sensitive records
+
+A separate production Worker, account-specific pilot access code, and D1 database can be configured **without authorizing real confidential data**. HTTPS availability, passing unit tests and being behind a pilot code do not establish that Carehold's privacy and encryption architecture is safe for medical/child/therapeutic records. Keep staging as the test environment and complete fictional-data browser checks on the final production origin before any real-data decision.
+
+**Do not type `SECURITY REVIEWED` or `E2E REVIEWED` in the release script unless those activities have actually been completed and documented.** This runbook intentionally does not offer a test-mode override for a production deployment. If the release review is unfinished, keep improving staging; do not bypass or weaken the safeguards. The `release:production` script is a deployment mechanism, not security certification.
