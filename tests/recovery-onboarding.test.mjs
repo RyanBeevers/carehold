@@ -30,7 +30,7 @@ test('recovery gate trusts neither a passkey nor a server row without the local 
  assert.match(gate,/if\(recovery.configured&&registered.publicKey\)return 'restore'/);
  assert.match(gate,/return 'legacy'/);
  assert.match(gate,/return 'blocked'/);
- assert.match(gate,/MessageRecoveryGate key=\{userId\+':'+state\}/);
+ assert.ok(gate.includes("MessageRecoveryGate key={userId+':'+state}"));
  assert.match(gate,/LegacyMessageMigration userId=\{userId\} onComplete=/);
 });
 
