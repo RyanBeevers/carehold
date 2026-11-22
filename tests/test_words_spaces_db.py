@@ -18,10 +18,10 @@ class SharedWordsIntegrity(unittest.TestCase):
         for uid,role in (('owner','owner'),('child','member'),('teen','member')):
             self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h',?,?, 'now')",(uid,role))
         self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('other-h','other','owner','now')")
-        self.db.execute("INSERT INTO shared_word_spaces VALUES('s','h','child','prompt','now')")
+        self.db.execute("INSERT INTO shared_word_spaces(id,household_id,created_by,initial_kind,created_at) VALUES('s','h','child','prompt','now')")
         for uid in ('child','teen'):
-            self.db.execute("INSERT INTO shared_word_participants VALUES('s',?,'now')",(uid,))
-        self.db.execute("INSERT INTO shared_word_posts VALUES('p','s','child','prompt','hash','now')")
+            self.db.execute("INSERT INTO shared_word_participants(space_id,user_id,joined_at) VALUES('s',?,'now')",(uid,))
+        self.db.execute("INSERT INTO shared_word_posts(id,space_id,author_id,kind,body_hash,created_at) VALUES('p','s','child','prompt','hash','now')")
         for uid in ('child','teen'):
             self.db.execute("INSERT INTO shared_word_copies VALUES('p',?,'fictional ciphertext')",(uid,))
 
