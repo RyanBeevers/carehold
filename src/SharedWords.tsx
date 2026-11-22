@@ -20,7 +20,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
  seed:ShareSeed,userId:string,householdId:string,identity:Identity|null,keyError:string,people:WordContact[],
  onCreated:(spaceId:string)=>Promise<void>|void,onCancel:()=>void,onRefreshPeople:()=>void
 }){
- const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [keyChanges,setKeyChanges]=useState<KeyChange[]|null>(null);
  const pending=useRef<{id:string,postId:string,recipients:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const eligible=people.filter(p=>p.publicKey);
@@ -28,7 +28,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
  const canSend=!!identity&&chosen.length>0&&!busy;
  async function create(e:FormEvent){
   e.preventDefault();if(!canSend||!identity)return;
-  setBusy(true);setError('');
+  setBusy(true);setError('');setNotice('');
   try{
    const selected=chosen.map(p=>p.id).sort();
    const fingerprint=selected.join(':');
@@ -73,10 +73,11 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
    </fieldset>
    <div className="words-audience-confirm"><Users size={18}/><span>{chosen.length===0?'Nobody selected yet':`This will be shared with ${chosen.map(p=>p.name).join(', ')}. All participants can see discussion replies.`}</span></div>
    {error&&<p role="alert" className="messages-error">{error}</p>}
+   {notice&&<p role="status" className="words-status">{notice}</p>}
    <KeyFingerprintDetails contacts={chosen}/>
    {keyChanges&&<KeyChangeReview changes={keyChanges} busy={busy}
     onDismiss={()=>{setKeyChanges(null);pending.current=null;onRefreshPeople();}}
-    onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);pending.current=null;setError('Key checkpoint updated. Review the recipients and press Share again.');}catch(e){setError(message(e));}}}/>}
+    onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);pending.current=null;setError('');setNotice('Encryption key checkpoint updated. Review the recipients and press Share again.');}catch(e){setError(message(e));}}}/>}
 
    {!identity&&<p role={keyError?'alert':'status'} className={keyError?'messages-error':'muted'}>{keyError?'Encrypted sharing is blocked on this browser: '+keyError+' Return to the browser profile where this account first enrolled its encryption key.':'Preparing the encrypted device key before sharing…'}</p>}
    <button className="button primary" type="submit" disabled={!canSend}><Send size={17}/>{busy?'Encrypting and sharing…':seed.kind==='prompt'?'Share this prompt':'Share this journal entry'}</button>
