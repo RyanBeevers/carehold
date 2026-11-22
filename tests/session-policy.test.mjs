@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SESSION_IDLE_SECONDS,SESSION_REFRESH_SECONDS,INACTIVITY_LOCK_MS,BACKGROUND_LOCK_MS,lockReason} from '../shared/session-policy.ts';
-test('three-minute server session and client inactivity lock agree',()=>{
- assert.equal(SESSION_IDLE_SECONDS,180);
- assert.equal(INACTIVITY_LOCK_MS,SESSION_IDLE_SECONDS*1000);
+test('short client lock is independent of longer sliding server session grace',()=>{
+ assert.equal(SESSION_IDLE_SECONDS,1_800);
+ assert.equal(INACTIVITY_LOCK_MS,180_000);
+ assert.ok(SESSION_IDLE_SECONDS*1000>INACTIVITY_LOCK_MS);
+ assert.equal(SESSION_REFRESH_SECONDS,60);
  assert.ok(SESSION_REFRESH_SECONDS<SESSION_IDLE_SECONDS);
  assert.equal(lockReason(180_000,0,null),'inactive');
  assert.equal(lockReason(179_999,0,null),null);
