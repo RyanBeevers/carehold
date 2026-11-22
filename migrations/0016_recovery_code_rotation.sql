@@ -31,6 +31,9 @@ CREATE TABLE account_recovery_rotation_journals (
  household_id TEXT NOT NULL,
  entry_id TEXT NOT NULL,
  expected_revision INTEGER NOT NULL CHECK(expected_revision>0),
+ -- Old ciphertext is retained for forensic recovery and rollback analysis.
+ original_iv TEXT NOT NULL,
+ original_ciphertext TEXT NOT NULL,
  iv TEXT NOT NULL,
  ciphertext TEXT NOT NULL,
  PRIMARY KEY(rotation_id,household_id,entry_id)
@@ -40,6 +43,9 @@ CREATE TABLE account_recovery_rotation_drafts (
  household_id TEXT NOT NULL,
  scope_id TEXT NOT NULL,
  expected_revision INTEGER NOT NULL CHECK(expected_revision>0),
+ -- Old ciphertext is retained for forensic recovery and rollback analysis.
+ original_iv TEXT NOT NULL,
+ original_ciphertext TEXT NOT NULL,
  iv TEXT NOT NULL,
  ciphertext TEXT NOT NULL,
  PRIMARY KEY(rotation_id,household_id,scope_id)
