@@ -5,7 +5,7 @@ import {promptsForAudience,relationshipOptions,RELATIONSHIP_LABELS,rotatePrompt,
 import {seal,unseal,type Identity,type PublicKey,type Envelope,type Content} from './lib/message-crypto';
 import {MessageRecoveryGate} from './MessageRecoveryGate';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
-import {KeyChangeReview,KeyFingerprintDetails} from './RecipientKeyReview';
+import {KeyChangeReview} from './RecipientKeyReview';
 import {checkRecipientKeyContinuity,acceptVerifiedRecipientKeys,RecipientKeyChangedError,type KeyChange} from './lib/recipient-key-continuity';
 type Contact={id:string,name:string,publicKey:PublicKey|null};
 type Thread={id:string,createdAt:string,participants:Contact[]};
@@ -137,7 +137,6 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
   finally{setSending(false);}
  }
  return <div className="messages-composer">
-  <KeyFingerprintDetails contacts={thread.participants.filter(p=>p.id!==userId)}/>
   {keyChanges&&<KeyChangeReview changes={keyChanges} busy={sending}
    onDismiss={()=>{setKeyChanges(null);retry.current=null;}}
    onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);retry.current=null;setStatus('Encryption key checkpoint updated. Review the recipient and press Send again.');}catch(e){setError(errorText(e));}}}/>}
