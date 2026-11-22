@@ -45,8 +45,8 @@ test('Settings presents fresh-code generation or recovery form directly without 
  assert.match(recovery,/<MessageRecoveryGate key=\{userId\+':'\+status\}/);
  assert.match(recovery,/status==='legacy'&&<LegacyMessageMigration/);
  assert.doesNotMatch(recovery,/href="\/words">Open Words recovery/);
- assert.match(source('src/MessageRecoveryGate.tsx'),/Generate recovery code/);
- assert.match(source('src/MessageRecoveryGate.tsx'),/Restore my message key/);
+ assert.match(source('src/MessageRecoveryGate.tsx'),/Set up secure backup/);
+ assert.match(source('src/MessageRecoveryGate.tsx'),/Restore my writing/);
 });
 test('server grace is longer than local idle lock and browser keeps explicit sign-out',()=>{
  const auth=source('worker/auth.ts'),policy=source('shared/session-policy.ts');
