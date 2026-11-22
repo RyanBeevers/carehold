@@ -34,6 +34,8 @@ class WordsLifecycleDB(unittest.TestCase):
 
     def test_departed_participant_cannot_receive_new_encrypted_copies(self):
         self.db.execute("UPDATE shared_word_participants SET left_at='now' WHERE space_id='s' AND user_id='sara'")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("INSERT INTO shared_word_posts(id,space_id,author_id,kind,body_hash,created_at) VALUES('left','s','sara','discussion','hash','now')")
         self.db.execute("INSERT INTO shared_word_posts(id,space_id,author_id,kind,body_hash,created_at) VALUES('reply','s','owner','discussion','hash','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO shared_word_copies(post_id,recipient_id,envelope_json) VALUES('reply','sara','{}')")
