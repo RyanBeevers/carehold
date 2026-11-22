@@ -117,6 +117,18 @@ Record failures with the specific step, account role, relevant HTTP response/sta
 The initial local household E2E checklist was reported passing. Subsequent usability feedback led to new features and migrations **not included in that first pass**. **Before deployment**, follow the full focused verification in [POST_E2E_FEEDBACK.md](./POST_E2E_FEEDBACK.md): mistaken/refused/not-administered dose corrections and later observations; automatic draft autosave; draft clearing on share/new prompt; titled searchable/paginated journal; unified discussion and device-only private notes; adult-to-adult prompt filtering; 3-minute active session; medication/profile archive-and-restore, historical conversations, RxTerms form deduplication and role/permission isolation.
 
 
+## Mandatory new-account recovery during onboarding (STAGING ACCEPTANCE — NOT YET PASSED)
+
+- [ ] In a new persistent browser profile with a **fictional** staging account, create the account and add its passkey. Confirm the **03 / KEEP YOUR WRITING SAFE** recovery screen appears **before** any care-circle setup, Today, People, Messages, or Words.
+- [ ] Generate a CH1 code. Do not save it; confirm **Continue**/enrollment remains disabled. Save it in a secure vault outside the browser, hide the displayed code, then retrieve and enter the same code. The enrollment action must enable only after matching verification.
+- [ ] Finish enrollment, then continue to personal prompt preferences and create/join a circle. Confirm existing sessions do not silently regenerate keys.
+- [ ] Close Carehold and sign in again in the original persistent browser: the enrolled key should match and the app should resume without a replacement prompt.
+- [ ] Sign in to the *same fictional account* from a second persistent browser with passkey/password; it must require the saved CH1 code before exposing the care circle, and reject incorrect codes without replacing any key. Correct code must restore synced encrypted content.
+- [ ] Simulate interrupting first enrollment while switching to a password manager: the encrypted pending envelope must remain resumable, and no code can be retrieved from the server. Do not clear IndexedDB on the original profile.
+- [ ] Check a genuine legacy browser identity prompts non-destructive migration instead of creating a new key; test interrupted resume with the saved code.
+- [ ] From staging, confirm `GET /api/health/ready` succeeds **only after** migration 0016 tables are applied. Run the exact latest `npm run verify:pre-e2e` on the branch before staging.
+- [ ] Do **not** use real child, medication, therapy or confidential journal content on this unaudited pilot.
+
 ## Recovery-first re-test after migration 0011 (fictional test accounts ONLY)
 
 This section is **not yet passed**. A new household with existing accounts does not reset account-scoped encryption keys; use new fictional user accounts for fresh-enrollment testing. Do not delete the old Sara/browser-test keys or D1 ciphertext to make a test pass.
