@@ -39,6 +39,12 @@ Carehold is an invite-only household care pilot, built to grow into a subscripti
 4. **Professional:** Referrals are invitation/onboarding actions **without implicit access**. Therapist/psychiatrist accounts, consent, clinically relevant records, and optional paid workspaces are deferred.
 5. **Commercial:** Subscription entitlements, monthly/annual billing, complimentary accounts, beta/founder lifetime access, staff entitlement admin are future work. Billing roles never imply care-content access.
 
+## Household pilot security UX (November 2026)
+
+See [docs/HOUSEHOLD_PILOT_SECURITY.md](docs/HOUSEHOLD_PILOT_SECURITY.md). The owner is testing this privately with invited household accounts. Everyday Words/Messages surfaces should **not** show a permanent fictional-writing banner; do show actionable errors for authentication, encryption, recipient-key mismatches, recovery and failed sync. Settings exposes the remaining privacy and recovery limitations.
+
+Before any send, remember/check recipient key continuity **per signed-in account, household and recipient**. Unexpected changes must block sending until the sender compares the recipient's full public verification code outside the app and explicitly approves. This browser-local TOFU improvement is **not independently verified E2EE**, protection against XSS or per-device revocation. Do not weaken authorization, fake review signoffs, erase recovery ciphertext, or silently trust changed keys to make the UX smoother. Public/clinical and minor-confidential release gates below remain open.
+
 ## Open discovery / release blockers (do not quietly assume solved)
 - Minors' privacy, age thresholds, guardian consent/oversight, children's right to private writing, account deletion, and teen transition to adulthood.
 - Therapist/psychiatrist authorization, referral workflow, clinician role/licensure, professional record retention, cross-jurisdiction and emergency disclosure.
