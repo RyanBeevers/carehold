@@ -23,12 +23,12 @@ class TrustedDeviceSchema(unittest.TestCase):
     def test_devices_are_per_account_and_cannot_reuse_duplicate_ids_for_same_account(self):
         for uid in ('owner_a','owner_b'):
             self.db.execute('''INSERT INTO trusted_devices
-                (user_id,device_id,label,account_public_jwk,created_at,last_seen_at)
-                VALUES(?,?,?,?,?,?)''',(uid,'d','A fictional phone','account-public-'+uid,'now','now'))
+                (user_id,device_id,label,account_public_jwk,approval_public_jwk,created_at,last_seen_at)
+                VALUES(?,?,?,?,?,?,?)''',(uid,'d','A fictional phone','account-public-'+uid,'sign-'+uid,'now','now'))
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute('''INSERT INTO trusted_devices
-                (user_id,device_id,label,account_public_jwk,created_at,last_seen_at)
-                VALUES('owner_a','d','duplicate','old','now','now')''')
+                (user_id,device_id,label,account_public_jwk,approval_public_jwk,created_at,last_seen_at)
+                VALUES('owner_a','d','duplicate','old','forged','now','now')''')
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM trusted_devices').fetchone()[0],2)
         self.db.execute("UPDATE trusted_devices SET revoked_at='later' WHERE user_id='owner_a' AND device_id='d'")
         self.assertIsNone(self.db.execute("SELECT revoked_at FROM trusted_devices WHERE user_id='owner_b'").fetchone()[0])
