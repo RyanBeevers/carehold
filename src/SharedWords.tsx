@@ -291,7 +291,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
     </button>
     {confirmAction&&(confirmAction.kind==='space'||confirmAction.kind==='leave')&&<div className="words-audience-confirm" role="group" aria-label="Confirm shared space removal">
      <span>{confirmAction.kind==='space'
-      ?'Remove this shared space and all replies from everyone’s Carehold view? Your private journal entry is not deleted. Past copies on other devices and encrypted recovery history may remain.'
+      ?'Remove this shared space and all replies from everyone’s Carehold view? Any private journal entry remains. If the shared snapshot is your only copy, save it privately before removing this space. Past copies on devices and encrypted recovery history may remain.'
       :'Leave this shared space? It will disappear from your account. Others can keep existing copies and continue without you.'}</span>
      <button type="button" className="quiet small" disabled={removing} onClick={()=>setConfirmAction(null)}>Keep space</button>
      <button type="button" className="button dark small" disabled={removing||!!busy} onClick={()=>void removeSharedContent()}>{removing?'Removing…':confirmAction.kind==='space'?'Remove for everyone':'Leave space'}</button>
