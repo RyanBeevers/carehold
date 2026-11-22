@@ -101,3 +101,12 @@ BEGIN
    AND d.revision=sd.expected_revision+1 AND d.iv=sd.iv AND d.ciphertext=sd.ciphertext)
  ) THEN RAISE(ABORT,'Unmigrated synchronized drafts remain') END;
 END;
+
+-- Another caregiver cannot append ciphertext for an old public key midway
+-- through a rotation. This rejects the entire sender transaction atomically.
+CREATE TRIGGER prevent_direct_to_rotating_recipient BEFORE INSERT ON encrypted_message_copies
+WHEN EXISTS(SELECT 1 FROM account_recovery_rotations WHERE user_id=NEW.recipient_id AND state='staged')
+BEGIN SELECT RAISE(ABORT,'Recipient encryption key rotation in progress'); END;
+CREATE TRIGGER prevent_words_to_rotating_recipient BEFORE INSERT ON shared_word_copies
+WHEN EXISTS(SELECT 1 FROM account_recovery_rotations WHERE user_id=NEW.recipient_id AND state='staged')
+BEGIN SELECT RAISE(ABORT,'Recipient encryption key rotation in progress'); END;
