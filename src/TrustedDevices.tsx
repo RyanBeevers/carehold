@@ -2,13 +2,13 @@ import {useEffect,useState} from 'react';
 import {api,StaleSessionRequest} from './lib/api';
 import {storedMessageIdentity} from './lib/message-crypto';
 import {pairingNumber} from './lib/trusted-device-crypto';
-import {localTrustedDevice,readTrustedRecoveryCode} from './lib/trusted-device-vault';
+import {localTrustedDevice,readTrustedRecoveryCode,renameLocalTrustedDevice} from './lib/trusted-device-vault';
 import {enrollLocalTrustedDevice,getTrustedDeviceDirectory,approveTrustedDeviceRequest,enableTrustedApproval,revokeTrustedDevice,type DeviceDirectory,type DeviceRequest} from './lib/trusted-device-client';
 import type {MessageRecoveryEnvelope} from './lib/message-recovery';
 
 const message=(e:unknown)=>e instanceof Error?e.message:'Unable to update devices.';
 export function TrustedDevices({userId}:{userId:string}){
- const [data,setData]=useState<DeviceDirectory|null>(null),[localId,setLocalId]=useState('');
+ const [data,setData]=useState<DeviceDirectory|null>(null),[localId,setLocalId]=useState(''),[deviceName,setDeviceName]=useState('');
  const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [recoveryCode,setRecoveryCode]=useState(''),[recoveryAvailable,setRecoveryAvailable]=useState(false);
  const [selected,setSelected]=useState<DeviceRequest|null>(null),[pairing,setPairing]=useState(''),[matched,setMatched]=useState(false);
@@ -19,7 +19,7 @@ export function TrustedDevices({userId}:{userId:string}){
   if(!identity||!identity.journalKey)throw new Error('Restore your encrypted writing before managing trusted devices.');
   if(enroll)await enrollLocalTrustedDevice(userId,identity);
   const directory=await getTrustedDeviceDirectory();
-  setData(directory);setLocalId(device.id);
+  setData(directory);setLocalId(device.id);setDeviceName(v=>v||device.name);
   setRecoveryAvailable(Boolean(await readTrustedRecoveryCode(userId,directory.accountPublicKey)));
   return directory;
  }
@@ -37,6 +37,19 @@ export function TrustedDevices({userId}:{userId:string}){
    .then(code=>{if(live)setPairing(code);}).catch(e=>{if(live)setError(message(e));});
   return()=>{live=false;};
  },[userId,selected?.id,selected?.publicKey?.x,selected?.publicKey?.y]);
+ async function rename(){
+  if(busy)return;
+  setBusy(true);setError('');setNotice('');
+  try{
+   await renameLocalTrustedDevice(userId,deviceName);
+   const identity=await storedMessageIdentity(userId);
+   if(!identity)throw new Error('Your encrypted account key is unavailable.');
+   await enrollLocalTrustedDevice(userId,identity);
+   await load();
+   setNotice('Device name updated.');
+  }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
+  finally{setBusy(false);}
+ }
  async function approve(){
   if(!selected||!matched||busy||!pairing)return;
   setBusy(true);setError('');setNotice('');
@@ -99,6 +112,13 @@ export function TrustedDevices({userId}:{userId:string}){
      <div className="words-response-actions"><button type="button" className="button outline small" disabled={busy} onClick={()=>setRemoving(null)}>Keep device</button>
       <button type="button" className="button dark small" disabled={busy} onClick={()=>void revoke(removing)}>Remove device</button></div>
     </div>}
+    <details className="recovery-storage-alternatives">
+     <summary>Rename this device</summary>
+     <form onSubmit={e=>{e.preventDefault();void rename();}} className="trusted-device-rename">
+      <label>Device name<input maxLength={60} required value={deviceName} onChange={e=>setDeviceName(e.target.value)} placeholder="My iPhone"/></label>
+      <button type="submit" className="button outline small" disabled={busy||!deviceName.trim()}>Save name</button>
+     </form>
+    </details>
     {stale.length>0&&<details className="recovery-storage-alternatives">
      <summary>Previously removed or outdated devices ({stale.length})</summary>
      {stale.map(d=><p className="muted tiny" key={d.id}>{d.name} — {d.revokedAt?'Removed':'Needs to re-enroll after an account-key change'}</p>)}
