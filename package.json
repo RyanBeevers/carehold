@@ -19,6 +19,7 @@
     "push:setup": "node scripts/configure-local-push.mjs",
     "db:backup:local": "bash scripts/backup-local.sh",
     "preflight:staging": "node scripts/check-staging-config.mjs",
+    "configure:staging": "node scripts/configure-staging.mjs",
     "verify:pre-e2e": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
