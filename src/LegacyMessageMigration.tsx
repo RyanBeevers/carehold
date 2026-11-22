@@ -199,7 +199,7 @@ export function LegacyMessageMigration({userId}:{userId:string}){
   setStatus('done');setPending(null);
  }
  if(status==='checking')return <p role="status">Checking legacy encryption…</p>;
- if(status==='done')return <div className="recovery-gate"><strong>Message recovery upgrade completed.</strong><p>Original ciphertext and the old browser key were retained. Your saved code can recover new message access and encrypted private journals on another browser. Reload Carehold to refresh encrypted screens.</p><button type="button" className="button outline" onClick={()=>window.location.reload()}>Reload encrypted screens</button></div>;
+ if(status==='done')return <div className="recovery-gate"><strong>Message recovery upgrade completed.</strong><p>Original ciphertext and the old browser key were retained. A recovery code saved outside this browser is required to restore access on another device. This success state alone does not prove you stored the code. If you missed it, keep this browser profile and its site data intact. Reload Carehold to refresh encrypted screens.</p><button type="button" className="button outline" onClick={()=>window.location.reload()}>Reload encrypted screens</button></div>;
  if(status==='blocked')return <p role="status" className="fine-print">Legacy migration requires the original browser with its old private key. Nothing was reset. {error}</p>;
  return <div className="recovery-gate">
   <h3>Upgrade older encrypted messages safely</h3>
@@ -208,7 +208,8 @@ export function LegacyMessageMigration({userId}:{userId:string}){
    <button type="button" className="button primary" disabled={busy} onClick={()=>void generate()}>Prepare non-destructive migration</button></>}
   {status==='show-code'&&pending&&<><p>Save this recovery code securely before converting anything. It is shown only now, cannot be reconstructed, and is required if the migration is interrupted.</p>
    <RecoveryCodeSaveGuide code={pending.recoveryCode} saved={savedCode} onSavedChange={setSavedCode}/>
-   <button type="button" className="button primary" disabled={!savedCode||busy} onClick={()=>void start()}>{busy?'Converting…':'Encrypt and verify all my older messages'}</button></>}
+   <p className="fine-print"><strong>Step 3 — Finalize only after verifying the external copy.</strong> Once the migration finishes, Carehold cannot display this code again or safely recreate it. Without it, a different browser will not be able to decrypt your messages or synchronized private writing.</p>
+   <button type="button" className="button primary" disabled={!savedCode||busy} onClick={()=>void start()}>{busy?'Converting…':'Finish migration — verified code saved'}</button></>}
   {status==='resume-prestage'&&pendingResume&&<><p><strong>Continue the original-browser setup you started.</strong> The unregistered key was kept here only as an encrypted envelope while you saved the recovery code. No code or original message key was stored in plaintext.</p>
    <label>Saved recovery code<input type="password" autoComplete="off" spellCheck={false} value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value)} placeholder="CH1-…"/></label>
    <p className="muted tiny">Find <strong>{RECOVERY_SEARCH_LABEL}</strong> in Apple Passwords, a trusted manager or a locked note.</p>
