@@ -1,4 +1,4 @@
-import {api} from './api.ts';
+import {api,StaleSessionRequest} from './api.ts';
 import {samePublicKey,storedMessageIdentity,storeRecoveredMessageIdentity,storeRotatedMessageIdentity,unseal,type Identity,type PublicKey} from './message-crypto.ts';
 import {openMessageRecoveryIdentity,type MessageRecoveryEnvelope} from './message-recovery.ts';
 import {newTransferKeyPair,sealTransferCode,openTransferCode,assertSameTransferKey,type TransferEnvelope} from './trusted-device-crypto.ts';
@@ -106,12 +106,23 @@ export async function finishApprovedDeviceRequest(userId:string,requestId:string
  if(previous&&!samePublicKey(previous.publicKey,identity.publicKey))
   await storeRotatedMessageIdentity(userId,previous,identity);
  else await storeRecoveredMessageIdentity(userId,identity);
- await saveTrustedRecoveryCode(userId,code,server.envelope);
- await enrollLocalTrustedDevice(userId,identity);
- const device=await localTrustedDevice(userId);
- const authorization=await keyProof(userId,identity,device.id,'complete',requestId);
- await api('/trusted-devices/requests/'+encodeURIComponent(requestId)+'/complete','POST',{deviceId:device.id,...authorization});
- await discardPendingTransfer(userId);
+ // The checked account identity is already safely restored at this point.
+ // A temporary device-registry/IndexedDB failure must not strand the user's
+ // private writing behind the onboarding gate. Device approval privileges
+ // remain unavailable until independently enrolled in Settings.
+ try{
+  await saveTrustedRecoveryCode(userId,code,server.envelope);
+  await enrollLocalTrustedDevice(userId,identity);
+  const device=await localTrustedDevice(userId);
+  const authorization=await keyProof(userId,identity,device.id,'complete',requestId);
+  await api('/trusted-devices/requests/'+encodeURIComponent(requestId)+'/complete','POST',{deviceId:device.id,...authorization});
+ }catch(e){
+  if(e instanceof StaleSessionRequest)throw e;
+  // Clear the short-lived encrypted relay if registration failed; if the
+  // account session is offline, the scheduled Worker cleanup still expires it.
+  await api('/trusted-devices/requests/'+encodeURIComponent(requestId)+'/cancel','POST',{}).catch(()=>{});
+ }
+ await discardPendingTransfer(userId).catch(()=>{});
  return identity;
 }
 export async function cancelDeviceRequest(userId:string,requestId:string):Promise<void>{
