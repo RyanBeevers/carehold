@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {api,StaleSessionRequest} from './lib/api';
 import type {Identity} from './lib/message-crypto';
 import {pairingNumber} from './lib/trusted-device-crypto';
-import {pendingTransfer} from './lib/trusted-device-vault';
+import {pendingTransfer,discardPendingTransfer} from './lib/trusted-device-vault';
 import {startNewDeviceRequest,finishApprovedDeviceRequest,cancelDeviceRequest,type DeviceRequest} from './lib/trusted-device-client';
 
 const errorText=(e:unknown)=>e instanceof Error?e.message:'Device approval was interrupted.';
@@ -25,6 +25,14 @@ export function NewDeviceApproval({userId,onReady}:{userId:string,onReady:(ident
    try{
     const next=await api<DeviceRequest>('/trusted-devices/requests/'+encodeURIComponent(requestId));
     if(!live)return;
+    if(['expired','cancelled','consumed'].includes(next.state)){
+     await discardPendingTransfer(userId);
+     if(live){
+      setRequestId(null);setRequest(null);setNumber('');
+      setError(next.state==='expired'?'The approval expired. Request a new one when both devices are available.':'That approval is no longer active. You can request another.');
+     }
+     return;
+    }
     setRequest(next);
     const pending=await pendingTransfer(userId);
     if(!pending||pending.id!==requestId)throw new Error('This device approval belongs to another browser.');
@@ -39,7 +47,16 @@ export function NewDeviceApproval({userId,onReady}:{userId:string,onReady:(ident
      }catch(e){if(live&&!(e instanceof StaleSessionRequest))setError(errorText(e));}
      finally{resolving.current=false;if(live)setBusy(false);}
     }
-   }catch(e){if(live&&!(e instanceof StaleSessionRequest))setError(errorText(e));}
+   }catch(e){
+    if(live&&!(e instanceof StaleSessionRequest)){
+     // The request can be missing after an interrupted initial POST. Never
+     // erase a pending private key for a transient network/server failure.
+     if(e instanceof Error&&e.message.includes('Device request unavailable')){
+      await discardPendingTransfer(userId).catch(()=>{});
+      if(live){setRequestId(null);setRequest(null);setNumber('');setError('The earlier request was not found. You can start a new approval.');}
+     }else setError(errorText(e));
+    }
+   }
   };
   void check();
   const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void check();},4500);
@@ -55,8 +72,15 @@ export function NewDeviceApproval({userId,onReady}:{userId:string,onReady:(ident
  async function cancel(){
   if(!requestId||busy)return;
   setBusy(true);setError('');
-  try{await cancelDeviceRequest(userId,requestId);setRequestId(null);setRequest(null);setNumber('');done.current=false;}
-  catch(e){if(!(e instanceof StaleSessionRequest))setError(errorText(e));}
+  try{
+   await cancelDeviceRequest(userId,requestId);
+   setRequestId(null);setRequest(null);setNumber('');done.current=false;
+  }catch(e){
+   if(e instanceof Error&&/expired|no longer|Device request unavailable/.test(e.message)){
+    await discardPendingTransfer(userId);
+    setRequestId(null);setRequest(null);setNumber('');done.current=false;
+   }else if(!(e instanceof StaleSessionRequest))setError(errorText(e));
+  }
   finally{setBusy(false);}
  }
  const active=requestId&&request?.state!=='expired'&&request?.state!=='cancelled'&&request?.state!=='consumed';
