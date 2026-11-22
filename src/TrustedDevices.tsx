@@ -17,7 +17,10 @@ export function TrustedDevices({userId}:{userId:string}){
   const device=await localTrustedDevice(userId);
   const identity=await storedMessageIdentity(userId);
   if(!identity||!identity.journalKey)throw new Error('Restore your encrypted writing before managing trusted devices.');
-  if(enroll)await enrollLocalTrustedDevice(userId,identity);
+  // A manual-CH1-restored browser can read its writing even if another
+  // trusted device must approve enrollment. Never hide the device list.
+  if(enroll)try{await enrollLocalTrustedDevice(userId,identity);}
+   catch(e){setError(message(e));}
   const directory=await getTrustedDeviceDirectory();
   setData(directory);setLocalId(device.id);setDeviceName(v=>v||device.name);
   setRecoveryAvailable(Boolean(await readTrustedRecoveryCode(userId,directory.accountPublicKey)));
@@ -90,6 +93,7 @@ export function TrustedDevices({userId}:{userId:string}){
  }
  const active=data?.devices.filter(d=>!d.revokedAt&&d.keyCurrent)??[];
  const stale=data?.devices.filter(d=>d.revokedAt||!d.keyCurrent)??[];
+ const thisDeviceTrusted=active.some(d=>d.id===localId);
  return <section className="trusted-device-settings" aria-label="Trusted devices and device approvals">
   <div className="setting-section"><div>
    <h2>Trusted devices</h2>
@@ -97,6 +101,7 @@ export function TrustedDevices({userId}:{userId:string}){
    {!ready&&<p role="status">Checking your enrolled devices…</p>}
    {error&&<p className="messages-error" role="alert">{error}</p>}
    {notice&&<p className="words-status" role="status">{notice}</p>}
+   {ready&&data&&!thisDeviceTrusted&&<p className="muted tiny" role="status">This browser can use your restored writing but isn't currently authorized to approve other devices. If your old devices are available, approve this one from them. If they're permanently lost, use Advanced Security to rotate your encryption identity before enrolling this browser.</p>}
   </div><button type="button" className="button outline small" onClick={()=>void load(true).catch(e=>setError(message(e)))} disabled={busy}>Refresh devices</button></div>
   {data&&<div className="trusted-device-body">
    <div className="trusted-device-group">
@@ -129,9 +134,9 @@ export function TrustedDevices({userId}:{userId:string}){
     {!data.pendingRequests.length?<p className="muted tiny">No pending approvals. Start a new-device request from the phone or browser you're adding, then open this screen on a trusted device.</p>:
      data.pendingRequests.filter(r=>r.deviceId!==localId).map(request=><div key={request.id} className="trusted-device-row">
       <div><strong>{request.deviceName}</strong><p className="muted tiny">Waiting for approval</p></div>
-      <button type="button" className="button outline small" disabled={busy||!recoveryAvailable} onClick={()=>{setSelected(request);setMatched(false);}}>Review</button>
+      <button type="button" className="button outline small" disabled={busy||!recoveryAvailable||!thisDeviceTrusted} onClick={()=>{setSelected(request);setMatched(false);}}>Review</button>
      </div>)}
-    {data.pendingRequests.length>0&&!recoveryAvailable&&<p className="muted tiny">To approve another device, first enable trusted-device recovery on this browser below. The code must come from your saved backup.</p>}
+    {data.pendingRequests.length>0&&(!recoveryAvailable||!thisDeviceTrusted)&&<p className="muted tiny">Approving a device requires both verified recovery on this browser and active trusted enrollment. If needed, enable recovery below or complete account-key rotation after losing all other devices.</p>}
     {selected&&<div className="key-change-review" role="group" aria-label="Approve another device">
      <strong>Approve {selected.deviceName}?</strong>
      <p>Confirm the eight digits below match those shown on your new device. Do not approve a request you did not start.</p>
@@ -149,7 +154,7 @@ export function TrustedDevices({userId}:{userId:string}){
     <label>Saved recovery code<input type="password" autoComplete="off" value={recoveryCode} onChange={e=>setRecoveryCode(e.target.value)} placeholder="CH1-…" spellCheck={false}/></label>
     <button type="button" className="button outline" disabled={busy||!recoveryCode.trim()} onClick={()=>void saveApproval()}>{busy?'Verifying…':'Enable trusted-device approvals'}</button>
    </details>}
-   {recoveryAvailable&&<p className="muted tiny">This browser can approve a new device while signed in. Your private backup code stays encrypted on this device.</p>}
+   {recoveryAvailable&&<p className="muted tiny">{thisDeviceTrusted?'This browser can approve a new device while signed in.':'Encrypted recovery backup is stored locally, but this browser cannot approve another until trusted enrollment is completed.'} Your private backup code stays encrypted on this device.</p>}
    <p className="muted tiny">Removing a device does not yet revoke its already-imported account encryption key. A key rotation is required to protect future content after a lost or compromised device; older copies cannot be recalled.</p>
   </div>}
  </section>;
