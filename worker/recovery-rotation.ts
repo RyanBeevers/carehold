@@ -215,7 +215,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    const hid=b.householdId,id=b.sourceId,revision=b.expectedRevision,iv=b.iv,ct=b.ciphertext;
    if(typeof hid!=='string'||typeof id!=='string'||!UUID.test(hid)||
     !(kind==='journal'?UUID.test(id):HASH.test(id))||
-    !Number.isSafeInteger(revision)||revision<1||!IV.test(iv)||!CIPHER.test(ct))
+    typeof revision!=='number'||!Number.isSafeInteger(revision)||revision<1||
+    typeof iv!=='string'||!IV.test(iv)||typeof ct!=='string'||!CIPHER.test(ct))
     fail(400,'Invalid encrypted migration record.');
    await member(db,hid,user.id);
    const table=kind==='journal'?'private_journal_sync':'private_draft_sync';
