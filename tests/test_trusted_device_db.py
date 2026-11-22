@@ -49,15 +49,17 @@ class TrustedDeviceSchema(unittest.TestCase):
         self.db.execute("UPDATE trusted_device_requests SET state='consumed',ciphertext_json=NULL WHERE id='r1'")
         self.assertIsNone(self.db.execute("SELECT ciphertext_json FROM trusted_device_requests WHERE id='r1'").fetchone()[0])
 
-    def test_challenge_is_scoped_to_user_device_and_foreign_key(self):
-        self.db.execute("INSERT INTO trusted_device_challenges VALUES('owner_a','d','digest',9999999999)")
-        self.db.execute("INSERT INTO trusted_device_challenges VALUES('owner_b','d','other',9999999999)")
+    def test_challenge_is_one_time_scoped_and_simultaneous_device_tabs_cannot_overwrite(self):
+        self.db.execute("INSERT INTO trusted_device_challenges VALUES('c1','owner_a','d','digest',9999999999)")
+        self.db.execute("INSERT INTO trusted_device_challenges VALUES('c2','owner_a','d','parallel',9999999999)")
+        self.db.execute("INSERT INTO trusted_device_challenges VALUES('c3','owner_b','d','other',9999999999)")
         with self.assertRaises(sqlite3.IntegrityError):
-            self.db.execute("INSERT INTO trusted_device_challenges VALUES('owner_a','d','dupe',9999999999)")
+            self.db.execute("INSERT INTO trusted_device_challenges VALUES('c1','owner_a','d','dupe',9999999999)")
         with self.assertRaises(sqlite3.IntegrityError):
-            self.db.execute("INSERT INTO trusted_device_challenges VALUES('missing','z','digest',9999999999)")
-        self.db.execute("DELETE FROM trusted_device_challenges WHERE user_id='owner_a' AND device_id='d'")
-        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM trusted_device_challenges').fetchone()[0],1)
+            self.db.execute("INSERT INTO trusted_device_challenges VALUES('c4','missing','z','digest',9999999999)")
+        self.db.execute("DELETE FROM trusted_device_challenges WHERE challenge_id='c1' AND user_id='owner_a' AND device_id='d'")
+        rows=self.db.execute("SELECT challenge_id FROM trusted_device_challenges ORDER BY challenge_id").fetchall()
+        self.assertEqual(rows,[('c2',),('c3',)])
 
     def test_legacy_message_keys_and_encrypted_journal_schema_are_not_mutated(self):
         cols=[r[1] for r in self.db.execute('PRAGMA table_info(message_device_keys)')]
