@@ -349,7 +349,7 @@ export default function App(){
  }
  function beginManageAccess(member:Member){
   setAccessMember(member);setAccessScope(member.access_scope==='full'?'full':'limited');
-  setAccessProfiles(member.grants?.map(g=>g.profileId)||[]);
+  setAccessProfiles((member.grants||[]).map(g=>g.profileId).filter(id=>profiles.some(p=>p.id===id&&!p.archived_at)));
   const caps=new Set<CareCapability>(['view_schedule',...(member.grants||[]).flatMap(g=>g.capabilities)]);
   setAccessCapabilities([...caps]);setModal('access');
  }
