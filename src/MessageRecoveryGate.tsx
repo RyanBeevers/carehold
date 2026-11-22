@@ -172,7 +172,8 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
   </form>}
   {mode==='show-code'&&pending&&<><p>Save this recovery code somewhere secure and separate from this browser. It is not your password or passkey. Never share it with another household member.</p>
    <RecoveryCodeSaveGuide code={pending.recoveryCode} saved={saved} onSavedChange={setSaved}/>
-   <button type="button" className="button primary" disabled={!saved||busy} onClick={()=>void completeEnrollment()}>{busy?'Enrolling…':'Complete secure enrollment'}</button>
+   <p className="fine-print"><strong>Step 3 — Complete enrollment only after verifying your saved copy.</strong> This recovery code will not be shown again after enrollment. Losing it prevents encrypted-data recovery on another device.</p>
+   <button type="button" className="button primary" disabled={!saved||busy} onClick={()=>void completeEnrollment()}>{busy?'Enrolling…':'Complete enrollment — verified code saved'}</button>
    <p className="muted tiny">Do not navigate away until enrollment succeeds. The recovery code is never sent to the server.</p></>}
   {mode==='restore'&&<form onSubmit={e=>void restore(e)}><p>This account has encrypted messages from another browser. Enter your saved recovery code to authorize this device and access its shared history.</p>
    <label>Recovery code<input name="recovery-code" type="password" autoComplete="off" spellCheck={false} value={code} onChange={e=>setCode(e.target.value)} placeholder="CH1-…" required/></label>
