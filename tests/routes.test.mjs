@@ -6,8 +6,8 @@ const wrangler=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.u
 
 test('each app page has a unique, shareable, non-sensitive URL',()=>{
  const paths=Object.values(APP_PATHS);
- assert.deepEqual(paths,['/today','/people','/words','/messages','/circle','/settings']);
- assert.equal(new Set(paths).size,6);
+ assert.deepEqual(paths,['/today','/people','/words','/messages','/circle','/settings','/settings/about']);
+ assert.equal(new Set(paths).size,paths.length);
  for(const [page,path] of Object.entries(APP_PATHS)){
   assert.equal(pagePath(page),path);
   assert.equal(pageFromPath(path),page);
@@ -21,6 +21,9 @@ test('legacy root defaults to Today and invalid routes fail closed without data'
  }
  assert.equal(canonicalPagePath('/'),'/today');
  assert.equal(canonicalPagePath('/settings/'),'/settings');
+ assert.equal(pageFromPath('/settings/about'),'about');
+ assert.equal(pageFromPath('/settings/about/'),'about');
+ assert.equal(canonicalPagePath('/settings/about'),'/settings/about');
 });
 test('only normal link clicks are handled by client navigation',()=>{
  const normal={button:0,defaultPrevented:false,metaKey:false,ctrlKey:false,shiftKey:false,altKey:false};
@@ -39,6 +42,7 @@ test('fresh installed PWA launch at root restores only a recognized page label',
  assert.equal(restorePage('/',()=> 'words'),'words');
  assert.equal(restorePage('/',()=> 'messages'),'messages');
  assert.equal(restorePage('/',()=> 'settings'),'settings');
+ assert.equal(restorePage('/',()=> 'about'),'about');
  assert.equal(restorePage('/people',()=> 'words'),'people');
  assert.equal(restorePage('/words/',()=> 'today'),'words');
  assert.equal(restorePage('/',()=> 'secret-token'),'today');
