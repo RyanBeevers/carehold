@@ -6,6 +6,8 @@ import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
 import {savePrivateJournal,listPrivateJournal,type JournalEntry} from './lib/private-journal';
 import {saveSyncedPrivateJournal,listSyncedPrivateJournal} from './lib/synced-private-journal';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
+import {KeyChangeReview,KeyFingerprintDetails} from './RecipientKeyReview';
+import {checkRecipientKeyContinuity,acceptVerifiedRecipientKeys,RecipientKeyChangedError,type KeyChange} from './lib/recipient-key-continuity';
 
 export type WordContact={id:string,name:string,publicKey:PublicKey|null};
 export type ShareSeed={kind:'prompt'|'journal',prompt:string|null,text:string,title?:string,sourceEntryId?:string};
@@ -19,6 +21,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
  onCreated:(spaceId:string)=>Promise<void>|void,onCancel:()=>void,onRefreshPeople:()=>void
 }){
  const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [keyChanges,setKeyChanges]=useState<KeyChange[]|null>(null);
  const pending=useRef<{id:string,postId:string,recipients:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const eligible=people.filter(p=>p.publicKey);
  const chosen=eligible.filter(p=>recipients.includes(p.id));
@@ -29,6 +32,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
   try{
    const selected=chosen.map(p=>p.id).sort();
    const fingerprint=selected.join(':');
+   await checkRecipientKeyContinuity(userId,householdId,chosen);
    const publicKeys=Object.fromEntries([{id:userId,publicKey:identity.publicKey},...chosen].map(p=>[p.id,p.publicKey!])) as Record<string,PublicKey>;
    let attempt=pending.current;
    if(!attempt||attempt.recipients!==fingerprint||JSON.stringify(attempt.publicKeys)!==JSON.stringify(publicKeys)){
@@ -43,7 +47,10 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
    await api('/words/spaces','POST',{id:attempt.id,postId:attempt.postId,householdId,kind:seed.kind,recipientIds:selected,copies:attempt.copies,publicKeys:attempt.publicKeys});
    pending.current=null;
    await onCreated(attempt.id);
-  }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
+  }catch(e){
+   if(e instanceof RecipientKeyChangedError)setKeyChanges(e.changed);
+   else if(!(e instanceof StaleSessionRequest))setError(message(e));
+  }
   finally{setBusy(false);}
  }
  return <section className="words-compose" aria-label="Share a prompt or journal entry">
@@ -58,7 +65,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
     <div className="words-share-people">
      {people.map(person=><label key={person.id} className="words-share-person">
       <input type="checkbox" checked={recipients.includes(person.id)} disabled={!person.publicKey||(!recipients.includes(person.id)&&recipients.length>=10)||busy}
-       onChange={e=>{pending.current=null;setRecipients(v=>e.target.checked?[...v,person.id]:v.filter(id=>id!==person.id));}}/>
+       onChange={e=>{pending.current=null;setKeyChanges(null);setRecipients(v=>e.target.checked?[...v,person.id]:v.filter(id=>id!==person.id));}}/>
       <span><strong>{person.name}</strong>{!person.publicKey&&<small>Needs to open Words or Messages on their own device first</small>}</span>
      </label>)}
     </div>
@@ -66,9 +73,14 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
    </fieldset>
    <div className="words-audience-confirm"><Users size={18}/><span>{chosen.length===0?'Nobody selected yet':`This will be shared with ${chosen.map(p=>p.name).join(', ')}. All participants can see discussion replies.`}</span></div>
    {error&&<p role="alert" className="messages-error">{error}</p>}
+   <KeyFingerprintDetails contacts={chosen}/>
+   {keyChanges&&<KeyChangeReview changes={keyChanges} busy={busy}
+    onDismiss={()=>{setKeyChanges(null);pending.current=null;onRefreshPeople();}}
+    onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);pending.current=null;setError('Key checkpoint updated. Review the recipients and press Share again.');}catch(e){setError(message(e));}}}/>}
+
    {!identity&&<p role={keyError?'alert':'status'} className={keyError?'messages-error':'muted'}>{keyError?'Encrypted sharing is blocked on this browser: '+keyError+' Return to the browser profile where this account first enrolled its encryption key.':'Preparing the encrypted device key before sharing…'}</p>}
    <button className="button primary" type="submit" disabled={!canSend}><Send size={17}/>{busy?'Encrypting and sharing…':seed.kind==='prompt'?'Share this prompt':'Share this journal entry'}</button>
-   <p className="muted tiny">Nothing is sent until this button is pressed. Fictional writing only: encryption and minor-consent review remain outstanding.</p>
+   <p className="muted tiny">Nothing is shared until you press Share. Only the people you select can open this snapshot using their enrolled encryption keys.</p>
   </form>
  </section>;
 }
@@ -133,6 +145,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
  const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]),[sourceSaved,setSourceSaved]=useState(false);
  const [error,setError]=useState(''),[busy,setBusy]=useState<'reflection'|'discussion'|'save'|null>(null),[status,setStatus]=useState('');
  const [confirmAction,setConfirmAction]=useState<{kind:'space'|'leave'|'post',id?:string}|null>(null),[removing,setRemoving]=useState(false);
+ const [keyChanges,setKeyChanges]=useState<KeyChange[]|null>(null);
  const retry=useRef<{kind:'reflection'|'discussion',text:string,id:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const lastInteraction=useRef(Date.now());
  async function load(){
@@ -187,6 +200,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   setBusy(kind);setError('');setStatus('');
   try{
    if(detail.participants.some(p=>!p.publicKey))throw new Error('A participant has no registered device key.');
+   await checkRecipientKeyContinuity(userId,householdId,detail.participants.filter(p=>p.id!==userId));
    const publicKeys=Object.fromEntries(detail.participants.map(p=>[p.id,p.publicKey!])) as Record<string,PublicKey>;
    let attempt=retry.current;
    if(!attempt||attempt.kind!==kind||attempt.text!==text||JSON.stringify(attempt.publicKeys)!==JSON.stringify(publicKeys)){
@@ -201,7 +215,10 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    setStatus(cleared?(kind==='reflection'?'Your journal response was shared deliberately.':'Your reply was posted.'):
     'Shared successfully, but the local draft could not be cleared. Discard it manually.');
    await load();
-  }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
+  }catch(e){
+   if(e instanceof RecipientKeyChangedError)setKeyChanges(e.changed);
+   else if(!(e instanceof StaleSessionRequest))setError(message(e));
+  }
   finally{setBusy(null);}
  }
  async function savePrivateNote(){
@@ -300,6 +317,11 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    <section className="words-space-discussion">
      <div className="words-hub-section-top"><div><span className="mono kicker">TALK ABOUT IT</span><h3>Discussion</h3></div><MessageCircle size={19}/></div>
      <p className="muted tiny">One place to talk together or keep a private note. Private notes are encrypted for your account and synchronized when recovery is configured; shared replies are visible to all selected participants.</p>
+     <KeyFingerprintDetails contacts={detail.participants.filter(p=>p.id!==userId)}/>
+     {keyChanges&&<KeyChangeReview changes={keyChanges} busy={Boolean(busy)||removing}
+      onDismiss={()=>{setKeyChanges(null);void load().catch(e=>setError(message(e)));}}
+      onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);retry.current=null;setStatus('Recipient key checkpoint updated. Review the discussion and send again.');}catch(e){setError(message(e));}}}/>}
+
      {board.length===0&&<p className="muted">No notes or replies yet. Add something whenever you are ready.</p>}
      <ol className="words-discussion-ledger">
       {board.map(note=><li key={note.id} className={note.private?'words-private-note':''}>
@@ -340,7 +362,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
      {discussion.error&&<p className="messages-error" role="alert">{discussion.error}</p>}
     </section>
     {status&&<p className="words-status" role="status"><Check size={15}/>{status}</p>}
-   <p className="muted tiny">No typing, read, draft or viewing indicators are shared with the author. Fictional test writing only.</p>
+   <p className="muted tiny">No typing, read, draft or viewing indicators are shared with the author.</p>
   </>}
  </section>;
 }
