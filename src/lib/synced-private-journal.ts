@@ -93,3 +93,22 @@ export async function deleteSyncedPrivateJournal(
  const url='/private-journal/'+encodeURIComponent(id)+'?householdId='+encodeURIComponent(hid)+'&accountId='+encodeURIComponent(uid);
  await api(url,'DELETE',{expectedRevision});
 }
+
+
+/**
+ * Verify an exact ciphertext-only re-encryption before a recovery key rotation
+ * can stage it. Revision advances by one only on the eventual atomic commit.
+ * Do not send plaintext to the Worker or discard the old ciphertext.
+ */
+export async function reencryptSyncedJournalEntry(
+ uid:string,hid:string,row:CipherEntry,oldKey:CryptoKey,nextKey:CryptoKey
+):Promise<{sourceId:string,householdId:string,expectedRevision:number,iv:string,ciphertext:string}>{
+ checkScope(uid,hid,oldKey);checkScope(uid,hid,nextKey);
+ const plain=await unseal(uid,hid,row,oldKey);
+ const staged=await seal(uid,hid,plain,row.revision+1,nextKey);
+ const verified=await unseal(uid,hid,{...row,...staged,revision:row.revision+1},nextKey);
+ if(verified.text!==plain.text||verified.prompt!==plain.prompt||verified.title!==plain.title||
+  verified.sharedAt!==plain.sharedAt||verified.spaceId!==plain.spaceId)
+  throw new Error('Encrypted journal verification failed. No key was changed.');
+ return {sourceId:row.id,householdId:hid,expectedRevision:row.revision,...staged};
+}
