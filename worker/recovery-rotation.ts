@@ -220,12 +220,12 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    await member(db,hid,user.id);
    const table=kind==='journal'?'private_journal_sync':'private_draft_sync';
    const idcol=kind==='journal'?'entry_id':'scope_id';
-   const old=await db.prepare(`SELECT 1 FROM ${table} WHERE user_id=? AND household_id=? AND ${idcol}=? AND revision=? AND deleted_at IS NULL`)
-    .bind(user.id,hid,id,revision).first();
+   const old=await db.prepare(`SELECT iv,ciphertext FROM ${table} WHERE user_id=? AND household_id=? AND ${idcol}=? AND revision=? AND deleted_at IS NULL`)
+    .bind(user.id,hid,id,revision).first<{iv:string,ciphertext:string}>();
    if(!old)fail(409,'Encrypted content changed or was deleted during rotation. Preserve original browser and retry.');
    const target=kind==='journal'?'account_recovery_rotation_journals':'account_recovery_rotation_drafts';
-   await db.prepare(`INSERT OR IGNORE INTO ${target}(rotation_id,household_id,${idcol},expected_revision,iv,ciphertext) VALUES(?,?,?,?,?,?)`)
-    .bind(stage.rotation_id,hid,id,revision,iv,ct).run();
+   await db.prepare(`INSERT OR IGNORE INTO ${target}(rotation_id,household_id,${idcol},expected_revision,original_iv,original_ciphertext,iv,ciphertext) VALUES(?,?,?,?,?,?,?,?)`)
+    .bind(stage.rotation_id,hid,id,revision,old.iv,old.ciphertext,iv,ct).run();
    const saved=await db.prepare(`SELECT expected_revision,iv,ciphertext FROM ${target} WHERE rotation_id=? AND household_id=? AND ${idcol}=?`)
     .bind(stage.rotation_id,hid,id).first<{expected_revision:number,iv:string,ciphertext:string}>();
    if(saved?.expected_revision!==revision||saved.iv!==iv||saved.ciphertext!==ct)
