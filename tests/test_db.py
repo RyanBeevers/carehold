@@ -14,7 +14,7 @@ class DatabaseIntegrity(unittest.TestCase):
         self.db.execute("INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES('u1','A','a@test.invalid',0,1,1)")
         self.db.execute("INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES('u2','B','b@test.invalid',0,1,1)")
         self.db.execute("INSERT INTO households VALUES('h1','Household','America/New_York','u1','now')")
-        self.db.execute("INSERT INTO household_members VALUES('h1','u1','owner','now')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h1','u1','owner','now')")
         self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,created_at) VALUES('p1','h1','Person','adult','now')")
         self.db.execute("INSERT INTO medications(id,profile_id,name,dose,cadence,start_date,created_at,updated_at) VALUES('m1','p1','Medication','prescribed label','daily','2026-11-01','now','now')")
     def add(self, eid, idem, supersedes=None, key='m1:2026-11-20:08:00'):
@@ -32,7 +32,7 @@ class DatabaseIntegrity(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):self.add('correction-2','request-3','a')
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM dose_events').fetchone()[0],2)
     def test_invalid_capability_rejected_by_db(self):
-        self.db.execute("INSERT INTO household_members VALUES('h1','u2','caregiver','now')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h1','u2','caregiver','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO profile_grants VALUES('h1','p1','u2','journal_read','now')")
     def test_audience_is_non_privileged_and_restricted_to_pilot_types(self):
@@ -49,7 +49,7 @@ class DatabaseIntegrity(unittest.TestCase):
         self.assertIsNone(self.db.execute("SELECT 1 FROM household_members WHERE user_id='u2'").fetchone())
 
     def test_linked_user_must_be_unique_per_household(self):
-        self.db.execute("INSERT INTO household_members VALUES('h1','u2','member','now')")
+        self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h1','u2','member','now')")
         self.db.execute("INSERT INTO profiles(id,household_id,display_name,kind,linked_user_id,created_at) VALUES('p2','h1','Person 2','adult','u2','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("UPDATE profiles SET linked_user_id='u2' WHERE id='p1'")
@@ -60,7 +60,7 @@ class DatabaseIntegrity(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO push_test_rate_limits(user_id,last_sent_at) VALUES('u1','later')")
     def test_duplicate_member_and_push_delivery_rejected(self):
-        with self.assertRaises(sqlite3.IntegrityError):self.db.execute("INSERT INTO household_members VALUES('h1','u1','caregiver','now')")
+        with self.assertRaises(sqlite3.IntegrityError):self.db.execute("INSERT INTO household_members(household_id,user_id,role,joined_at) VALUES('h1','u1','caregiver','now')")
         self.db.execute("INSERT INTO push_deliveries(id,user_id,occurrence_key,state) VALUES('x','u1','occ','failed')")
         with self.assertRaises(sqlite3.IntegrityError):self.db.execute("INSERT INTO push_deliveries(id,user_id,occurrence_key,state) VALUES('y','u1','occ','failed')")
 
