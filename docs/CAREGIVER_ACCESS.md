@@ -2,7 +2,7 @@
 
 The owner manages invitations, medication profiles and grants. `Caregiver` is **not** a household owner and never grants journal, private Words, direct message or conversation access. Member classification is a server-side restriction independent of the self-selected prompt audience.
 
-- **Full-circle caregiver:** sees every active person/pet, their medication plans, history and Today's entries, including profiles added after invitation; can manage medication plans and record/correct administrations only when the account is classified Adult.
+- **Full-circle caregiver:** sees every active person/pet, their medication plans, history and Today's entries, including profiles added after invitation; full-circle access (viewing and editing) becomes effective only after the owner classifies the account Adult.
 - **Limited caregiver:** sees only expressly selected profiles and a configured set of medication capabilities. Viewing schedules is mandatory when selecting a profile; recording, history viewing and editing a plan can be independently included.
 - **Member:** remains limited by granted capabilities and their own linked Adult profile. Teen and Child account classifications cannot mutate medication records.
 - **Circle roster:** owners and caregivers see names/roles; only owners see member email/classification and access-control settings. Roster access does not confer medication or Words access.
