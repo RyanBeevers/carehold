@@ -36,7 +36,9 @@ export async function localTrustedDevice(userId:string):Promise<LocalTrustedDevi
  try{
   const existing=await result<LocalTrustedDevice|undefined>(db.transaction('devices','readonly').objectStore('devices').get(userId));
   if(existing)return existing;
-  const fresh:LocalTrustedDevice={userId,id:crypto.randomUUID(),name:'This device'};
+  const agent=typeof navigator==='undefined'?'':navigator.userAgent;
+  const name=/iPhone/i.test(agent)?'iPhone':/iPad/i.test(agent)?'iPad':/Android/i.test(agent)?'Android device':/Macintosh|Mac OS X/i.test(agent)?'Mac':/Windows/i.test(agent)?'Windows PC':'Browser';
+  const fresh:LocalTrustedDevice={userId,id:crypto.randomUUID(),name};
   try{
    const tx=db.transaction('devices','readwrite'),done=committed(tx);
    tx.objectStore('devices').add(fresh);
@@ -47,6 +49,19 @@ export async function localTrustedDevice(userId:string):Promise<LocalTrustedDevi
    throw new Error('Could not store this device identifier.');
   }
   return fresh;
+ }finally{db.close();}
+}
+export async function renameLocalTrustedDevice(userId:string,label:string):Promise<void>{
+ validUser(userId);
+ const name=label.trim();
+ if(!name||name.length>60)throw new Error('Name this device in 60 characters or less.');
+ const db=await openDb();
+ try{
+  const tx=db.transaction('devices','readwrite'),done=committed(tx),store=tx.objectStore('devices');
+  const row=await result<LocalTrustedDevice|undefined>(store.get(userId));
+  if(!row)throw new Error('This device has not been enrolled locally.');
+  store.put({...row,name});
+  await done;
  }finally{db.close();}
 }
 /** Store only ciphertext and a non-exportable device-local AES CryptoKey.
