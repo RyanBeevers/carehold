@@ -583,3 +583,13 @@
 .household-security-details summary{cursor:pointer;font-weight:700;line-height:1.5;padding:9px 0}
 .household-security-details summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
 .household-security-details p{line-height:1.6;margin:11px 0;color:var(--muted)}
+
+/* Quiet by default; recovery and key verification are disclosed on demand. */
+.key-change-instructions,.recovery-advanced-settings,.recovery-storage-alternatives{max-width:100%;min-width:0}
+.key-change-instructions>summary,.recovery-advanced-settings>summary,.recovery-storage-alternatives>summary{cursor:pointer;font-size:12px;font-weight:700;line-height:1.5;padding:9px 0;color:var(--ink)}
+.key-change-instructions>summary:focus-visible,.recovery-advanced-settings>summary:focus-visible,.recovery-storage-alternatives>summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.key-change-instructions p,.recovery-storage-alternatives p{font-size:12px;line-height:1.65;color:var(--muted)}
+.recovery-advanced-settings{margin-top:12px}
+.recovery-advanced-settings .recovery-gate{margin:16px 0 0}
+.recovery-storage-alternatives{border-top:1px solid var(--line);margin:12px 0 0}
+@media(max-width:720px){.key-change-instructions code{font-size:10px}.recovery-advanced-settings .button{max-width:100%;white-space:normal}}
