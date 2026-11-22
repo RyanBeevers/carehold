@@ -42,13 +42,21 @@ test('encrypted draft autosave is the default with no repeated enable button',()
  assert.doesNotMatch(shared,/Enable encrypted draft autosave/);
 });
 
-test('new prompts never silently reuse text, and share completion clears the matching draft',()=>{
+test('new prompts do not reuse text, and sharing preserves the journal before clearing its matching draft',()=>{
  assert.match(hub,/async function beginFresh\(prompt/);
- assert.match(hub,/await draft\.discard\(\)/);
  assert.match(hub,/pendingPrompt/);
- assert.match(hub,/sourceEntryId/);
- assert.match(hub,/draft\.text===current\.text&&draft\.prompt===current\.prompt/);
  assert.match(hub,/Start fresh/);
+ const start=hub.indexOf('async function finishSharing(');
+ const end=hub.indexOf('return <div className="words-hub">',start);
+ assert.ok(start>=0&&end>start,'Share completion handler must exist');
+ const completion=hub.slice(start,end);
+ assert.match(completion,/sourceEntryId/);
+ assert.match(completion,/await saveJournalEntry\(/);
+ assert.match(completion,/draft\.text===shared\.text&&draft\.prompt===shared\.prompt&&draft\.title\.trim\(\)===\(shared\.title\?\.trim\(\)\?\?''\)/);
+ assert.match(completion,/const cleared=await draft\.discard\(\)/);
+ assert.ok(completion.indexOf('await saveJournalEntry(')<completion.indexOf('const cleared=await draft.discard()'),
+  'Save the private journal entry before clearing the matching device draft');
+ assert.match(completion,/private journal save needs attention/);
 });
 
 test('one shared discussion composer handles both private and public writing',()=>{
