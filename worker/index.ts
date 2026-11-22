@@ -282,22 +282,33 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     const grants=await db.prepare('SELECT capability FROM profile_grants WHERE profile_id=? AND user_id=?')
       .bind(linked.id,user.id).all<{capability:Capability}>();
     const values=(grants.results||[]).map(g=>g.capability);
+    const accountClass=await classification(db,hid,user.id),full=await isFullCircleCaregiver(db,hid,user.id);
     return json({profile:{id:linked.id,displayName:linked.display_name,kind:linked.kind,
-      canViewSchedule:canUseCareProfile(role,await classification(db,hid,user.id),values,'view_schedule',linked.kind==='adult'),
-      canRecordDose:canUseCareProfile(role,await classification(db,hid,user.id),values,'record_dose',linked.kind==='adult'),
-      canViewHistory:canUseCareProfile(role,await classification(db,hid,user.id),values,'view_history',linked.kind==='adult')}});
+      canViewSchedule:canUseCareProfile(role,accountClass,values,'view_schedule',linked.kind==='adult',full),
+      canRecordDose:canUseCareProfile(role,accountClass,values,'record_dose',linked.kind==='adult',full),
+      canViewHistory:canUseCareProfile(role,accountClass,values,'view_history',linked.kind==='adult',full)}});
   }
   if(path==='/api/profiles'&&req.method==='GET') {
     const hid=required(url.searchParams.get('householdId')),role=await member(db,hid,user.id);
     const includeArchived=role==='owner'&&url.searchParams.get('includeArchived')==='1';
+    const full=await isFullCircleCaregiver(db,hid,user.id);
+    const accountClass=await classification(db,hid,user.id);
     const results=await db.prepare(`SELECT p.id,p.display_name,p.kind,p.household_id,p.archived_at,
       CASE WHEN ?='owner' THEN p.linked_user_id ELSE NULL END AS linked_user_id,
       CASE WHEN p.linked_user_id=? THEN 1 ELSE 0 END AS is_self
       FROM profiles p
-      WHERE p.household_id=? AND (?=1 OR p.archived_at IS NULL) AND (?='owner' OR EXISTS
+      WHERE p.household_id=? AND (?=1 OR p.archived_at IS NULL) AND (?='owner' OR ?=1 OR EXISTS
         (SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))
-      ORDER BY p.archived_at IS NOT NULL,p.created_at`).bind(role,user.id,hid,includeArchived?1:0,role,user.id,user.id,user.id).all();
-    return json({profiles:results.results});
+      ORDER BY p.archived_at IS NOT NULL,p.created_at`).bind(role,user.id,hid,includeArchived?1:0,role,full?1:0,user.id,user.id,user.id).all<ProfileRow&{is_self:number;archived_at:string|null}>();
+    const visible=await Promise.all((results.results||[]).map(async p=>{
+      const grants=await db.prepare('SELECT capability FROM profile_grants WHERE profile_id=? AND user_id=?')
+        .bind(p.id,user.id).all<{capability:Capability}>();
+      const values=(grants.results||[]).map(x=>x.capability),self=p.kind==='adult'&&p.is_self===1;
+      return {...p,
+        can_manage_medication:canUseCareProfile(role,accountClass,values,'manage_medication',self,full),
+        can_record_dose:canUseCareProfile(role,accountClass,values,'record_dose',self,full)};
+    }));
+    return json({profiles:visible});
   }
   if(path==='/api/profiles'&&req.method==='POST') {
     const b=await jsonBody(req),hid=required(b.householdId),name=required(b.name,70),kind=b.kind;
@@ -414,13 +425,14 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     const household=await db.prepare('SELECT timezone FROM households WHERE id=?').bind(hid).first<{timezone:string}>();
     const date=isoDay(url.searchParams.get('date')||localDate(new Date(),household!.timezone));
      const accountClass=await classification(db,hid,user.id);
+     const full=await isFullCircleCaregiver(db,hid,user.id);
      const recordGrants=await db.prepare("SELECT profile_id FROM profile_grants WHERE user_id=? AND capability='record_dose'")
       .bind(user.id).all<{profile_id:string}>();
      const writableProfiles=new Set((recordGrants.results||[]).map(g=>g.profile_id));
     const rows=await db.prepare(`SELECT m.*,p.display_name,p.kind,p.household_id,p.linked_user_id FROM medications m
       JOIN profiles p ON p.id=m.profile_id
       WHERE p.household_id=? AND p.archived_at IS NULL AND m.archived_at IS NULL
-      AND (?='owner' OR EXISTS(SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))`).bind(hid,role,user.id,user.id,user.id).all<MedicationRow&ProfileRow>();
+      AND (?='owner' OR ?=1 OR EXISTS(SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))`).bind(hid,role,full?1:0,user.id,user.id,user.id).all<MedicationRow&ProfileRow>();
     const entries:unknown[]=[];
     for(const m of rows.results||[]) {
       if(!scheduledOn(medSchedule(m),date))continue;
@@ -436,7 +448,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
           medicationId:m.id,medicationName:m.name,dose:m.dose,instructions:m.instructions,profileId:m.profile_id,
           person:m.display_name,kind:m.kind,event,
            canRecordDose:canUseCareProfile(role,accountClass,writableProfiles.has(m.profile_id)?['record_dose']:[],
-            'record_dose',m.kind==='adult'&&(m as MedicationRow&ProfileRow&{linked_user_id?:string|null}).linked_user_id===user.id)});
+            'record_dose',m.kind==='adult'&&(m as MedicationRow&ProfileRow&{linked_user_id?:string|null}).linked_user_id===user.id,full)});
       }
     }
     return json({date,timezone:household!.timezone,entries});
