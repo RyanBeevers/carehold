@@ -497,3 +497,39 @@
  .person-detail .detail-actions{align-items:stretch;flex-direction:column;gap:10px}
  .person-detail .detail-actions .profile-action{width:100%;min-height:48px}
 }
+
+
+/* Recovery enrollment is not complete until the external code is retrieved
+   and entered again. Keep this as a distinct step rather than a checkbox. */
+.recovery-verification{
+ display:grid;
+ justify-items:start;
+ gap:13px;
+ margin:22px 0 8px;
+ padding:20px 22px;
+ border:1px solid var(--line);
+ border-left:4px solid var(--coral);
+ border-radius:12px;
+ background:var(--panel);
+ max-width:740px;
+}
+.recovery-verification p{margin:0;line-height:1.65}
+.recovery-verification label{display:block;width:100%;max-width:520px}
+.recovery-verification input{display:block;width:100%;margin:9px 0 0}
+.recovery-verification .button{white-space:normal;text-align:center}
+.recovery-missing-code{
+ margin:14px 0;
+ padding:18px 20px;
+ border:1px solid var(--line);
+ border-left:4px solid var(--coral);
+ border-radius:10px;
+ background:var(--panel);
+ max-width:760px;
+}
+.recovery-missing-code strong{display:block;margin-bottom:8px;color:var(--ink)}
+.recovery-missing-code p{margin:8px 0 0;line-height:1.6;color:var(--ink)}
+@media(max-width:620px){
+ .recovery-verification{padding:17px 15px;width:100%}
+ .recovery-verification .button{width:100%}
+ .recovery-missing-code{padding:15px 14px}
+}
