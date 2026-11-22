@@ -125,7 +125,7 @@ This section is **not yet passed**. A new household with existing accounts does 
 - [ ] Create fresh account A and fresh account B, each with a passkey; create a new household and join B explicitly.
 - [ ] In **Settings → Encrypted data recovery**, confirm a fresh account shows **Generate recovery code** directly (no hidden navigation link). Save a unique code securely outside the browser, confirm storage and complete enrollment. If you sign in on a second device, the same Settings section must present **Restore my message key**; if you have an original-browser legacy key, it should present the non-destructive migration.
 - [ ] **Recovery-code custody:** For both fresh enrollment and legacy migration, the app displays a one-time CH1- code, instructs the user to store it outside Carehold, hides it, and requires re-entering the externally saved code before the final action is enabled. Test incorrect code, switching storage method and returning to show the still-uncommitted code. Never test with real private writing.
-- [ ] **Missing-code scenario after completed enrollment:** Settings must clearly distinguish an enrolled browser key from an externally saved code and show **I didn't save my recovery code** guidance. No button should reset keys or delete ciphertext. Current release blocker: safe recovery-code reissue/rotation from an authenticated original trusted browser is not yet implemented or independently verified.
+- [ ] **Missing-code scenario after completed enrollment:** Settings must clearly distinguish an enrolled browser key from an externally saved code and show **I didn't save my recovery code** guidance. No button should reset keys or delete ciphertext. The trusted-original-browser replacement flow is implemented in migration 0016, but remains **unverified in actual browser E2E and not production-approved**. Confirm the new code is saved and test recovery in a second persistent browser profile before relying on it.
 - [ ] Complete equivalent enrollment as B; verify two distinct public keys and ciphertext-only recovery rows.
 - [ ] Send fictional direct message and shared Words reply A↔B; verify actual plaintext can decrypt on intended accounts.
 - [ ] Sign A into a different browser/profile and enter the saved code; verify BOTH old direct and Words history decrypt there.
@@ -161,7 +161,7 @@ This section is **not yet passed**. A new household with existing accounts does 
 
 ## Focused final E2E additions — 0014/0015 (NOT YET EXECUTED)
 
-Use **fictional accounts and writing only**. The older shared account key and its historical ciphertext must be retained throughout the test. Run the automated suite on the exact latest draft commit first, then apply local migrations 0011–0015 and verify the D1 backup is restorable. Do not start staging or production deployments from this checklist.
+Use **fictional accounts and writing only**. The older shared account key and its historical ciphertext must be retained throughout the test. Run the automated suite on the exact latest draft commit first, then apply local migrations 0011–0016 and verify the D1 backup is restorable. Do not start staging or production deployments from this checklist.
 
 - [ ] **Legacy fixture:** On a test account whose original trusted browser still has its non-exportable legacy ECDH private key, send a direct message and shared Words prompt/reply. Confirm another selected recipient can read their own copy.
 - [ ] **Proof gate:** A signed-in account with no original private key must not be able to stage migration. A wrong/expired challenge proof must return 403; the active key must remain unchanged.
@@ -192,3 +192,20 @@ Use **fictional accounts and writing only**. The older shared account key and it
 - [ ] Check copy failures gracefully (clipboard permission denied or unavailable), light/dark contrast, small iPhone screens, VoiceOver labels, and recovery code display after rotating or switching apps.
 - [ ] Confirm the recovery secret is never copied into logs, API request bodies, browser storage, notification payloads, or unencrypted exports. The only saved server artifact is the encrypted recovery envelope.
 
+
+## Recovery-code replacement after a completed migration — migration 0016 (NOT YET PASSED)
+
+Use fictional data only, two persistent browser profiles, and a freshly backed-up **local** D1 database. This is a release-blocking test; do not attempt to fix failures by deleting browser storage or keys.
+
+- [ ] On original browser A with a completed v2 identity whose old CH1 code was deliberately *not* saved, open **Settings → Encrypted data recovery → Replace lost recovery code**. Verify a second browser without the code cannot decrypt existing content.
+- [ ] Prepare a new code; confirm migration cannot begin until code is hidden and correctly re-entered from a separate password-manager entry or secure offline copy. A wrong code keeps the action disabled. Preserve the saved code throughout.
+- [ ] Before starting, create fictional direct messages and Words prompts/replies, a synced private journal entry, and unsent synced drafts for Words, direct Messages and a shared discussion. Also keep a second recipient able to read their own encrypted copies.
+- [ ] Start replacement; verify API challenge proves possession of the *existing browser private key*, and another signed-in browser without that key cannot start it. During the staged phase the original key, recipient copies, journals and drafts remain unchanged, and concurrent writes fail closed.
+- [ ] Interrupt after several staged copies. Resume on original browser using the saved new code. Previously staged copies must be verified and not overwritten. Cancel a separate test using the original-key challenge and confirm original data and key remain usable.
+- [ ] Simulate an unknown legacy draft scope or corrupted ciphertext; finalization must fail **without activating the new account key**. The old data must remain available on the original browser. Do not silently omit a draft.
+- [ ] On successful finalization confirm each existing direct/Words ciphertext, synced private journal, and synced draft can be opened from a **second browser that did not have the original key**, using only account sign-in and the newly saved CH1 code. Confirm the other participant still decrypts their own copies.
+- [ ] Verify the previous original journal/draft ciphertext is preserved in the rotation audit tables and no plaintext or recovery code enters D1 or request bodies. Confirm another browser with the older identity can explicitly restore using the new code without clearing its IndexedDB.
+- [ ] Verify background/local UI auto-lock during migration pauses cleanly and can be resumed. Verify actual Chrome desktop/mobile layouts, errors, keyboard interaction and a full `npm run verify:pre-e2e` on the latest commit.
+- [ ] **NO-GO:** mismatched revisions, incomplete source inventory, expired/wrong saved code, browser key mismatch, unverified content, partial finalization or any loss of original ciphertext.
+
+Original-browser key re-enrollment remains **experimental**, not independently security reviewed. This still does not provide per-device cryptographic revocation or verified recipient-key identity.
