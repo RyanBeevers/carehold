@@ -59,7 +59,7 @@ async function member(db:D1Database,householdId:string,userId:string):Promise<Ro
   if(!row)bad(403,'You do not have access to this household.');return row!.role;
 }
 async function isFullCircleCaregiver(db:D1Database,hid:string,uid:string):Promise<boolean>{
- const row=await db.prepare("SELECT access_scope FROM household_members WHERE household_id=? AND user_id=? AND role='caregiver'")
+ const row=await db.prepare("SELECT hm.access_scope FROM household_members hm JOIN household_member_classes mc ON mc.household_id=hm.household_id AND mc.user_id=hm.user_id WHERE hm.household_id=? AND hm.user_id=? AND hm.role='caregiver' AND mc.classification='adult'")
   .bind(hid,uid).first<{access_scope:'limited'|'full'}>();
  return row?.access_scope==='full';
 }
