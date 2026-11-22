@@ -508,10 +508,62 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     return json({id,corrected:true},201);
   }
   if(path==='/api/members'&&req.method==='GET') {
-    const hid=required(url.searchParams.get('householdId'));await owner(db,hid,user.id);
-    const result=await db.prepare(`SELECT hm.user_id,hm.role,u.name,u.email,COALESCE(mc.classification,'unverified') classification FROM household_members hm JOIN user u ON u.id=hm.user_id LEFT JOIN household_member_classes mc ON mc.household_id=hm.household_id AND mc.user_id=hm.user_id
-      WHERE hm.household_id=? ORDER BY hm.joined_at`).bind(hid).all();
-    return json({members:result.results});
+    const hid=required(url.searchParams.get('householdId')),viewer=await member(db,hid,user.id);
+    if(viewer!=='owner'&&viewer!=='caregiver')bad(403,'Only caregivers or owners can view the circle roster.');
+    const result=await db.prepare(`SELECT hm.user_id,hm.role,hm.access_scope,u.name,u.email,
+      COALESCE(mc.classification,'unverified') classification FROM household_members hm JOIN user u ON u.id=hm.user_id
+      LEFT JOIN household_member_classes mc ON mc.household_id=hm.household_id AND mc.user_id=hm.user_id
+      WHERE hm.household_id=? ORDER BY hm.joined_at`).bind(hid).all<{user_id:string;role:Role;access_scope:string;name:string;email:string;classification:MemberClassification}>();
+    if(viewer!=='owner')return json({members:(result.results||[]).map(m=>({user_id:m.user_id,name:m.name,role:m.role}))});
+    const withGrants=await Promise.all((result.results||[]).map(async m=>{
+      const rows=await db.prepare('SELECT profile_id,capability FROM profile_grants WHERE household_id=? AND user_id=?')
+        .bind(hid,m.user_id).all<{profile_id:string;capability:Capability}>();
+      const grants=new Map<string,Capability[]>();
+      for(const g of rows.results||[])grants.set(g.profile_id,[...(grants.get(g.profile_id)||[]),g.capability]);
+      return {...m,grants:[...grants].map(([profileId,capabilities])=>({profileId,capabilities}))};
+    }));
+    return json({members:withGrants});
+  }
+  const memberAccess=path.match(/^\/api\/members\/([0-9a-zA-Z_-]+)\/access$/);
+  if(memberAccess&&req.method==='PATCH'){
+    const b=await jsonBody(req),hid=required(b.householdId);
+    await owner(db,hid,user.id);
+    const target=await db.prepare('SELECT role,access_scope FROM household_members WHERE household_id=? AND user_id=?')
+      .bind(hid,memberAccess[1]).first<{role:Role;access_scope:'limited'|'full'}>();
+    if(!target)bad(404,'Circle member not found.');
+    if(target!.role==='owner')bad(403,'Owner permissions cannot be changed here.');
+    if(b.accessScope!=='limited'&&b.accessScope!=='full')bad(400,'Choose a valid care access scope.');
+    if(b.accessScope==='full'&&target!.role!=='caregiver')bad(400,'Only caregivers can have full-circle access.');
+    if(!Array.isArray(b.grants)||b.grants.length>40)bad(400,'Invalid profile permissions.');
+    if(b.accessScope==='full'&&b.grants.length)bad(400,'Full-circle access cannot include separate profile grants.');
+    const selected=new Set<string>();
+    const grants:{profileId:string,capabilities:Capability[]}[]=[];
+    for(const entry of b.grants){
+      if(!entry||typeof entry!=='object'||typeof entry.profileId!=='string'||
+         !validCapabilities(entry.capabilities)||entry.capabilities.length===0||
+         !entry.capabilities.includes('view_schedule'))bad(400,'Invalid profile permission selection.');
+      if(selected.has(entry.profileId))bad(400,'Duplicate profile permission.');
+      selected.add(entry.profileId);
+      const exists=await db.prepare('SELECT 1 FROM profiles WHERE id=? AND household_id=? AND archived_at IS NULL')
+        .bind(entry.profileId,hid).first();
+      if(!exists)bad(400,'Selected profile is not active in this circle.');
+      grants.push({profileId:entry.profileId,capabilities:[...new Set(entry.capabilities)]});
+    }
+    const prior=await db.prepare('SELECT profile_id,capability FROM profile_grants WHERE household_id=? AND user_id=?')
+      .bind(hid,memberAccess[1]).all<{profile_id:string;capability:Capability}>();
+    const ts=now();
+    await db.batch([
+      db.prepare('UPDATE household_members SET access_scope=? WHERE household_id=? AND user_id=?')
+        .bind(b.accessScope,hid,memberAccess[1]),
+      db.prepare('DELETE FROM profile_grants WHERE household_id=? AND user_id=?').bind(hid,memberAccess[1]),
+      ...grants.flatMap(g=>g.capabilities.map(cap=>db.prepare('INSERT INTO profile_grants(household_id,profile_id,user_id,capability,created_at) VALUES(?,?,?,?,?)')
+        .bind(hid,g.profileId,memberAccess[1],cap,ts))),
+      db.prepare(`INSERT INTO member_access_changes
+        (id,household_id,user_id,previous_scope,next_scope,before_grants_json,after_grants_json,changed_by,changed_at)
+        VALUES(?,?,?,?,?,?,?,?,?)`).bind(uuid(),hid,memberAccess[1],target!.access_scope,b.accessScope,
+          JSON.stringify(prior.results||[]),JSON.stringify(grants),user.id,ts)
+    ]);
+    return json({updated:true});
   }
   const memberClass=path.match(/^\/api\/members\/([0-9a-zA-Z_-]+)\/classification$/);
    if(memberClass&&req.method==='PATCH'){
