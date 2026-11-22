@@ -23,6 +23,7 @@ export function KeyChangeReview({changes,busy,onApprove,onDismiss}:{
 export function KeyFingerprintDetails({contacts}:{contacts:readonly KeyContact[]}){
  const [codes,setCodes]=useState<{id:string,name:string,code:string}[]>([]);
  const [error,setError]=useState('');
+ const version=JSON.stringify(contacts.map(p=>[p.id,p.name,p.publicKey]));
  useEffect(()=>{
   let live=true;setCodes([]);setError('');
   void Promise.all(contacts.filter(p=>p.publicKey).map(async person=>({
@@ -30,7 +31,7 @@ export function KeyFingerprintDetails({contacts}:{contacts:readonly KeyContact[]
   }))).then(items=>{if(live)setCodes(items);})
    .catch(()=>{if(live)setError('Unable to calculate verification codes on this device.');});
   return()=>{live=false;};
- },[contacts]);
+ },[version]);
  if(!contacts.length)return null;
  return <details className="recipient-key-details">
   <summary>Compare recipient encryption codes</summary>
