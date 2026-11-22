@@ -8,7 +8,11 @@ const recovery=source('src/RecoveryReadiness.tsx');
 const picker=source('src/HouseholdPicker.tsx');
 
 test('Today permits authorized correction or later factual outcome without a person-page detour',()=>{
- const today=app.slice(app.indexOf("page==='today'&&"),app.indexOf("page==='people'&&"));
+ // Match the JSX page-rendering boundaries, not earlier page checks in hooks.
+ const todayStart=app.indexOf("{page==='today'&&<><PageTitle");
+ const peopleStart=app.indexOf("{page==='people'&&<><PageTitle");
+ assert.ok(todayStart>=0&&peopleStart>todayStart,'Today and People render blocks must exist in order');
+ const today=app.slice(todayStart,peopleStart);
  assert.match(today,/e\.canRecordDose&&<div className="ledger-record-buttons">/);
  assert.match(today,/onClick=\{\(\)=>beginCorrection\(e\.event!\)\}/);
  assert.match(today,/onClick=\{\(\)=>beginCorrection\(e\.event!,'later'\)\}/);
