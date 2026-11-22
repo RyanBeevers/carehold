@@ -130,6 +130,9 @@ async function claimInvitation(db:D1Database,invitation:InvitationRow,userId:str
  const ts=now();
  const grants=JSON.parse(invitation.grants_json) as {profileId:string,capabilities:Capability[]}[];
  if(!Array.isArray(grants)||grants.some(g=>!g||!validCapabilities(g.capabilities)||typeof g.profileId!=='string'))bad(409,'Invitation permissions are invalid.');
+ if(!['limited','full'].includes(invitation.access_scope)||
+    (invitation.access_scope==='full'&&(invitation.role!=='caregiver'||grants.length>0)))
+   bad(409,'Invitation access scope is invalid.');
  try {
   await db.batch([
    db.prepare('UPDATE invitations SET claimed_by=?,claimed_at=? WHERE id=? AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at>?').bind(userId,ts,invitation.id,ts),
@@ -633,8 +636,11 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     const b=await jsonBody(req),hid=required(b.householdId),role=b.role;
     await owner(db,hid,user.id);
     if(role!=='member'&&role!=='caregiver')bad(400,'Invalid member role.');
-    const grants=b.grants;
+    const grants=b.grants,accessScope=b.accessScope??'limited';
+    if(accessScope!=='limited'&&accessScope!=='full')bad(400,'Invalid caregiver access scope.');
+    if(accessScope==='full'&&role!=='caregiver')bad(400,'Only caregivers can have full-circle access.');
     if(!Array.isArray(grants)||grants.length>40)throw new ApiError(400,'Invalid profile grants.');
+    if(accessScope==='full'&&grants.length)bad(400,'Full-circle access uses no individual grants.');
     const accepted:{profileId:string,capabilities:Capability[]}[]=[];
     for(const g of grants) {
       if(!g||typeof g!=='object')bad(400,'Invalid grant.');
@@ -647,8 +653,8 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     }
     const raw=crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'');
     const expires=new Date(Date.now()+48*3600000).toISOString();
-    await db.prepare('INSERT INTO invitations(id,household_id,token_hash,role,grants_json,created_by,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)')
-      .bind(uuid(),hid,await sha256(raw),role,JSON.stringify(accepted),user.id,now(),expires).run();
+    await db.prepare('INSERT INTO invitations(id,household_id,token_hash,role,grants_json,created_by,created_at,expires_at,access_scope) VALUES(?,?,?,?,?,?,?,?,?)')
+      .bind(uuid(),hid,await sha256(raw),role,JSON.stringify(accepted),user.id,now(),expires,accessScope).run();
     return json({code:raw,expiresAt:expires},201);
   }
   if(path==='/api/invitations/accept'&&req.method==='POST') {
