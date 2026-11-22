@@ -45,7 +45,8 @@ test('an enrolled key is not presented as proof of saved recovery and missing-co
  assert.match(readiness,/That confirms local access — not that the one-time recovery code was saved elsewhere/);
  assert.match(readiness,/I didn't save my recovery code/);
  assert.match(readiness,/Keep this browser and its Carehold site data intact/);
- assert.match(readiness,/cannot re-display or safely reissue a lost code/);
+ assert.match(readiness,/Replace lost recovery code/);
+ assert.match(readiness,/refuses to finalize if anything is missing/);
  assert.doesNotMatch(readiness,/reset.*keys.*onClick/i);
 });
 
