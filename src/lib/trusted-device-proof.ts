@@ -5,7 +5,7 @@ import type {PublicKey} from './message-crypto.ts';
  * devices. The shared account ECDH key must NEVER be the sole proof of an
  * enrolled device's authority: removed browsers may retain that account key.
  */
-export type DeviceSignatureAction='enroll'|'approve'|'revoke';
+export type DeviceSignatureAction='enroll'|'approve'|'revoke'|'complete';
 export type DeviceSigningPair={privateKey:CryptoKey,publicKey:PublicKey};
 const enc=new TextEncoder();
 const KEY=/^[A-Za-z0-9_-]{43}$/;
@@ -20,7 +20,7 @@ const unb64=(s:string)=>{
 };
 function context(userId:string,deviceId:string,proof:string,action:DeviceSignatureAction,targetId:string):Uint8Array<ArrayBuffer>{
  if(!userId||userId.length>200||!UUID.test(deviceId)||!KEY.test(proof)||
-  !['enroll','approve','revoke'].includes(action)||!UUID.test(targetId))
+  !['enroll','approve','revoke','complete'].includes(action)||!UUID.test(targetId))
   throw new Error('Invalid device authorization context.');
  return enc.encode(JSON.stringify(['carehold-unique-device-authorization-v1',userId,deviceId,proof,action,targetId]));
 }
