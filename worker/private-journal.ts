@@ -40,6 +40,8 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
  const hid=text(url.searchParams.get('householdId'));
  if(url.searchParams.get('accountId')!==user.id)fail(403,'Account changed. Reopen encrypted journals after signing in.');
  await assertMember(db,hid,user.id);
+ if(req.method!=='GET'&&await db.prepare("SELECT 1 FROM account_recovery_rotations WHERE user_id=? AND state='staged'").bind(user.id).first())
+  fail(409,'Encryption recovery-code replacement is in progress. Your old ciphertext is preserved; finish or cancel rotation before editing.');
  if(path==='/api/private-journal'&&req.method==='GET'){
   const raw=url.searchParams.get('offset')||'0';
   if(!/^\d{1,5}$/.test(raw)||Number(raw)>10000)fail(400,'Invalid journal page.');
