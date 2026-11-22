@@ -43,7 +43,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
   })();
   return()=>{live=false;};
  },[userId,retry]);
- const onReady=useCallback((_identity:Identity)=>{setStatus('configured');setError('');},[]);
+ const onReady=useCallback((_identity:Identity)=>{setStatus('configured');setError('');setRetry(n=>n+1);},[]);
  const onError=useCallback((message:string)=>setError(message),[]);
  const info:Record<Status,string>={
   checking:'Checking your encrypted account recovery…',
