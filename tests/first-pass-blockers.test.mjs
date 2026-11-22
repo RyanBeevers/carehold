@@ -18,7 +18,7 @@ test('Today permits authorized correction or later factual outcome without a per
 });
 test('masthead has a single rounded sun/moon action and Settings retains system appearance',()=>{
  assert.match(app,/function ThemeIconToggle\(/);
- assert.match(app,/<ThemeIconToggle theme=\{theme\} setTheme=\{setTheme\}\}\/>/);
+ assert.match(app,/<ThemeIconToggle theme=\{theme\} setTheme=\{setTheme\}\/>/);
  assert.match(app,/aria-label=\{'Switch to '\+target\+' mode'\}/);
  assert.match(app,/<Moon size=\{19\}/);
  assert.match(app,/<Sun size=\{19\}/);
