@@ -66,7 +66,11 @@ export async function startNewDeviceRequest(userId:string):Promise<string>{
     assertSameTransferKey(existing.publicKey,pending.publicKey);
     return pending.id;
    }
-  }catch{/* Only discard a stale local pending key; server never overwrites registered identities. */}
+  }catch(e){
+   // A network outage must not discard a valid pending private key.
+   // An authenticated 404 is the only safe case to replace a missing request.
+   if(!(e instanceof Error)||!e.message.includes('Device request unavailable'))throw e;
+  }
   await discardPendingTransfer(userId);
  }
  const pair=await newTransferKeyPair(),requestId=crypto.randomUUID();
