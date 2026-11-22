@@ -35,10 +35,10 @@ class RecoveryRotationDatabase(unittest.TestCase):
         self.db.execute("INSERT INTO encrypted_messages VALUES('m','t','a','hash','now')")
         self.db.execute("INSERT INTO encrypted_message_copies VALUES('m','a','old-msg-a')")
         self.db.execute("INSERT INTO encrypted_message_copies VALUES('m','b','old-msg-b')")
-        self.db.execute("INSERT INTO shared_word_spaces VALUES('s','h','a','prompt','now')")
+        self.db.execute("INSERT INTO shared_word_spaces(id,household_id,created_by,initial_kind,created_at) VALUES('s','h','a','prompt','now')")
         for uid in ("a", "b"):
-            self.db.execute("INSERT INTO shared_word_participants VALUES('s',?,'now')", (uid,))
-        self.db.execute("INSERT INTO shared_word_posts VALUES('p','s','a','prompt','digest','now')")
+            self.db.execute("INSERT INTO shared_word_participants(space_id,user_id,joined_at) VALUES('s',?,'now')", (uid,))
+        self.db.execute("INSERT INTO shared_word_posts(id,space_id,author_id,kind,body_hash,created_at) VALUES('p','s','a','prompt','digest','now')")
         self.db.execute("INSERT INTO shared_word_copies VALUES('p','a','old-words-a')")
         self.db.execute("INSERT INTO shared_word_copies VALUES('p','b','old-words-b')")
         self.db.execute(
@@ -134,7 +134,7 @@ class RecoveryRotationDatabase(unittest.TestCase):
         self.db.execute("INSERT INTO encrypted_messages VALUES('m2','t','b','digest2','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO encrypted_message_copies VALUES('m2','a','incoming')")
-        self.db.execute("INSERT INTO shared_word_posts VALUES('p2','s','b','discussion','digest2','now')")
+        self.db.execute("INSERT INTO shared_word_posts(id,space_id,author_id,kind,body_hash,created_at) VALUES('p2','s','b','discussion','digest2','now')")
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("INSERT INTO shared_word_copies VALUES('p2','a','incoming')")
 
