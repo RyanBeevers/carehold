@@ -140,12 +140,13 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    if(!approval)fail(403,'Approve this device from another trusted device, or rotate your recovery key if those devices were lost.');
   }
   await signedProof(db,user.id,deviceId,b.proof,b.signature,b.challengeId,approvalPublic,'enroll',deviceId);
-  await db.prepare(`INSERT INTO trusted_devices(user_id,device_id,label,account_public_jwk,approval_public_jwk,created_at,last_seen_at)
+  const registered=await db.prepare(`INSERT INTO trusted_devices(user_id,device_id,label,account_public_jwk,approval_public_jwk,created_at,last_seen_at)
     VALUES(?,?,?,?,?,?,?)
     ON CONFLICT(user_id,device_id) DO UPDATE SET label=excluded.label,last_seen_at=excluded.last_seen_at,
     account_public_jwk=excluded.account_public_jwk WHERE trusted_devices.revoked_at IS NULL
     AND trusted_devices.approval_public_jwk=excluded.approval_public_jwk`)
    .bind(user.id,deviceId,label,current.encoded,approvalEncoded,iso(),iso()).run();
+  if(registered.meta.changes!==1)fail(409,'This device was changed or revoked during enrollment.');
   return json({enrolled:true,deviceId});
  }
  if(p==='/api/trusted-devices/requests'&&method==='POST'){
@@ -191,8 +192,11 @@ async function route(req:Request,env:CareEnv,user:SessionUser){
    if(!validTransferEnvelope(b.envelope))fail(400,'Invalid encrypted device transfer.');
    await signedProof(db,user.id,approver,b.proof,b.signature,b.challengeId,JSON.parse(approverDevice.approval_public_jwk) as PublicKey,'approve',row.id);
    const update=await db.prepare(`UPDATE trusted_device_requests SET state='approved',ciphertext_json=?,approved_by_device_id=?,approved_at=?
-    WHERE id=? AND user_id=? AND state='pending' AND expires_at>? AND account_public_jwk=?`)
-    .bind(JSON.stringify(b.envelope),approver,iso(),row.id,user.id,now(),current.encoded).run();
+    WHERE id=? AND user_id=? AND state='pending' AND expires_at>? AND account_public_jwk=?
+    AND EXISTS(SELECT 1 FROM trusted_devices d WHERE d.user_id=? AND d.device_id=?
+     AND d.revoked_at IS NULL AND d.account_public_jwk=? AND d.approval_public_jwk=?)`)
+    .bind(JSON.stringify(b.envelope),approver,iso(),row.id,user.id,now(),current.encoded,
+     user.id,approver,current.encoded,approverDevice.approval_public_jwk).run();
    if(update.meta.changes!==1)fail(409,'This approval changed while you were reviewing it.');
    return json({approved:true});
   }
