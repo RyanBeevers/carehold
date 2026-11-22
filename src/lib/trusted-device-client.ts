@@ -2,6 +2,7 @@ import {api} from './api.ts';
 import {samePublicKey,storedMessageIdentity,storeRecoveredMessageIdentity,storeRotatedMessageIdentity,unseal,type Identity,type PublicKey} from './message-crypto.ts';
 import {openMessageRecoveryIdentity,type MessageRecoveryEnvelope} from './message-recovery.ts';
 import {newTransferKeyPair,sealTransferCode,openTransferCode,assertSameTransferKey,type TransferEnvelope} from './trusted-device-crypto.ts';
+import {signDeviceAuthorization,type DeviceSignatureAction} from './trusted-device-proof.ts';
 import {localTrustedDevice,savePendingTransfer,pendingTransfer,discardPendingTransfer,readTrustedRecoveryCode,saveTrustedRecoveryCode} from './trusted-device-vault.ts';
 
 export type TrustedDevice={id:string,name:string,createdAt:string,lastSeenAt:string,revokedAt:string|null,keyCurrent:boolean};
@@ -12,13 +13,17 @@ type DeviceChallenge={envelope:Parameters<typeof unseal>[0],accountPublicKey:Pub
 /** This is a crypto proof, not merely a user session or a browser device ID.
  * The server encrypts a random single-use challenge for this account key.
  */
-async function keyProof(userId:string,identity:Identity,deviceId:string):Promise<string>{
+async function keyProof(userId:string,identity:Identity,deviceId:string,action:DeviceSignatureAction,targetId:string):Promise<{proof:string,signature:string}>{
+ const device=await localTrustedDevice(userId);
+ if(device.id!==deviceId||!device.approvalPrivateKey||device.approvalPrivateKey.extractable)
+  throw new Error('A different browser owns this trusted-device identity.');
  const challenge=await api<DeviceChallenge>('/trusted-devices/challenge','POST',{deviceId});
  if(!samePublicKey(identity.publicKey,challenge.accountPublicKey))
   throw new Error('Your account encryption identity changed. Restore it before managing devices.');
  const clear=await unseal(challenge.envelope,identity.privateKey,'carehold-trusted-device-register',deviceId,userId);
  if(clear.kind!=='message'||!/^[A-Za-z0-9_-]{43}$/.test(clear.text))throw new Error('Invalid device proof.');
- return clear.text;
+ const signature=await signDeviceAuthorization(device.approvalPrivateKey,userId,deviceId,clear.text,action,targetId);
+ return {proof:clear.text,signature};
 }
 const enrollmentInFlight=new Map<string,Promise<void>>();
 export function enrollLocalTrustedDevice(userId:string,identity:Identity):Promise<void>{
@@ -29,8 +34,9 @@ export function enrollLocalTrustedDevice(userId:string,identity:Identity):Promis
  const task=(async()=>{
   if(!identity.journalKey)throw new Error('Restore encrypted writing before registering this device.');
   const record=await localTrustedDevice(userId);
-  const proof=await keyProof(userId,identity,record.id);
-  await api('/trusted-devices/enroll','POST',{deviceId:record.id,label:record.name,proof});
+  const authorization=await keyProof(userId,identity,record.id,'enroll',record.id);
+  await api('/trusted-devices/enroll','POST',{deviceId:record.id,label:record.name,
+   approvalPublicKey:record.approvalPublicKey,...authorization});
  })().finally(()=>{enrollmentInFlight.delete(userId);});
  enrollmentInFlight.set(userId,task);
  return task;
@@ -53,8 +59,8 @@ export async function approveTrustedDeviceRequest(userId:string,request:DeviceRe
  const restored=await openMessageRecoveryIdentity(userId,secret,recoveryEnvelope);
  if(!samePublicKey(restored.publicKey,identity.publicKey))throw new Error('The local trusted backup no longer matches the account.');
  const envelope=await sealTransferCode(userId,request.id,request.publicKey,identity.publicKey,secret);
- const proof=await keyProof(userId,identity,record.id);
- await api('/trusted-devices/requests/'+encodeURIComponent(request.id)+'/approve','POST',{approverDeviceId:record.id,proof,envelope});
+ const authorization=await keyProof(userId,identity,record.id,'approve',request.id);
+ await api('/trusted-devices/requests/'+encodeURIComponent(request.id)+'/approve','POST',{approverDeviceId:record.id,...authorization,envelope});
 }
 export async function startNewDeviceRequest(userId:string):Promise<string>{
  const local=await localTrustedDevice(userId);
@@ -101,7 +107,9 @@ export async function finishApprovedDeviceRequest(userId:string,requestId:string
  else await storeRecoveredMessageIdentity(userId,identity);
  await saveTrustedRecoveryCode(userId,code,server.envelope);
  await enrollLocalTrustedDevice(userId,identity);
- await api('/trusted-devices/requests/'+encodeURIComponent(requestId)+'/complete','POST',{deviceId:(await localTrustedDevice(userId)).id});
+ const device=await localTrustedDevice(userId);
+ const authorization=await keyProof(userId,identity,device.id,'complete',requestId);
+ await api('/trusted-devices/requests/'+encodeURIComponent(requestId)+'/complete','POST',{deviceId:device.id,...authorization});
  await discardPendingTransfer(userId);
  return identity;
 }
@@ -113,6 +121,6 @@ export async function cancelDeviceRequest(userId:string,requestId:string):Promis
 export async function revokeTrustedDevice(userId:string,identity:Identity,targetId:string):Promise<{requiresEncryptionRotation:boolean}>{
  const current=await localTrustedDevice(userId);
  if(current.id===targetId)throw new Error('You cannot remove the device you are using.');
- const proof=await keyProof(userId,identity,current.id);
- return api('/trusted-devices/'+encodeURIComponent(targetId)+'/revoke','POST',{currentDeviceId:current.id,proof});
+ const authorization=await keyProof(userId,identity,current.id,'revoke',targetId);
+ return api('/trusted-devices/'+encodeURIComponent(targetId)+'/revoke','POST',{currentDeviceId:current.id,...authorization});
 }
