@@ -272,6 +272,38 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
   }catch(e){setPushError(errorText(e));}
   finally{setPushBusy(false);}
  }
+ async function finishSharing(spaceId:string){
+  const shared=seed;
+  let notice='Shared with your selected participants.';
+  if(shared?.kind==='journal'){
+   try{
+    if(shared.sourceEntryId){
+     const original=entries.find(item=>item.id===shared.sourceEntryId);
+     if(!original)throw new Error('Private journal entry not found. The shared space was created, but the journal label was not updated.');
+     await saveJournalEntry({id:original.id,prompt:original.prompt,text:original.text,title:original.title??'',
+      sharedAt:Date.now(),spaceId},original.revision);
+    }else{
+     // Sharing from Write creates a separate shared snapshot AND saves the
+     // author's private journal entry. Never discard an unsaved draft first.
+     await saveJournalEntry({id:editing?.id??crypto.randomUUID(),prompt:shared.prompt,text:shared.text,
+      title:shared.title?.trim()??'',sharedAt:Date.now(),spaceId},editing?.revision??0);
+     if(draft.text===shared.text&&draft.prompt===shared.prompt&&draft.title.trim()===(shared.title?.trim()??'')){
+      const cleared=await draft.discard();
+      if(cleared)setEditing(null);
+      else notice='Shared and saved privately, but the device draft could not be cleared. Please review it.';
+     }
+    }
+    await reloadJournal();
+    if(notice==='Shared with your selected participants.')notice='Shared snapshot created and your private journal entry preserved.';
+   }catch(e){
+    // Remote sharing succeeded. Never pretend it was rolled back, or
+    // discard the local draft when a private save conflicted or failed.
+    notice='Shared with your selected participants, but the private journal save needs attention: '+errorText(e);
+   }
+  }
+  setSeed(null);setOpenSpaceId(spaceId);selectTab('shared');setFeedback(notice);
+  window.dispatchEvent(new Event('carehold:activity-changed'));
+ }
  return <div className="words-hub">
   <details className="words-hub-warning">
    <summary><LockKeyhole size={17} aria-hidden="true"/><span className="words-hub-warning-message"><strong>Fictional writing only.</strong> Do not enter confidential family, health or therapeutic information.</span><span className="words-hub-warning-more">Why?</span></summary>
@@ -286,19 +318,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
    {keyError&&<p className="messages-error" role="alert"><strong>Encrypted sharing unavailable.</strong> {keyError} Your existing local journal is preserved on this device. Never reset your account key to bypass this warning.</p>}
    {identity?.journalKey&&legacyCount>0&&<div className="recovery-gate"><strong>{legacyCount} older journal entries are stored on this device only.</strong><p>Import them into private encrypted sync without deleting the original local copies. This can be safely retried.</p><button type="button" className="button outline" disabled={migratingJournal} onClick={()=>void migrateJournal()}>{migratingJournal?'Migrating…':'Safely migrate local journal'}</button></div>}
   {seed?<ShareComposer seed={seed} userId={userId} householdId={householdId} identity={identity} keyError={keyError} people={people}
-    onCreated={sid=>{
-    const current=seed;setSeed(null);setOpenSpaceId(sid);selectTab('shared');
-    if(current?.kind==='journal'){
-     if(current.sourceEntryId){
-      const entry=entries.find(e=>e.id===current.sourceEntryId);
-      if(entry)void saveJournalEntry({id:entry.id,prompt:entry.prompt,text:entry.text,title:entry.title??'',sharedAt:Date.now(),spaceId:entry.spaceId??null},entry.revision)
-       .then(()=>reloadJournal()).catch(e=>setJournalError(errorText(e)));
-     }else if(draft.text===current.text&&draft.prompt===current.prompt){
-      void draft.discard().then(cleared=>{if(cleared)setEditing(null);else setJournalError('Shared, but the old device draft could not be cleared.');});
-     }
-    }
-    setFeedback('Shared with your selected participants.');window.dispatchEvent(new Event('carehold:activity-changed'));
-   }}
+    onCreated={sid=>{void finishSharing(sid);}}
     onCancel={()=>setSeed(null)} onRefreshPeople={()=>void api<{people:WordContact[]}>(`/words/people?householdId=${encodeURIComponent(householdId)}`).then(r=>{setPeople(r.people);setContactsError('');}).catch(e=>setContactsError(errorText(e)))}/>:
   tab==='explore'?<section className="words-explore" aria-label="Prompt library">
    <div className="words-hub-section-top"><div><span className="mono kicker">A GENTLE PLACE TO BEGIN</span><h2>Find the right words.</h2><p className="muted">Browse 100+ thoughtful prompts. Share one as an invitation, or use it as inspiration for your own entry.</p></div></div>
@@ -343,7 +363,7 @@ export function WordsHub({userId,householdId,audience}:{userId:string,householdI
      <button type="button" className="button dark small" disabled={!draft.ready||!draft.text.trim()||journalBusy||draft.status==='conflict'}
       onClick={()=>startSharing({kind:'journal',prompt:draft.prompt,text:draft.text,title:draft.title})}><Users size={16}/> Share this entry</button>
     </div>
-    <p className="muted tiny">Saving privately creates an encrypted journal entry on this device. Sharing creates a separate encrypted snapshot visible only to explicitly selected participants. No automatic send or silent updates.</p>
+    <p className="muted tiny">Saving privately creates an encrypted journal entry on this device. Sharing also preserves a private journal copy, while sending a separate encrypted snapshot only to the participants you select. No automatic send or silent updates.</p>
    </form>
   </section>:
   tab==='journal'?<section className="words-journal-shelf" aria-label="My private journal">
