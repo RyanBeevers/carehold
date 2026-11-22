@@ -18,12 +18,13 @@ CREATE INDEX trusted_devices_active ON trusted_devices(user_id,revoked_at);
 -- Challenge can only be decrypted with the current account private key.
 -- Its random plaintext and recovery secrets are never stored in D1.
 CREATE TABLE trusted_device_challenges (
+ challenge_id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
  device_id TEXT NOT NULL,
  proof_hash TEXT NOT NULL,
- expires_at INTEGER NOT NULL,
- PRIMARY KEY(user_id,device_id)
+ expires_at INTEGER NOT NULL
 );
+CREATE INDEX trusted_device_challenges_by_device ON trusted_device_challenges(user_id,device_id,expires_at);
 CREATE INDEX trusted_device_challenges_expiration ON trusted_device_challenges(expires_at);
 
 -- A recipient-generated ephemeral public key binds every pending approval.
