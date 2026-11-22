@@ -10,7 +10,7 @@ This feature remains a fictional-writing pilot, **not** an independent security/
 - Sharing an already saved entry preserves the original entry and updates its `sharedAt` status and most recent `spaceId`.
 - The recipient cannot edit the private journal copy. Later edits to the private original do **not** silently change the shared snapshot.
 - If recipients receive the share but the separate private save fails, the author sees an explicit warning. The app keeps their current device draft intact instead of pretending the share was canceled.
-- Earlier unsaved entries that disappeared after sharing were **not actually written to the private journal**. If an original browser still holds an unsaved draft or an encrypted journal backup, preserve it. Do not invent or silently recreate a journal entry from a recipient's message.
+- Earlier unsaved entries that disappeared after sharing were **not actually written to the private journal**. The original author can open the still-accessible shared journal space and select **Save a private journal copy** to recover its decrypted shared snapshot into their own journal. This does not change other participants' copies and avoids duplicating a matching private entry. If the original is undecipherable, preserve the original browser and encrypted backups; do not reset keys or invent data.
 
 ### Shared space lifecycle
 
@@ -34,7 +34,7 @@ This feature remains a fictional-writing pilot, **not** an independent security/
 
 Use **fictional content** and distinct browsers/profiles for two accounts (for example Ryan/Sara test identities). After local automated verification, test on isolated staging:
 
-1. Start an unsaved Write entry, share it with the other account. Confirm the recipient sees a shared space and **the author still has their own private journal entry**.
+1. Start an unsaved Write entry, share it with the other account. Confirm the recipient sees a shared space and **the author still has their own private journal entry**. For an older shared-only journal space, test **Save a private journal copy** without changing the recipient's snapshot.
 2. Edit the author's private entry. Confirm the recipient's shared snapshot stays unchanged.
 3. Post a discussion reply as the other account. Confirm both participants can see it.
 4. Remove only the author's reply; confirm it disappears from both views and the other person's replies remain.
