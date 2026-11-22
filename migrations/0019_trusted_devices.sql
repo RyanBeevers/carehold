@@ -23,6 +23,7 @@ CREATE TABLE trusted_device_challenges (
  expires_at INTEGER NOT NULL,
  PRIMARY KEY(user_id,device_id)
 );
+CREATE INDEX trusted_device_challenges_expiration ON trusted_device_challenges(expires_at);
 
 -- A recipient-generated ephemeral public key binds every pending approval.
 -- Ciphertext-only CH1 transfer; no plaintext backup code or private key.
@@ -42,6 +43,7 @@ CREATE TABLE trusted_device_requests (
  consumed_at TEXT
 );
 CREATE INDEX trusted_device_requests_user ON trusted_device_requests(user_id,state,expires_at);
+CREATE INDEX trusted_device_requests_expiration ON trusted_device_requests(expires_at);
 
 -- Optional passkey PRF-assisted recovery, bound to an actual credential.
 -- Only authenticated browser-derived ciphertext is stored, never a PRF output
