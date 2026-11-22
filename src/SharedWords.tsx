@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {ArrowLeft,ArrowUpRight,Check,MessageCircle,RotateCw,Send,Users} from 'lucide-react';
+import {ArrowLeft,ArrowUpRight,Check,MessageCircle,RotateCw,Send,Trash2,Users} from 'lucide-react';
 import {api,StaleSessionRequest} from './lib/api';
 import {sealWord,unsealWord,type WordPayload} from './lib/words-space-crypto';
 import type {Envelope,Identity,PublicKey} from './lib/message-crypto';
@@ -132,6 +132,7 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
  const [detail,setDetail]=useState<(Omit<SpaceDetail,'posts'>&{posts:VisiblePost[]})|null>(null);
  const [privateNotes,setPrivateNotes]=useState<JournalEntry[]>([]);
  const [error,setError]=useState(''),[busy,setBusy]=useState<'reflection'|'discussion'|'save'|null>(null),[status,setStatus]=useState('');
+ const [confirmAction,setConfirmAction]=useState<{kind:'space'|'leave'|'post',id?:string}|null>(null),[removing,setRemoving]=useState(false);
  const retry=useRef<{kind:'reflection'|'discussion',text:string,id:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
  const lastInteraction=useRef(Date.now());
  async function load(){
@@ -214,6 +215,28 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
   }catch(e){setError(message(e));}
   finally{setBusy(null);}
  }
+  async function removeSharedContent(){
+   if(!confirmAction||removing)return;
+   setRemoving(true);setError('');setStatus('');
+   try{
+    if(confirmAction.kind==='post'){
+     if(!confirmAction.id)throw new Error('Select the reply to remove.');
+     await api(`/words/spaces/${encodeURIComponent(spaceId)}/posts/${encodeURIComponent(confirmAction.id)}`,'DELETE');
+     await load();
+     setStatus('Your reply is no longer shown in this discussion. Previously received copies cannot be recalled.');
+    }else if(confirmAction.kind==='space'){
+     await api(`/words/spaces/${encodeURIComponent(spaceId)}`,'DELETE',{confirmation:'DELETE SHARED SPACE'});
+     window.dispatchEvent(new Event('carehold:activity-changed'));
+     onBack();
+    }else{
+     await api(`/words/spaces/${encodeURIComponent(spaceId)}/leave`,'POST');
+     window.dispatchEvent(new Event('carehold:activity-changed'));
+     onBack();
+    }
+    setConfirmAction(null);
+   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
+   finally{setRemoving(false);}
+  }
   return <section className="words-space-detail" aria-label="Shared prompt and discussion">
   <button type="button" className="quiet small" onClick={onBack}><ArrowLeft size={15}/> All shared spaces</button>
   {error&&<p role="alert" className="messages-error">{error}</p>}
@@ -228,6 +251,18 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
     {detail.kind==='journal'&&<div className="words-journal-quote"><span className="mono kicker">{author(first?.authorId||'')} WROTE</span><p>{first?.content?.text||'Unable to decrypt this entry on this device.'}</p></div>}
     <p className="muted tiny">Shared with {detail.participants.map(p=>p.id===userId?'you':p.name).join(', ')}. Everyone here sees posted replies, but not private drafts or whether anyone has viewed this page.</p>
    </header>
+   <div className="words-space-management">
+    <button type="button" className="quiet small" disabled={removing||!!busy} onClick={()=>setConfirmAction({kind:detail.createdBy===userId?'space':'leave'})}>
+     <Trash2 size={15}/>{detail.createdBy===userId?'Remove shared space':'Leave this shared space'}
+    </button>
+    {confirmAction&&(confirmAction.kind==='space'||confirmAction.kind==='leave')&&<div className="words-audience-confirm" role="group" aria-label="Confirm shared space removal">
+     <span>{confirmAction.kind==='space'
+      ?'Remove this shared space and all replies from everyone’s Carehold view? Your private journal entry is not deleted. Past copies on other devices and encrypted recovery history may remain.'
+      :'Leave this shared space? It will disappear from your account. Others can keep existing copies and continue without you.'}</span>
+     <button type="button" className="quiet small" disabled={removing} onClick={()=>setConfirmAction(null)}>Keep space</button>
+     <button type="button" className="button dark small" disabled={removing} onClick={()=>void removeSharedContent()}>{removing?'Removing…':confirmAction.kind==='space'?'Remove for everyone':'Leave space'}</button>
+    </div>}
+   </div>
    <section className="words-space-discussion">
      <div className="words-hub-section-top"><div><span className="mono kicker">TALK ABOUT IT</span><h3>Discussion</h3></div><MessageCircle size={19}/></div>
      <p className="muted tiny">One place to talk together or keep a private note. Private notes are encrypted for your account and synchronized when recovery is configured; shared replies are visible to all selected participants.</p>
@@ -236,6 +271,14 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
       {board.map(note=><li key={note.id} className={note.private?'words-private-note':''}>
        <span className="mono kicker">{note.private?'PRIVATE NOTE · ONLY YOU':note.kind==='reflection'?'SHARED REFLECTION':'SHARED REPLY'} · {author(note.author)} · {new Date(note.at).toLocaleString()}</span>
        <p>{note.text}</p>
+       {!note.private&&note.author===userId&&<div className="words-response-actions">
+        <button type="button" className="quiet small" disabled={removing||!!busy} onClick={()=>setConfirmAction({kind:'post',id:note.id})}><Trash2 size={14}/> Remove my reply</button>
+       </div>}
+       {confirmAction?.kind==='post'&&confirmAction.id===note.id&&<div className="words-audience-confirm" role="group" aria-label="Confirm reply removal">
+        <span>Remove your reply from this discussion for everyone? This cannot recall content already seen or historical encrypted copies.</span>
+        <button type="button" className="quiet small" disabled={removing} onClick={()=>setConfirmAction(null)}>Keep reply</button>
+        <button type="button" className="button dark small" disabled={removing} onClick={()=>void removeSharedContent()}>{removing?'Removing…':'Remove reply'}</button>
+       </div>}
       </li>)}
      </ol>
      {reflection.ready&&reflection.text.trim()&&<div className="words-audience-confirm">
