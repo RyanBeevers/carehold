@@ -186,10 +186,16 @@
 
 /* Journal-first Words workspace: editorial ledgers rather than a wall of cards. */
 .words-hub{max-width:1100px}
-.words-hub-warning{display:flex;align-items:flex-start;gap:12px;padding:14px 17px;border-left:3px solid var(--coral);background:var(--panel);margin:0 0 30px}
-.words-hub-warning svg{flex-shrink:0;color:var(--coral)}
-.words-hub-warning strong{font-size:12px;line-height:1.4}
-.words-hub-warning p{font-size:12px;color:var(--muted);line-height:1.6;margin:5px 0 0}
+.words-hub-warning{padding:10px 12px;border-left:3px solid var(--coral);background:var(--panel);margin:0 0 20px}
+.words-hub-warning summary{display:flex;align-items:center;gap:9px;min-height:32px;cursor:pointer;list-style:none}
+.words-hub-warning summary::-webkit-details-marker{display:none}
+.words-hub-warning summary svg{flex-shrink:0;color:var(--coral)}
+.words-hub-warning-message{flex:1;min-width:0;font-size:12px;line-height:1.5;color:var(--ink)}
+.words-hub-warning-message strong{font-weight:700}
+.words-hub-warning-more{font-size:12px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.words-hub-warning summary:focus-visible{outline:2px solid var(--coral);outline-offset:3px}
+.words-hub-warning-detail{padding:6px 4px 2px 26px}
+.words-hub-warning-detail p{font-size:12px;color:var(--muted);line-height:1.6;margin:4px 0 0}
 .words-hub-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-bottom:1px solid var(--line);gap:0;margin:0 0 32px}
 .words-hub-tabs button{position:relative;min-height:76px;padding:13px 10px 16px;border:0;border-bottom:3px solid transparent;text-align:left;background:transparent;color:var(--muted);cursor:pointer}
 .words-hub-tabs button+button{border-left:1px solid var(--line)}
