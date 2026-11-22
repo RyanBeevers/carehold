@@ -160,12 +160,12 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
 
  if(mode==='ready')return notice?<p role="status" className="muted tiny">{notice}</p>:null;
  return <section className="recovery-gate" aria-label="Message encryption recovery">
-  <h3>Encrypted messages &amp; device recovery</h3>
+  <h3>Keep your writing backed up</h3>
   {mode==='checking'&&<p role="status">Checking this device’s encryption identity…</p>}
   {mode==='blocked'&&<p>Existing encrypted history has been preserved. This device cannot be enrolled until the original key is safely migrated.</p>}
-  {mode==='setup'&&<><p>This account has not enrolled an encryption key. Before sharing writing, generate a recovery code that can restore your messages on a different browser or phone.</p>
-   <p className="muted tiny">The 256-bit code is shown once. Carehold cannot restore old messages if you lose every trusted device and your recovery code.</p>
-   <button type="button" className="button primary" disabled={busy} onClick={()=>void generate()}>{busy?'Preparing…':'Generate recovery code'}</button></>}
+  {mode==='setup'&&<><p>One quick backup setup helps you restore your writing on a replacement phone. Carehold will take care of encryption automatically afterward.</p>
+   <p className="muted tiny">You'll save a private backup code once. Keep it in your password manager so it's available if your device is lost.</p>
+   <button type="button" className="button primary" disabled={busy} onClick={()=>void generate()}>{busy?'Preparing…':'Set up secure backup'}</button></>}
   {mode==='resume-setup'&&pendingResume&&<form onSubmit={e=>void completeResumedEnrollment(e)}>
    <p><strong>Finish your earlier recovery setup.</strong> You can leave Carehold to save the code in Passwords: only an encrypted setup record was kept here. No recovery code was stored by Carehold.</p>
    <p>Find <strong>{RECOVERY_SEARCH_LABEL}</strong> in your password manager or locked note. Enter the saved code below, confirm it is stored safely, then finish enrollment.</p>
@@ -175,15 +175,15 @@ export function MessageRecoveryGate({userId,onReady,onError}:{
    <button type="button" className="button outline small" disabled={busy} onClick={()=>void discardUnregisteredSetup()}>I didn't save it — discard this unregistered attempt</button>
    <p className="muted tiny">Discarding applies only to this unfinished, unregistered attempt. It does not delete any existing account keys or messages.</p>
   </form>}
-  {mode==='show-code'&&pending&&<><p>Save this recovery code somewhere secure and separate from this browser. It is not your password or passkey. Never share it with another household member.</p>
+  {mode==='show-code'&&pending&&<><p>Save this one-time backup code in your password manager. It is not your login password or passkey. Keep it private.</p>
    <RecoveryCodeSaveGuide code={pending.recoveryCode} saved={saved} onSavedChange={setSaved}/>
-   <p className="fine-print"><strong>Step 3 — Complete enrollment only after verifying your saved copy.</strong> This recovery code will not be shown again after enrollment. Losing it prevents encrypted-data recovery on another device.</p>
-   <button type="button" className="button primary" disabled={!saved||busy} onClick={()=>void completeEnrollment()}>{busy?'Enrolling…':'Complete enrollment — verified code saved'}</button>
+   <p className="fine-print">This code will not be shown again after setup. Keep your saved copy so you can restore on another device if needed.</p>
+   <button type="button" className="button primary" disabled={!saved||busy} onClick={()=>void completeEnrollment()}>{busy?'Enrolling…':'Finish secure setup'}</button>
    <p className="muted tiny">Do not navigate away until enrollment succeeds. The recovery code is never sent to the server.</p></>}
-  {mode==='restore'&&<form onSubmit={e=>void restore(e)}><p>This account has encrypted messages from another browser. Enter your saved recovery code to authorize this device and access its shared history.</p>
+  {mode==='restore'&&<form onSubmit={e=>void restore(e)}><p>You're on a new device. Enter the backup code saved during your first setup to restore your private writing and messages.</p>
    <label>Recovery code<input name="recovery-code" type="password" autoComplete="off" spellCheck={false} value={code} onChange={e=>setCode(e.target.value)} placeholder="CH1-…" required/></label>
-   <button className="button primary" disabled={busy||!code.trim()}>{busy?'Recovering…':'Restore my message key'}</button>
-   <p className="muted tiny">Look for <strong>{RECOVERY_SEARCH_LABEL}</strong> in Apple Passwords, another trusted password manager or your locked notes. Account login alone cannot decrypt messages; do not reset keys to bypass this screen.</p></form>}
+   <button className="button primary" disabled={busy||!code.trim()}>{busy?'Recovering…':'Restore my writing'}</button>
+   <p className="muted tiny">Look for <strong>{RECOVERY_SEARCH_LABEL}</strong> in Apple Passwords or another trusted password manager. If you cannot find it, preserve your original device rather than resetting keys.</p></form>}
   {notice&&<p role="status">{notice}</p>}
   {error&&<p role="alert" className="messages-error">{error}</p>}
  </section>;
