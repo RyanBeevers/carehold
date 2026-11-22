@@ -647,7 +647,7 @@ export default function App(){
    <button className="button outline" onClick={()=>{setPersonName('');setPersonKind('adult');setModal('profile');}}><Plus size={16}/> Add a person or pet</button>
   </div>}</div>
   {profiles.filter(p=>!p.archived_at).length===0&&!showArchivedProfiles?<div className="empty-state"><span className="empty-star">✺</span><h2>Who are we looking after?</h2><p>Add an adult, child, or pet to start the medication ledger.</p>{owner&&<button className="button primary" onClick={()=>setModal('profile')}>Add the first profile</button>}</div>:<div className="person-layout"><div className="person-list" aria-label="Choose a profile">{visibleProfiles.map(p=><button key={p.id} className={p.id===selected?'person-list-item selected':'person-list-item'} onClick={()=>setSelected(p.id)}><IconLabel kind={p.kind}/><span>{p.display_name}<small>{p.archived_at?'Archived · ':''}{p.kind}</small></span><ArrowUpRight size={18}/></button>)}</div><section className="person-detail">{person&&<><div className="detail-intro"><span className="form-index">PROFILE / {person.kind.toUpperCase()}</span><h2>{person.display_name}<span>.</span></h2><div className="detail-actions" role="group" aria-label="Profile actions">
-   {!person.archived_at&&<button type="button" className="profile-action profile-action--primary" disabled={saving} onClick={()=>newMed(person.id)}><Plus size={17} aria-hidden="true"/> Add medication</button>}
+   {!person.archived_at&&person.can_manage_medication&&<button type="button" className="profile-action profile-action--primary" disabled={saving} onClick={()=>newMed(person.id)}><Plus size={17} aria-hidden="true"/> Add medication</button>}
    {owner&&!person.archived_at&&person.kind!=='pet'&&<button type="button" className="profile-action profile-action--secondary" disabled={saving} onClick={()=>beginLink(person)}><Link2 size={17} aria-hidden="true"/>{person.linked_user_id?'Change linked account':'Link an account'}</button>}
    {owner&&(person.archived_at?
     <button type="button" className="profile-action profile-action--secondary" disabled={saving} onClick={()=>void restoreProfile(person)}><ArchiveRestore size={17} aria-hidden="true"/> Restore profile</button>:
@@ -656,14 +656,14 @@ export default function App(){
   {meds.some(m=>m.archived_at)&&<button type="button" className="quiet small" onClick={()=>setShowArchivedMeds(v=>!v)}>{showArchivedMeds?'Hide archived medications':'Show archived medications'}</button>}
   {visibleMeds.length===0?<p className="muted">No active medications.</p>:visibleMeds.map(m=><div className="med-row" key={m.id}><div><span className="mono muted tiny">{m.archived_at?'ARCHIVED · ':''}{m.cadence.replace('_',' ').toUpperCase()} · {m.catalog_source==='rxterms'?'RXTERMS MATCH':'CUSTOM ENTRY'}</span><h4>{m.name}</h4><p>{m.dose} {m.form?` · ${m.form}`:''}</p>{m.product_strength&&<p className="muted tiny">Catalog product: {m.product_strength} (not the prescribed dose)</p>}<p className="muted tiny">{m.cadence==='prn'?'As-needed medication':m.times.join(' / ')}</p></div><div className="med-row-actions">
    {m.archived_at?
-    <button type="button" className="button outline small" disabled={saving||Boolean(person.archived_at)} onClick={()=>void restoreMedication(m)}>Restore</button>:
+    person.can_manage_medication&&<button type="button" className="button outline small" disabled={saving||Boolean(person.archived_at)} onClick={()=>void restoreMedication(m)}>Restore</button>:
     !person.archived_at&&<>
-     <button className="quiet small" onClick={()=>newMed(person.id,m)}>Edit</button>
-     {m.cadence==='prn'&&<button className="button outline small" onClick={()=>beginDose(undefined,m)}>Record PRN</button>}
-     <button type="button" className="quiet small" onClick={()=>{setPending({medication:m});setModal('archive-med');}}>Archive</button>
+     {person.can_manage_medication&&<button className="quiet small" onClick={()=>newMed(person.id,m)}>Edit</button>}
+     {m.cadence==='prn'&&person.can_record_dose&&<button className="button outline small" onClick={()=>beginDose(undefined,m)}>Record PRN</button>}
+     {person.can_manage_medication&&<button type="button" className="quiet small" onClick={()=>{setPending({medication:m});setModal('archive-med');}}>Archive</button>}
     </>}
   </div></div>)}<h3 className="subsection-title history-title">Administration history <span>{history.length.toString().padStart(2,'0')}</span></h3><p className="muted tiny">Corrections append to this ledger; the original entries remain.</p>{history.length===0?<p className="muted">No administration history yet.</p>:history.map(e=><div className="history-row" key={e.id}><div><b>{e.med_name_snapshot||'Medication'}</b><span className="history-status">{doseLabel(e)}</span><small>{e.actor_name||'Caregiver'} · {stamp(new Date(e.occurred_at))}{e.supersedes_event_id?' · corrected':''}</small></div>{e.is_current===0?<span className="muted tiny">Superseded · preserved in history</span>:
-   <div className="med-row-actions">
+   person.can_record_dose&&<div className="med-row-actions">
     <button type="button" className="quiet small" onClick={()=>beginCorrection(e)}>Correct record</button>
     {e.event_type!=='given'&&<button type="button" className="button outline small" onClick={()=>beginCorrection(e,'later')}>Record a later outcome</button>}
    </div>}</div>)}</>}</section></div>}
