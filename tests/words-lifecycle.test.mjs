@@ -50,7 +50,8 @@ test('Words notification test is opt-in, rate-limited, and never includes privat
  assert.match(worker,/if\(preference\?\.enabled!==1\)fail\(409/);
  assert.match(worker,/push_test_rate_limits/);
  assert.match(worker,/if\(!accepted\)fail\(502/);
- assert.match(worker,/Some.*NOTHING|Something new is waiting in Carehold/);
+ assert.match(worker,/Something new is waiting in Carehold/);
+ assert.match(worker,/Your Carehold Words notification test arrived/);
  assert.match(hub,/navigator\.serviceWorker\.getRegistration\(\)/);
  assert.match(hub,/Send a test notification/);
  assert.match(hub,/In-app Activity works without push/);
