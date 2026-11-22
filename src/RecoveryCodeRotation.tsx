@@ -182,12 +182,14 @@ export function RecoveryCodeRotation({userId,onComplete}:{userId:string,onComple
  async function resumePrestage(){
   if(!pendingEnvelope||!original||!code.trim()||busy)return;
   setBusy(true);setError('');
+  let next:Identity|null=null;
   try{
-   const next=await openMessageRecoveryIdentity(userId,code.trim(),pendingEnvelope);
+   next=await openMessageRecoveryIdentity(userId,code.trim(),pendingEnvelope);
    const proof=await challengeProof(original);
    await api('/recovery-rotation/start','POST',{envelope:pendingEnvelope,proof});
    await migrate(next,original);
   }catch(e){
+   if(next&&await acceptAlreadyCommitted(next,original))return;
    const state=await api<RotationStatus>('/recovery-rotation/status').catch(()=>null);
    if(state?.state==='staged'){setRotation(state);setMode('resume');}
    else setMode('resume-prestage');
@@ -197,14 +199,24 @@ export function RecoveryCodeRotation({userId,onComplete}:{userId:string,onComple
  async function resume(){
   if(!rotation?.envelope||!original||!code.trim()||busy)return;
   setBusy(true);setError('');
+  let next:Identity|null=null;
   try{
-   const next=await openMessageRecoveryIdentity(userId,code.trim(),rotation.envelope);
+   next=await openMessageRecoveryIdentity(userId,code.trim(),rotation.envelope);
    if(!rotation.publicKey||!samePublicKey(rotation.publicKey,next.publicKey))
     throw new Error('The saved code does not belong to the staged replacement.');
    await migrate(next,original);
   }catch(e){
+   if(next&&await acceptAlreadyCommitted(next,original))return;
    setMode('resume');setError(message(e));
   }finally{setBusy(false);}
+ }
+ async function acceptAlreadyCommitted(next:Identity,old:Identity):Promise<boolean>{
+  try{
+   const remote=await api<{publicKey:PublicKey|null}>('/messages/keys/me');
+   if(!remote.publicKey||!samePublicKey(remote.publicKey,next.publicKey))return false;
+   await finishLocal(next,old);
+   return true;
+  }catch{return false;}
  }
  async function cancelStaged(){
   if(!original||busy)return;setBusy(true);setError('');
