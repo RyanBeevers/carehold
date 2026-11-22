@@ -58,6 +58,11 @@ async function member(db:D1Database,householdId:string,userId:string):Promise<Ro
   const row=await db.prepare('SELECT role FROM household_members WHERE household_id=? AND user_id=?').bind(householdId,userId).first<{role:Role}>();
   if(!row)bad(403,'You do not have access to this household.');return row!.role;
 }
+async function isFullCircleCaregiver(db:D1Database,hid:string,uid:string):Promise<boolean>{
+ const row=await db.prepare("SELECT access_scope FROM household_members WHERE household_id=? AND user_id=? AND role='caregiver'")
+  .bind(hid,uid).first<{access_scope:'limited'|'full'}>();
+ return row?.access_scope==='full';
+}
 async function classification(db:D1Database,hid:string,uid:string):Promise<MemberClassification>{
  const row=await db.prepare('SELECT classification FROM household_member_classes WHERE household_id=? AND user_id=?')
   .bind(hid,uid).first<{classification:MemberClassification}>();
@@ -77,7 +82,8 @@ async function profileAccess(db:D1Database,profileId:string,userId:string,capabi
   const grants=await db.prepare('SELECT capability FROM profile_grants WHERE profile_id=? AND user_id=?').bind(profileId,userId).all<{capability:Capability}>();
   if(!canUseCareProfile(role,await classification(db,p!.household_id,userId),
    (grants.results||[]).map(x=>x.capability),capability,
-   p!.kind==='adult'&&(p as ProfileRow&{linked_user_id?:string|null}).linked_user_id===userId))
+   p!.kind==='adult'&&(p as ProfileRow&{linked_user_id?:string|null}).linked_user_id===userId,
+   await isFullCircleCaregiver(db,p!.household_id,userId)))
    bad(403,'This profile is not shared with you for that action or your account class is read-only.');
   return p!;
 }
@@ -116,7 +122,7 @@ function catalogFields(b:Record<string,unknown>,name:string,old?:MedicationRow):
 }
 function medSchedule(m:MedicationRow):Schedule {return {cadence:m.cadence,weekdays:JSON.parse(m.weekdays_json),intervalDays:m.interval_days??undefined,anchorDate:m.anchor_date??undefined,startDate:m.start_date,endDate:m.end_date};}
 type InvitationRow={
- id:string;household_id:string;role:'member'|'caregiver';grants_json:string;
+ id:string;household_id:string;role:'member'|'caregiver';grants_json:string;access_scope:'limited'|'full';
  claimed_at:string|null;revoked_at:string|null;expires_at:string;
 };
 async function claimInvitation(db:D1Database,invitation:InvitationRow,userId:string) {
@@ -127,7 +133,7 @@ async function claimInvitation(db:D1Database,invitation:InvitationRow,userId:str
  try {
   await db.batch([
    db.prepare('UPDATE invitations SET claimed_by=?,claimed_at=? WHERE id=? AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at>?').bind(userId,ts,invitation.id,ts),
-   db.prepare('INSERT INTO household_members(household_id,user_id,role,joined_at) SELECT household_id,?,role,? FROM invitations WHERE id=? AND claimed_by=? AND claimed_at=?').bind(userId,ts,invitation.id,userId,ts),
+   db.prepare('INSERT INTO household_members(household_id,user_id,role,joined_at,access_scope) SELECT household_id,?,role,?,access_scope FROM invitations WHERE id=? AND claimed_by=? AND claimed_at=?').bind(userId,ts,invitation.id,userId,ts),
    db.prepare('INSERT INTO household_member_classes(household_id,user_id,classification,updated_at) VALUES(?,?,?,?)').bind(invitation.household_id,userId,'unverified',ts),
    ...grants.flatMap(g=>g.capabilities.map(cap=>db.prepare(`INSERT INTO profile_grants(household_id,profile_id,user_id,capability,created_at) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM household_members WHERE household_id=? AND user_id=?)`).bind(invitation.household_id,g.profileId,userId,cap,ts,invitation.household_id,userId)))
   ]);
