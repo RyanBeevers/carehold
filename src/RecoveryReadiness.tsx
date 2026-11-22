@@ -2,6 +2,7 @@ import {useCallback,useEffect,useState} from 'react';
 import {api} from './lib/api';
 import {LegacyMessageMigration} from './LegacyMessageMigration';
 import {MessageRecoveryGate} from './MessageRecoveryGate';
+import {RecoveryCodeRotation} from './RecoveryCodeRotation';
 import {RECOVERY_SEARCH_LABEL} from './RecoveryCodeSaveGuide';
 import {samePublicKey,storedMessageIdentity,type Identity,type PublicKey} from './lib/message-crypto';
 
@@ -61,6 +62,7 @@ export function RecoveryReadiness({userId}:{userId:string}){
    {status==='error'&&<button type="button" className="button outline" onClick={()=>setRetry(n=>n+1)}>Retry recovery check</button>}
   </div>
   {(status==='setup'||status==='restore')&&<MessageRecoveryGate key={userId+':'+status} userId={userId} onReady={onReady} onError={onError}/>}
+  {status==='configured'&&<RecoveryCodeRotation userId={userId} onComplete={()=>{setMissingCodeHelp(false);setRetry(n=>n+1);}}/>}
   {status==='legacy'&&<LegacyMessageMigration userId={userId}/>}
   {status==='mismatch'&&<p role="alert" className="messages-error">This browser has a different key. Return to your original browser or restore on a clean trusted device using your saved code. Do not replace the existing key.</p>}
  </section>;
