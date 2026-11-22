@@ -34,6 +34,10 @@ test('sharing a journal snapshot preserves the private entry before clearing its
  assert.ok(section.indexOf('await saveJournalEntry(')<section.indexOf('const cleared=await draft.discard()'));
  assert.match(section,/but the private journal save needs attention/);
  assert.match(shared,/await onCreated\(attempt\.id\)/);
+ assert.match(shared,/async function restorePrivateJournal\(\)/);
+ assert.match(shared,/Save a private journal copy/);
+ assert.match(shared,/setSourceSaved\(true\)/);
+ assert.match(shared,/The shared snapshot is unchanged/);
  assert.match(hub,/onCreated=\{finishSharing\}/);
 });
 
