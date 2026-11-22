@@ -51,7 +51,7 @@ test('an enrolled key is not presented as proof of saved recovery and missing-co
 
 test('switching to iPhone Passwords cannot silently discard an unregistered recovery identity',()=>{
  const store=readFileSync(new URL('../src/lib/message-crypto.ts',import.meta.url),'utf8');
- assert.match(store,/indexedDB\.open\(dbName,3\)/);
+ assert.match(store,/indexedDB\.open\(dbName,4\)/);
  assert.match(store,/createObjectStore\('pendingRecoveries'/);
  assert.match(store,/storedPendingRecoveryEnvelope/);
  assert.match(store,/storePendingRecoveryEnvelope/);
