@@ -20,7 +20,13 @@ test('copy operation requires user action and never claims to auto-save in a pas
  assert.match(guide,/cannot directly insert a recovery code into Apple Passwords/);
  assert.match(guide,/Apple Passwords/);
  assert.match(guide,/Locked note/);
- assert.match(guide,/I saved my recovery code somewhere secure and checked/);
+ assert.match(guide,/Step 1 — Save your recovery code/);
+ assert.match(guide,/Step 2 — Verify your saved copy/);
+ assert.match(guide,/I've saved it — verify my copy/);
+ assert.match(guide,/enteredCode\.trim\(\)!==code/);
+ assert.match(guide,/onSavedChange\(true\)/);
+ assert.match(guide,/value=\{enteredCode\}/);
+ assert.doesNotMatch(guide,/type="checkbox" checked=\{saved\}/);
  // This is a source-level safety regression check. Check executable access,
  // not the mere appearance of an API name in a comment explaining the risk.
  const executable=guide.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
@@ -32,6 +38,15 @@ test('code is distinct from login password and no new auto-save credential is fa
  assert.match(guide,/not a replacement for your existing login/);
  assert.match(fresh,/Look for <strong>\{RECOVERY_SEARCH_LABEL\}<\/strong>/);
  assert.match(legacy,/Search your Passwords app or safe notes for <strong>\{RECOVERY_SEARCH_LABEL\}<\/strong>/);
+});
+
+test('an enrolled key is not presented as proof of saved recovery and missing-code help is discoverable',()=>{
+ const readiness=readFileSync(new URL('../src/RecoveryReadiness.tsx',import.meta.url),'utf8');
+ assert.match(readiness,/That confirms local access — not that the one-time recovery code was saved elsewhere/);
+ assert.match(readiness,/I didn't save my recovery code/);
+ assert.match(readiness,/Keep this browser and its Carehold site data intact/);
+ assert.match(readiness,/cannot re-display or safely reissue a lost code/);
+ assert.doesNotMatch(readiness,/reset.*keys.*onClick/i);
 });
 
 test('switching to iPhone Passwords cannot silently discard an unregistered recovery identity',()=>{
