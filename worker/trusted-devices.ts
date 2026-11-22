@@ -83,6 +83,12 @@ const publicRequest=(row:RequestRow)=>({
 });
 async function route(req:Request,env:CareEnv,user:SessionUser){
  const db=env.DB,url=new URL(req.url),p=url.pathname,method=req.method;
+ // Clear expired encrypted CH1 transfers, not just their user-facing state.
+ // The server never retains an approved recovery envelope indefinitely.
+ await db.prepare("UPDATE trusted_device_requests SET state='cancelled',ciphertext_json=NULL WHERE user_id=? AND expires_at<? AND state IN ('pending','approved')")
+  .bind(user.id,now()).run();
+ await db.prepare('DELETE FROM trusted_device_challenges WHERE user_id=? AND expires_at<?')
+  .bind(user.id,now()).run();
  if(p==='/api/trusted-devices'&&method==='GET'){
   const current=await currentKey(db,user.id);
   const [devices,pending]=await Promise.all([
