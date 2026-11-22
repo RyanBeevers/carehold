@@ -214,3 +214,13 @@ export async function handleTrustedDevices(req:Request,env:CareEnv,user:SessionU
  try{return await route(req,env,user);}
  catch(e){if(e instanceof DeviceError)return json({error:e.message},e.status);throw e;}
 }
+/** Remove expired encrypted CH1 transfer payloads independently of sign-ins.
+ * This must run on the existing scheduled Worker trigger even when neither
+ * device ever returns to the site.
+ */
+export async function purgeExpiredDeviceTransfers(env:CareEnv):Promise<void>{
+ await env.DB.batch([
+  env.DB.prepare("UPDATE trusted_device_requests SET state='cancelled',ciphertext_json=NULL WHERE expires_at<? AND state IN ('pending','approved')").bind(now()),
+  env.DB.prepare('DELETE FROM trusted_device_challenges WHERE expires_at<?').bind(now())
+ ]);
+}
