@@ -16,7 +16,7 @@ type VisiblePost=SpacePost&{content:WordPayload|null};
 const message=(e:unknown)=>e instanceof Error?e.message:'Something went wrong.';
 export function ShareComposer({seed,userId,householdId,identity,keyError,people,onCreated,onCancel,onRefreshPeople}:{
  seed:ShareSeed,userId:string,householdId:string,identity:Identity|null,keyError:string,people:WordContact[],
- onCreated:(spaceId:string)=>void,onCancel:()=>void,onRefreshPeople:()=>void
+ onCreated:(spaceId:string)=>Promise<void>|void,onCancel:()=>void,onRefreshPeople:()=>void
 }){
  const [recipients,setRecipients]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const pending=useRef<{id:string,postId:string,recipients:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
@@ -42,7 +42,7 @@ export function ShareComposer({seed,userId,householdId,identity,keyError,people,
    }
    await api('/words/spaces','POST',{id:attempt.id,postId:attempt.postId,householdId,kind:seed.kind,recipientIds:selected,copies:attempt.copies,publicKeys:attempt.publicKeys});
    pending.current=null;
-   onCreated(attempt.id);
+   await onCreated(attempt.id);
   }catch(e){if(!(e instanceof StaleSessionRequest))setError(message(e));}
   finally{setBusy(false);}
  }
