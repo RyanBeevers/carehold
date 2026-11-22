@@ -45,7 +45,7 @@ function unb64(value:string):Uint8Array<ArrayBuffer>{
 function getDb():Promise<IDBDatabase>{
  if(!('indexedDB' in globalThis)||!crypto.subtle)throw new Error('This browser cannot store encrypted message keys.');
  return new Promise((resolve,reject)=>{
-  const request=indexedDB.open(dbName,3);
+  const request=indexedDB.open(dbName,4);
   request.onupgradeneeded=()=>{
    if(!request.result.objectStoreNames.contains('identities'))
     request.result.createObjectStore('identities',{keyPath:'userId'});
@@ -54,6 +54,10 @@ function getDb():Promise<IDBDatabase>{
     request.result.createObjectStore('recoveredIdentities',{keyPath:'userId'});
    if(!request.result.objectStoreNames.contains('pendingRecoveries'))
     request.result.createObjectStore('pendingRecoveries',{keyPath:'scope'});
+   if(!request.result.objectStoreNames.contains('rotatedIdentities'))
+    request.result.createObjectStore('rotatedIdentities',{keyPath:'userId'});
+   if(!request.result.objectStoreNames.contains('identityHistory'))
+    request.result.createObjectStore('identityHistory',{keyPath:'scope'});
   };
   request.onsuccess=()=>{
    request.result.onversionchange=()=>request.result.close();
@@ -74,6 +78,10 @@ async function readIdentity(db:IDBDatabase,userId:string):Promise<Row|undefined>
 async function readRecovered(db:IDBDatabase,userId:string):Promise<Row|undefined>{
  const tx=db.transaction('recoveredIdentities','readonly');
  return requestValue(tx.objectStore('recoveredIdentities').get(userId)) as Promise<Row|undefined>;
+}
+async function readRotated(db:IDBDatabase,userId:string):Promise<Row|undefined>{
+ const tx=db.transaction('rotatedIdentities','readonly');
+ return requestValue(tx.objectStore('rotatedIdentities').get(userId)) as Promise<Row|undefined>;
 }
 
 /** Holds only a *wrapped* enrollment envelope, never the CH1 recovery secret.
@@ -133,7 +141,7 @@ export async function storedMessageIdentity(userId:string):Promise<Identity|null
  if(!userId||userId.length>200)throw new Error('Sign in before using encrypted messages.');
  const db=await getDb();
  try{
-  const row=(await readRecovered(db,userId))??(await readIdentity(db,userId));
+  const row=(await readRotated(db,userId))??(await readRecovered(db,userId))??(await readIdentity(db,userId));
   return row?{privateKey:row.privateKey,publicKey:row.publicKey,journalKey:row.journalKey}:null;
  }finally{db.close();}
 }
@@ -159,11 +167,36 @@ export async function storeRecoveredMessageIdentity(userId:string,identity:Ident
   }
  }finally{db.close();}
 }
+/**
+ * Commit a new already-verified original-browser identity only AFTER the D1
+ * rotation has completed. Preserve the prior non-extractable CryptoKey in an
+ * append-only local history store for verification; never overwrite it.
+ */
+export async function storeRotatedMessageIdentity(userId:string,previous:Identity,next:Identity):Promise<void>{
+ if(!userId||userId.length>200||previous.privateKey.extractable||next.privateKey.extractable||!next.journalKey||
+  samePublicKey(previous.publicKey,next.publicKey))
+  throw new Error('Refusing an incomplete or unscoped replacement identity.');
+ const db=await getDb();
+ try{
+  const current=(await readRotated(db,userId))??(await readRecovered(db,userId))??(await readIdentity(db,userId));
+  if(!current)throw new Error('Original device encryption key is no longer present.');
+  if(samePublicKey(current.publicKey,next.publicKey))return;
+  if(!samePublicKey(current.publicKey,previous.publicKey))
+   throw new Error('Original browser encryption key changed; no local key was overwritten.');
+  const scope=userId+':'+previous.publicKey.x;
+  const tx=db.transaction(['rotatedIdentities','identityHistory'],'readwrite'),done=committed(tx);
+  tx.objectStore('identityHistory').put({scope,userId,privateKey:previous.privateKey,
+   publicKey:previous.publicKey,journalKey:previous.journalKey});
+  tx.objectStore('rotatedIdentities').put({userId,privateKey:next.privateKey,
+   publicKey:next.publicKey,journalKey:next.journalKey});
+  await done;
+ }finally{db.close();}
+}
 export async function deviceIdentity(userId:string):Promise<Identity>{
  if(!userId||userId.length>200)throw new Error('Sign in before enrolling a message device.');
  const db=await getDb();
  try{
-  const current=(await readRecovered(db,userId))??(await readIdentity(db,userId));
+  const current=(await readRotated(db,userId))??(await readRecovered(db,userId))??(await readIdentity(db,userId));
   if(current)return {privateKey:current.privateKey,publicKey:current.publicKey,journalKey:current.journalKey};
   const keys=await crypto.subtle.generateKey(algorithm,false,['deriveBits']) as CryptoKeyPair;
   const publicKey=clean(await crypto.subtle.exportKey('jwk',keys.publicKey));
