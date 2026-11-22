@@ -150,7 +150,8 @@ function SharedSpaceDetail({spaceId,userId,householdId,identity,keyError,onBack,
    const original=posts.find(p=>p.kind==='journal'&&p.authorId===userId)?.content;
    setSourceSaved(saved.some(e=>(e.spaceId===spaceId&&e.title!=='Private discussion note')||
     Boolean(original&&e.text===original.text&&e.prompt===original.prompt&&e.title===(original.title??''))));
-   setPrivateNotes(saved.filter(e=>e.spaceId===spaceId&&e.title==='Private discussion note'));
+   setPrivateNotes(saved.filter(e=>e.spaceId===spaceId&&e.title==='Private discussion note'&&
+    !(original&&e.text===original.text&&e.prompt===original.prompt)));
   }catch(e){setError(message(e));}
   // A missing or undecipherable entry must not silently clear this recipient's inbox.
   // This acknowledgement remains recipient-private and never reaches the sender.
