@@ -7,7 +7,7 @@ import { validAudience, type Audience } from '../shared/audience';
 import { sendPushNotification } from '@mmmike/web-push/send';
 import {pushConfigured} from './push-config';
 import {handleMessages} from './messages';
-import {handleTrustedDevices} from './trusted-devices';
+import {handleTrustedDevices,purgeExpiredDeviceTransfers} from './trusted-devices';
 import {handlePrivateJournal} from './private-journal';
 import {handlePrivateDrafts} from './private-drafts';
 import {handleRecoveryMigration} from './recovery-migration';
@@ -797,5 +797,6 @@ export default {
   },
   async scheduled(_event:ScheduledEvent,env:CareEnv,ctx:ExecutionContext) {
     ctx.waitUntil(reminders(env).catch(()=>console.error('Reminder cycle failed')));
+   ctx.waitUntil(purgeExpiredDeviceTransfers(env).catch(()=>console.error('Trusted-device expiry cleanup failed')));
   },
 };
