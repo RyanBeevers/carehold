@@ -5,6 +5,8 @@ import {promptsForAudience,relationshipOptions,RELATIONSHIP_LABELS,rotatePrompt,
 import {seal,unseal,type Identity,type PublicKey,type Envelope,type Content} from './lib/message-crypto';
 import {MessageRecoveryGate} from './MessageRecoveryGate';
 import {useWordsDraftVault} from './lib/useWordsDraftVault';
+import {KeyChangeReview,KeyFingerprintDetails} from './RecipientKeyReview';
+import {checkRecipientKeyContinuity,acceptVerifiedRecipientKeys,RecipientKeyChangedError,type KeyChange} from './lib/recipient-key-continuity';
 type Contact={id:string,name:string,publicKey:PublicKey|null};
 type Thread={id:string,createdAt:string,participants:Contact[]};
 type Wire={id:string,senderId:string,createdAt:string,envelope:Envelope};
@@ -74,13 +76,9 @@ export function MessagesStudio({userId,householdId,audience,handoff,onHandoffHan
   finally{setBusy(false);}
  }
  return <section aria-label="Messages" className="messages-studio">
-  <details className="messages-warning">
-   <summary><span className="messages-warning-message"><strong>Fictional messages only.</strong> Do not send confidential family, medical, or therapeutic content.</span><span className="messages-warning-more">Why?</span></summary>
-   <p>Security and minor/privacy reviews are still pending. Messages are encrypted in the browser, but recipient keys are not independently verified. New-account recovery and staged original-browser migration are experimental. Secure independent device revocation is unfinished.</p>
-  </details>
   {!key&&<MessageRecoveryGate userId={userId} onReady={setKey} onError={setError}/>}
   {error&&<p role="alert" className="messages-error">{error}</p>}
-  {busy&&!key&&<p role="status">Preparing this device for fictional messaging…</p>}
+  {busy&&!key&&<p role="status">Preparing your encrypted messaging keys…</p>}
   {handoff&&<p role="status" className="muted">You have an unsent note from Words. Choose one person, then review the draft before explicitly sending it.</p>}
   {key&&<div className="messages-layout">
    <aside className="messages-directory"><div className="messages-subhead"><h2>Conversations</h2><button className="quiet small" type="button" onClick={()=>void directory().catch(e=>setError(errorText(e)))}>Refresh</button></div>
@@ -105,6 +103,7 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
  const [suggested,setSuggested]=useState<Prompt|null>(null),[seen,setSeen]=useState<string[]>([]);
  const [library,setLibrary]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[status,setStatus]=useState('');
  const retry=useRef<{text:string,kind:Content['kind'],id:string,copies:Record<string,Envelope>,publicKeys:Record<string,PublicKey>}|null>(null);
+ const [keyChanges,setKeyChanges]=useState<KeyChange[]|null>(null);
  const available=promptsForAudience(audience).filter(p=>(topic==='All topics'||p.topic===topic)&&(relationship==='all'||p.relationship===relationship));
  const topics=[...new Set(promptsForAudience(audience).filter(p=>relationship==='all'||p.relationship===relationship).map(p=>p.topic))].sort();
  function rotate(){
@@ -118,6 +117,7 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
   try{
    if(thread.participants.length!==2||thread.participants.some(p=>!p.publicKey))
     throw new Error('Both participants must enroll a device key before sending.');
+   await checkRecipientKeyContinuity(userId,householdId,thread.participants.filter(p=>p.id!==userId));
    const publicKeys=Object.fromEntries(thread.participants.map(p=>[p.id,p.publicKey])) as Record<string,PublicKey>;
    let attempt=retry.current;
    if(!attempt||attempt.text!==draft.text||attempt.kind!==kind||JSON.stringify(attempt.publicKeys)!==JSON.stringify(publicKeys)){
@@ -130,10 +130,18 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
    const cleared=await draft.discard();
    setKind('message');setStatus(cleared?'Sent to your chosen recipient.':'Sent, but the local draft could not be cleared. Please discard it manually.');
    onSent();
-  }catch(e){if(!(e instanceof StaleSessionRequest))setError(errorText(e));}
+  }catch(e){
+   if(e instanceof RecipientKeyChangedError)setKeyChanges(e.changed);
+   else if(!(e instanceof StaleSessionRequest))setError(errorText(e));
+  }
   finally{setSending(false);}
  }
  return <div className="messages-composer">
+  <KeyFingerprintDetails contacts={thread.participants.filter(p=>p.id!==userId)}/>
+  {keyChanges&&<KeyChangeReview changes={keyChanges} busy={sending}
+   onDismiss={()=>{setKeyChanges(null);retry.current=null;}}
+   onApprove={()=>{try{acceptVerifiedRecipientKeys(userId,householdId,keyChanges);setKeyChanges(null);retry.current=null;setStatus('Encryption key checkpoint updated. Review the recipient and press Send again.');}catch(e){setError(errorText(e));}}}/>}
+
   {handoff&&<div className="messages-prompts" role="note"><p><strong>Unsent note from Words.</strong> It will not be sent or shown to this person until you explicitly press Send. Applying it replaces any existing draft for this conversation.</p><div className="messages-actions"><button type="button" className="button dark small" disabled={!draft.ready||sending} onClick={()=>{draft.setText(handoff.text);setKind(handoff.kind);setSuggested(null);retry.current=null;onHandoffHandled(handoff.id);}}>{draft.text?'Replace this conversation draft':'Use note in this conversation'}</button><button type="button" className="button outline small" onClick={()=>onHandoffHandled(handoff.id)}>Dismiss note</button></div></div>}
   <div className="messages-subhead"><h3>Your words</h3><button className="quiet small" type="button" onClick={()=>setLibrary(v=>!v)}>{library?'Close prompts':'Guided prompts'}</button></div>
   {library&&<div className="messages-prompts"><label>Relationship<select value={relationship} onChange={e=>{setRelationship(e.target.value as Relationship|'all');setTopic('All topics');setSeen([]);setSuggested(null);}}><option value="all">All relationships</option>{relationshipOptions(audience).map(r=><option value={r} key={r}>{RELATIONSHIP_LABELS[r]}</option>)}</select></label><label>Category<select value={topic} onChange={e=>{setTopic(e.target.value);setSeen([]);setSuggested(null);}}><option>All topics</option>{topics.map(t=><option key={t}>{t}</option>)}</select></label>
@@ -143,7 +151,7 @@ function Composer({thread,userId,householdId,audience,handoff,onHandoffHandled,o
   </div>}
   <form onSubmit={e=>void send(e)}><label htmlFor="message-draft">Private draft — visible only after you press Send</label>
    <textarea id="message-draft" rows={4} value={draft.text} maxLength={3000} disabled={!draft.ready||sending} onChange={e=>{draft.setText(e.target.value);retry.current=null;}} placeholder="Write something you’d like to share…"/>
-   <div className="messages-meta"><span>{draft.enabled?draft.status==='saved'?(draft.syncEnabled&&draft.synced?'Encrypted draft synchronized privately':'Encrypted draft saved locally'):draft.status==='conflict'?(draft.remoteConflict?'Another device has a different draft':'Two tabs have edited this draft'):'Experimental encrypted autosave enabled':'Draft not saved until you opt in'}</span><span>{draft.text.length}/3000</span></div>
+   <div className="messages-meta"><span>{draft.enabled?draft.status==='saved'?(draft.syncEnabled&&draft.synced?'Encrypted draft synchronized privately':'Encrypted draft saved locally'):draft.status==='conflict'?(draft.remoteConflict?'Another device has a different draft':'Two tabs have edited this draft'):'Encrypted autosave enabled':'Draft not saved until you opt in'}</span><span>{draft.text.length}/3000</span></div>
    {(error||draft.error)&&<p className="messages-error" role="alert">{error||draft.error}</p>}{status&&<p role="status">{status}</p>}
    <div className="messages-actions">
     {!draft.enabled&&draft.ready&&<button type="button" className="button outline small" onClick={()=>void draft.enable()}>Enable encrypted device autosave</button>}
