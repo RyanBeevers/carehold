@@ -25,7 +25,7 @@ test('device recovery rejects the wrong account, request, ephemeral recipient, o
  await assert.rejects(()=>openTransferCode(ACCOUNT,'00000000-0000-4000-8000-000000000003',target,account.publicKey,sealed));
  await assert.rejects(()=>openTransferCode(ACCOUNT,REQUEST,other,account.publicKey,sealed));
  await assert.rejects(()=>openTransferCode(ACCOUNT,REQUEST,target,alteredAccount.publicKey,sealed));
- await assert.rejects(()=>assertSameTransferKey(target.publicKey,other.publicKey));
+ assert.throws(()=>assertSameTransferKey(target.publicKey,other.publicKey));
 });
 
 test('malformed ciphertext and unsupported transfer envelope versions fail closed',async()=>{
