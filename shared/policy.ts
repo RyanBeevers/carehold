@@ -16,11 +16,11 @@ export function validMemberClassification(value:unknown):value is MemberClassifi
 }
 export function canUseCareProfile(
  role:Role,classification:MemberClassification,grants:readonly Capability[],
- capability:Capability,linkedAdultSelf:boolean
+ capability:Capability,linkedAdultSelf:boolean,fullCircleCaregiver=false
 ):boolean{
  // No account class chosen through a Words prompt can ever authorize care edits.
  const mutation=capability==='manage_medication'||capability==='record_dose';
  if(mutation&&classification!=='adult')return false;
  const self=classification==='adult'&&linkedAdultSelf;
- return self||canAccess(role,grants,capability);
+ return self||(role==='caregiver'&&fullCircleCaregiver)||canAccess(role,grants,capability);
 }
