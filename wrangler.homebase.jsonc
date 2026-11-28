@@ -22,6 +22,6 @@
     ]
   },
   "vars": {
-    "APP_ORIGIN": "http://127.0.0.1:8793"
+    "APP_ORIGIN": "http://localhost:8793"
   }
 }

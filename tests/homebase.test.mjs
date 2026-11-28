@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import {careBridge,summarizeCare,LINK_MS} from '../worker/homebase.ts';
-const origin='http://127.0.0.1:8793',secret='a'.repeat(64),challenge='b'.repeat(64),at=Date.parse('2026-11-28T15:00:00Z');
+const origin='http://localhost:8793',secret='a'.repeat(64),challenge='b'.repeat(64),at=Date.parse('2026-11-28T15:00:00Z');
 const parent={userId:'adult',sessionId:'s-adult'},local={Origin:origin,'X-Carehold-Request':'1'},remote={Authorization:'Bearer '+secret};
 function setup(){
  const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');
