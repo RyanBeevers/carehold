@@ -1,0 +1,2 @@
+CREATE TABLE homebase_care_links(id TEXT PRIMARY KEY,household_id TEXT NOT NULL,user_id TEXT NOT NULL,session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,challenge_hash TEXT NOT NULL,code_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,redeemed_at INTEGER,revoked_at INTEGER,FOREIGN KEY(household_id,user_id) REFERENCES household_members(household_id,user_id) ON DELETE CASCADE);
+CREATE INDEX homebase_care_member ON homebase_care_links(household_id,user_id);

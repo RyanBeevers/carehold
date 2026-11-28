@@ -1,5 +1,6 @@
 export interface CareEnv {
   DB: D1Database;
+  HOMEBASE_BRIDGE_SECRET?: string;
   ASSETS: Fetcher;
   APP_ORIGIN: string;
   BETTER_AUTH_SECRET: string;
