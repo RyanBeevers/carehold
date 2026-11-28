@@ -24,7 +24,7 @@
     "verify:pre-e2e": "npm run typecheck && npm test && npm run build",
     "build:homebase": "VITE_HOMEBASE_ENABLED=true npm run build",
     "db:homebase:local": "wrangler d1 migrations apply DB --local --config wrangler.homebase.jsonc --persist-to .wrangler/homebase-care",
-    "dev:homebase": "wrangler dev --local --config wrangler.homebase.jsonc --persist-to .wrangler/homebase-care --ip 127.0.0.1 --port 8793 --env-file .env.homebase-local"
+    "dev:homebase": "wrangler dev --local --config wrangler.homebase.jsonc --persist-to .wrangler/homebase-care --ip 127.0.0.1 --port 8793"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.0",
