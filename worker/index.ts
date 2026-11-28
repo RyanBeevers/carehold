@@ -1,3 +1,4 @@
+import {careBridge} from './homebase';
 import { makeAuth } from './auth';
 import { localFrontendRedirect } from './local-frontend-redirect';
 import type { CareEnv, SessionUser, ProfileRow, MedicationRow } from './types';
@@ -147,8 +148,47 @@ async function claimInvitation(db:D1Database,invitation:InvitationRow,userId:str
  if(!joined)bad(409,'Invitation was already claimed.');
  return {joined:true,householdId:invitation.household_id};
 }
+async function readToday(db:D1Database,hid:string,userId:string,requestedDate:string|null=null){
+    const role=await member(db,hid,userId);
+    const household=await db.prepare('SELECT timezone FROM households WHERE id=?').bind(hid).first<{timezone:string}>();
+    const date=isoDay(requestedDate||localDate(new Date(),household!.timezone));
+     const accountClass=await classification(db,hid,userId);
+     const full=await isFullCircleCaregiver(db,hid,userId);
+     const recordGrants=await db.prepare("SELECT profile_id FROM profile_grants WHERE user_id=? AND capability='record_dose'")
+      .bind(userId).all<{profile_id:string}>();
+     const writableProfiles=new Set((recordGrants.results||[]).map(g=>g.profile_id));
+    const rows=await db.prepare(`SELECT m.*,p.display_name,p.kind,p.household_id,p.linked_user_id FROM medications m
+      JOIN profiles p ON p.id=m.profile_id
+      WHERE p.household_id=? AND p.archived_at IS NULL AND m.archived_at IS NULL
+      AND (?='owner' OR ?=1 OR EXISTS(SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))`).bind(hid,role,full?1:0,userId,userId,userId).all<MedicationRow&ProfileRow>();
+    const entries:{key:string;date:string;time:string;timezone:string;dueAt:string|null;medicationId:string;medicationName:string;dose:string;instructions:string;profileId:string;person:string;kind:ProfileRow['kind'];event:unknown;canRecordDose:boolean}[]=[];
+    for(const m of rows.results||[]) {
+      if(!scheduledOn(medSchedule(m),date))continue;
+      const times=await db.prepare('SELECT hhmm FROM medication_times WHERE medication_id=? ORDER BY hhmm').bind(m.id).all<{hhmm:string}>();
+      for(const x of times.results||[]) {
+        const key=occurrenceKey(m.id,date,x.hhmm);
+        const event=await db.prepare(`SELECT e.id,e.event_type,e.occurred_at,e.recorded_at,e.actor_user_id,e.note,e.supersedes_event_id,
+           e.correction_kind,e.med_name_snapshot,e.dose_snapshot,e.occurrence_key,e.scheduled_date,e.scheduled_time
+           FROM dose_events e
+          WHERE e.occurrence_key=? AND NOT EXISTS(SELECT 1 FROM dose_events n WHERE n.supersedes_event_id=e.id) LIMIT 1`).bind(key).first();
+        const due=localToInstant(date,x.hhmm,household!.timezone);
+        entries.push({key,date,time:x.hhmm,timezone:household!.timezone,dueAt:due?.toISOString()??null,
+          medicationId:m.id,medicationName:m.name,dose:m.dose,instructions:m.instructions,profileId:m.profile_id,
+          person:m.display_name,kind:m.kind,event,
+           canRecordDose:canUseCareProfile(role,accountClass,writableProfiles.has(m.profile_id)?['record_dose']:[],
+            'record_dose',m.kind==='adult'&&(m as MedicationRow&ProfileRow&{linked_user_id?:string|null}).linked_user_id===userId,full)});
+      }
+    }
+    return {date,timezone:household!.timezone,entries};
+
+}
 async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Response> {
   const url=new URL(req.url), path=url.pathname,db=env.DB;
+  // Bridge requests are authenticated by the narrow handler, never by caller-supplied user IDs.
+  if(path.startsWith('/api/homebase/'))return careBridge(req,db,env.HOMEBASE_BRIDGE_SECRET,env.APP_ORIGIN,async()=>{
+   const s=await makeAuth(env).api.getSession({headers:req.headers});
+   return s?.user?.id&&s.session?.id?{userId:s.user.id,sessionId:s.session.id}:null;
+  },(h,u)=>readToday(db,h,u));
   checkRequest(req,env);
   const localRedirect=localFrontendRedirect(req,env.APP_ORIGIN);
   if(localRedirect)return localRedirect;
@@ -424,37 +464,7 @@ async function handle(req:Request,env:CareEnv,ctx:ExecutionContext):Promise<Resp
     return json({updated:true});
   }
   if(path==='/api/today'&&req.method==='GET') {
-    const hid=required(url.searchParams.get('householdId')),role=await member(db,hid,user.id);
-    const household=await db.prepare('SELECT timezone FROM households WHERE id=?').bind(hid).first<{timezone:string}>();
-    const date=isoDay(url.searchParams.get('date')||localDate(new Date(),household!.timezone));
-     const accountClass=await classification(db,hid,user.id);
-     const full=await isFullCircleCaregiver(db,hid,user.id);
-     const recordGrants=await db.prepare("SELECT profile_id FROM profile_grants WHERE user_id=? AND capability='record_dose'")
-      .bind(user.id).all<{profile_id:string}>();
-     const writableProfiles=new Set((recordGrants.results||[]).map(g=>g.profile_id));
-    const rows=await db.prepare(`SELECT m.*,p.display_name,p.kind,p.household_id,p.linked_user_id FROM medications m
-      JOIN profiles p ON p.id=m.profile_id
-      WHERE p.household_id=? AND p.archived_at IS NULL AND m.archived_at IS NULL
-      AND (?='owner' OR ?=1 OR EXISTS(SELECT 1 FROM profile_grants g WHERE g.profile_id=p.id AND g.user_id=? AND g.capability='view_schedule') OR (p.kind='adult' AND p.linked_user_id=? AND EXISTS(SELECT 1 FROM household_member_classes c WHERE c.household_id=p.household_id AND c.user_id=? AND c.classification='adult')))`).bind(hid,role,full?1:0,user.id,user.id,user.id).all<MedicationRow&ProfileRow>();
-    const entries:unknown[]=[];
-    for(const m of rows.results||[]) {
-      if(!scheduledOn(medSchedule(m),date))continue;
-      const times=await db.prepare('SELECT hhmm FROM medication_times WHERE medication_id=? ORDER BY hhmm').bind(m.id).all<{hhmm:string}>();
-      for(const x of times.results||[]) {
-        const key=occurrenceKey(m.id,date,x.hhmm);
-        const event=await db.prepare(`SELECT e.id,e.event_type,e.occurred_at,e.recorded_at,e.actor_user_id,e.note,e.supersedes_event_id,
-           e.correction_kind,e.med_name_snapshot,e.dose_snapshot,e.occurrence_key,e.scheduled_date,e.scheduled_time
-           FROM dose_events e
-          WHERE e.occurrence_key=? AND NOT EXISTS(SELECT 1 FROM dose_events n WHERE n.supersedes_event_id=e.id) LIMIT 1`).bind(key).first();
-        const due=localToInstant(date,x.hhmm,household!.timezone);
-        entries.push({key,date,time:x.hhmm,timezone:household!.timezone,dueAt:due?.toISOString()??null,
-          medicationId:m.id,medicationName:m.name,dose:m.dose,instructions:m.instructions,profileId:m.profile_id,
-          person:m.display_name,kind:m.kind,event,
-           canRecordDose:canUseCareProfile(role,accountClass,writableProfiles.has(m.profile_id)?['record_dose']:[],
-            'record_dose',m.kind==='adult'&&(m as MedicationRow&ProfileRow&{linked_user_id?:string|null}).linked_user_id===user.id,full)});
-      }
-    }
-    return json({date,timezone:household!.timezone,entries});
+    return json(await readToday(db,required(url.searchParams.get('householdId')),user.id,url.searchParams.get('date')));
   }
   if(path==='/api/administrations'&&req.method==='POST') {
     const b=await jsonBody(req),m=await medication(db,required(b.medicationId)),p=await profileAccess(db,m.profile_id,user.id,'record_dose');
